@@ -35,7 +35,7 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Fahrer',
     icon: 'Truck',
     description: 'Aktive Lieferungen und Routennavigation',
-    availableTabs: ['dashboard', 'tracking', 'fleet', 'chat', 'settings'],
+    availableTabs: ['dashboard', 'tracking', 'chat', 'settings'],
     isPublic: true,
   },
   {

@@ -52,6 +52,7 @@ import {
   Info,
   Gavel,
   Clock,
+  AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -364,6 +365,10 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
   // Form state
   const [weight, setWeight] = useState<string>('');
+  const [length, setLength] = useState<string>('');
+  const [width, setWidth] = useState<string>('');
+  const [height, setHeight] = useState<string>('');
+  const [cargoType, setCargoType] = useState<'palette' | 'vehicle' | 'bulk' | 'container' | 'hazardous' | 'refrigerated'>('palette');
   const [priority, setPriority] = useState<'standard' | 'express' | 'overnight'>('standard');
   const [shipmentType, setShipmentType] = useState<'direct' | 'auction'>('direct');
   const [price, setPrice] = useState<string>('');
@@ -400,6 +405,10 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const resetForm = useCallback(() => {
     setStep(1);
     setWeight('');
+    setLength('');
+    setWidth('');
+    setHeight('');
+    setCargoType('palette');
     setPriority('standard');
     setShipmentType('direct');
     setPrice('');
@@ -458,6 +467,41 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
         {step === 2 && (
           <div className="space-y-4">
+            {/* Sendungsart-Auswahl */}
+            <div className="space-y-2">
+              <Label>{language === 'de' ? 'Art der Sendung' : 'Cargo Type'}</Label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: 'palette', labelDe: 'Palette', labelEn: 'Pallet', icon: Package },
+                  { id: 'vehicle', labelDe: 'Fahrzeug', labelEn: 'Vehicle', icon: Truck },
+                  { id: 'bulk', labelDe: 'Schüttgut', labelEn: 'Bulk', icon: Package },
+                  { id: 'container', labelDe: 'Container', labelEn: 'Container', icon: Package },
+                  { id: 'hazardous', labelDe: 'Gefahrgut', labelEn: 'Hazardous', icon: AlertTriangle },
+                  { id: 'refrigerated', labelDe: 'Kühlung', labelEn: 'Refrigerated', icon: Package },
+                ].map((type) => {
+                  const TypeIcon = type.icon;
+                  return (
+                    <button
+                      key={type.id}
+                      type="button"
+                      onClick={() => setCargoType(type.id as typeof cargoType)}
+                      className={cn(
+                        'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 transition-all duration-200',
+                        cargoType === type.id
+                          ? 'border-orange-500 bg-orange-500/5'
+                          : 'border-border/50 bg-card/50 hover:border-orange-300'
+                      )}
+                    >
+                      <TypeIcon className={cn('w-4 h-4', cargoType === type.id ? 'text-orange-500' : 'text-muted-foreground')} />
+                      <span className={cn('text-xs font-medium', cargoType === type.id ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground')}>
+                        {language === 'de' ? type.labelDe : type.labelEn}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t('weight', language)} (kg)</Label>
@@ -469,10 +513,51 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                 />
               </div>
               <div className="space-y-2">
-                <Label>{t('dimensions', language)}</Label>
-                <Input placeholder="L × B × H" />
+                <Label>{language === 'de' ? 'Volumen (m³)' : 'Volume (m³)'}</Label>
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={length && width && height ? ((parseFloat(length) * parseFloat(width) * parseFloat(height)) / 1000000).toFixed(2) : ''}
+                  readOnly
+                  className="bg-muted/50"
+                />
               </div>
             </div>
+
+            {/* 3 separate Maße-Felder */}
+            <div className="space-y-2">
+              <Label>{language === 'de' ? 'Abmessungen (cm)' : 'Dimensions (cm)'}</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1">
+                  <Input
+                    type="number"
+                    placeholder={language === 'de' ? 'Länge' : 'Length'}
+                    value={length}
+                    onChange={(e) => setLength(e.target.value)}
+                  />
+                  <span className="text-[10px] text-muted-foreground text-center block">{language === 'de' ? 'Länge' : 'Length'}</span>
+                </div>
+                <div className="space-y-1">
+                  <Input
+                    type="number"
+                    placeholder={language === 'de' ? 'Breite' : 'Width'}
+                    value={width}
+                    onChange={(e) => setWidth(e.target.value)}
+                  />
+                  <span className="text-[10px] text-muted-foreground text-center block">{language === 'de' ? 'Breite' : 'Width'}</span>
+                </div>
+                <div className="space-y-1">
+                  <Input
+                    type="number"
+                    placeholder={language === 'de' ? 'Höhe' : 'Height'}
+                    value={height}
+                    onChange={(e) => setHeight(e.target.value)}
+                  />
+                  <span className="text-[10px] text-muted-foreground text-center block">{language === 'de' ? 'Höhe' : 'Height'}</span>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>{t('priority', language)}</Label>
               <Select value={priority} onValueChange={(v) => setPriority(v as 'standard' | 'express' | 'overnight')}>

@@ -217,7 +217,8 @@ export function MembershipsPage() {
         </Card>
       </motion.div>
 
-      {/* Pricing Cards */}
+      {/* Pricing Cards - Nicht für Verlader/Shipper */}
+      {currentRole !== 'shipper' && (
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 max-w-6xl mx-auto">
         {membershipPlans.map((plan, index) => {
           const TierIcon = tierIcons[plan.tier] || Shield;
@@ -347,6 +348,7 @@ export function MembershipsPage() {
           );
         })}
       </div>
+      )}
 
       {/* VERLADER / AUKTIONSERSTELLER - WICHTIGER HINWEIS */}
       <motion.div
@@ -456,7 +458,8 @@ export function MembershipsPage() {
 
               <Separator className="bg-border/50" />
 
-              {/* Seite 2 – Transporteur (Gewinner der Auktion) */}
+              {/* Seite 2 – Transporteur (Gewinner der Auktion) - Nicht für Verlader/Shipper */}
+              {currentRole !== 'shipper' && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2 mb-1">
                   <Truck className="w-4 h-4 text-blue-500" />
@@ -500,6 +503,7 @@ export function MembershipsPage() {
                   </table>
                 </div>
               </div>
+              )}
 
               <Separator className="bg-border/50" />
 
@@ -546,7 +550,8 @@ export function MembershipsPage() {
         </Card>
       </motion.div>
 
-      {/* Commission Structure Table */}
+      {/* Commission Structure Table - Nicht für Verlader/Shipper */}
+      {currentRole !== 'shipper' && (
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -635,6 +640,7 @@ export function MembershipsPage() {
           </CardContent>
         </Card>
       </motion.div>
+      )}
     </div>
   );
 }

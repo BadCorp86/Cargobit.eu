@@ -25,6 +25,7 @@ import {
   Warehouse,
   ArrowRight,
   X,
+  List,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -47,10 +48,16 @@ const timelineSteps = [
 ];
 
 export function TrackingPage() {
-  const { language } = useCargoBitStore();
+  const { language, currentRole } = useCargoBitStore();
   const [trackingInput, setTrackingInput] = useState('CB-DE-2024-001245');
   const [selectedShipment, setSelectedShipment] = useState<Shipment | null>(
     shipments.find((s) => s.trackingNumber === 'CB-DE-2024-001245') || null
+  );
+  const [viewMode, setViewMode] = useState<'search' | 'list'>('search');
+
+  // Für Versender: Zeige alle aktiven Sendungen
+  const activeShipments = shipments.filter((s) => 
+    s.status !== 'delivered' && s.status !== 'cancelled' && s.status !== 'returned'
   );
 
   const handleTrack = () => {
@@ -70,11 +77,39 @@ export function TrackingPage() {
   return (
     <div className="p-4 sm:p-6 space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">{t('tracking', language)}</h1>
-        <p className="text-sm text-muted-foreground">{t('liveTracking', language)}</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">{t('tracking', language)}</h1>
+          <p className="text-sm text-muted-foreground">{t('liveTracking', language)}</p>
+        </div>
+        {/* Für Versender: Toggle zwischen Suche und Liste */}
+        {currentRole === 'shipper' && (
+          <div className="flex gap-2">
+            <Button
+              variant={viewMode === 'search' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('search')}
+              className={viewMode === 'search' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+            >
+              <Search className="w-4 h-4 mr-1" />
+              {language === 'de' ? 'Suche' : 'Search'}
+            </Button>
+            <Button
+              variant={viewMode === 'list' ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setViewMode('list')}
+              className={viewMode === 'list' ? 'bg-orange-500 hover:bg-orange-600' : ''}
+            >
+              <List className="w-4 h-4 mr-1" />
+              {language === 'de' ? 'Meine Sendungen' : 'My Shipments'}
+            </Button>
+          </div>
+        )}
       </div>
 
+      {/* Search Mode */}
+      {viewMode === 'search' && (
+      <>
       {/* Search */}
       <Card className="bg-card/50 backdrop-blur-sm border-border/50">
         <CardContent className="p-4">
@@ -287,6 +322,86 @@ export function TrackingPage() {
             <p className="text-muted-foreground">{t('noData', language)}</p>
           </CardContent>
         </Card>
+      )}
+      </>
+      )}
+
+      {/* List Mode - Für Versender: Alle aktiven Sendungen */}
+      {viewMode === 'list' && currentRole === 'shipper' && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="space-y-4"
+        >
+          <div className="flex items-center gap-2 mb-4">
+            <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0">
+              {activeShipments.length} {language === 'de' ? 'aktive Sendungen' : 'active shipments'}
+            </Badge>
+          </div>
+          
+          {activeShipments.length > 0 ? (
+            <div className="grid gap-4">
+              {activeShipments.map((shipment, index) => (
+                <motion.div
+                  key={shipment.id}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Card 
+                    className="bg-card/50 backdrop-blur-sm border-border/50 cursor-pointer hover:border-orange-300 transition-all"
+                    onClick={() => {
+                      setSelectedShipment(shipment);
+                      setViewMode('search');
+                    }}
+                  >
+                    <CardContent className="p-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-orange-500/20 to-amber-500/20 flex items-center justify-center">
+                            <Package className="w-6 h-6 text-orange-500" />
+                          </div>
+                          <div>
+                            <p className="font-mono font-bold">{shipment.trackingNumber}</p>
+                            <p className="text-sm text-muted-foreground">{shipment.sender} → {shipment.receiver}</p>
+                            <div className="flex items-center gap-2 mt-1">
+                              <span className="text-xs text-muted-foreground">{shipment.route}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <Badge className={cn('text-xs', getStatusColor(shipment.status))}>
+                            {t(statusLabels[shipment.status], language)}
+                          </Badge>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            {language === 'de' ? 'ETA:' : 'ETA:'} {shipment.estimatedDelivery}
+                          </p>
+                        </div>
+                      </div>
+                      {/* Progress Bar */}
+                      <div className="mt-3">
+                        <Progress 
+                          value={(() => {
+                            const stepIndex = timelineSteps.findIndex((step) => step.key === shipment.status);
+                            return stepIndex >= 0 ? ((stepIndex + 1) / timelineSteps.length) * 100 : 0;
+                          })()} 
+                          className="h-1.5 bg-muted" 
+                        />
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              ))}
+            </div>
+          ) : (
+            <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+              <CardContent className="py-16 text-center">
+                <Package className="w-12 h-12 text-muted-foreground/30 mx-auto mb-4" />
+                <p className="text-muted-foreground">{language === 'de' ? 'Keine aktiven Sendungen' : 'No active shipments'}</p>
+              </CardContent>
+            </Card>
+          )}
+        </motion.div>
       )}
     </div>
   );

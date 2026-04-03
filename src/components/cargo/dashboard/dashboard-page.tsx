@@ -624,6 +624,7 @@ function CarrierDashboard({ language }: { language: string }) {
 // ==========================================
 function DriverDashboard({ language }: { language: string }) {
   const { setActiveTab } = useCargoBitStore();
+  const [driverStatus, setDriverStatus] = useState<'available' | 'en_route' | 'on_break' | 'offline' | 'resting'>('available');
   
   const driverKPIs = [
     { label: 'deliveriesToday', value: 8, change: 2, changeLabel: 'heute erledigt', icon: 'Truck' },
@@ -633,6 +634,35 @@ function DriverDashboard({ language }: { language: string }) {
   ];
 
   const myDeliveries = shipments.filter(s => s.status === 'in_transit' || s.status === 'out_for_delivery').slice(0, 3);
+
+  // Status-Konfiguration
+  const statusConfig = {
+    available: { 
+      label: language === 'de' ? 'Verfügbar' : 'Available', 
+      color: 'bg-green-500 hover:bg-green-600 text-white',
+      icon: CheckCircle 
+    },
+    en_route: { 
+      label: language === 'de' ? 'Unterwegs' : 'En Route', 
+      color: 'bg-blue-500 hover:bg-blue-600 text-white',
+      icon: Truck 
+    },
+    on_break: { 
+      label: language === 'de' ? 'Pause' : 'On Break', 
+      color: 'bg-yellow-500 hover:bg-yellow-600 text-white',
+      icon: Clock 
+    },
+    offline: { 
+      label: language === 'de' ? 'Offline' : 'Offline', 
+      color: 'bg-gray-500 hover:bg-gray-600 text-white',
+      icon: AlertCircle 
+    },
+    resting: { 
+      label: language === 'de' ? 'Ruhend' : 'Resting', 
+      color: 'bg-purple-500 hover:bg-purple-600 text-white',
+      icon: Clock 
+    },
+  };
 
   return (
     <div className="space-y-6">
@@ -650,6 +680,42 @@ function DriverDashboard({ language }: { language: string }) {
           </p>
         </div>
       </motion.div>
+
+      {/* Status Selection */}
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <div className={cn('w-3 h-3 rounded-full', 
+              driverStatus === 'available' ? 'bg-green-500' :
+              driverStatus === 'en_route' ? 'bg-blue-500' :
+              driverStatus === 'on_break' ? 'bg-yellow-500' :
+              driverStatus === 'offline' ? 'bg-gray-500' : 'bg-purple-500'
+            )} />
+            {language === 'de' ? 'Mein Status' : 'My Status'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-5 gap-2">
+            {(Object.keys(statusConfig) as Array<keyof typeof statusConfig>).map((status) => {
+              const config = statusConfig[status];
+              const StatusIcon = config.icon;
+              return (
+                <Button
+                  key={status}
+                  onClick={() => setDriverStatus(status)}
+                  className={cn(
+                    'h-auto py-3 flex flex-col items-center gap-1.5 transition-all',
+                    driverStatus === status ? config.color : 'bg-muted/50 hover:bg-muted text-muted-foreground'
+                  )}
+                >
+                  <StatusIcon className="w-5 h-5" />
+                  <span className="text-xs font-medium">{config.label}</span>
+                </Button>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
 
       {/* KPI Cards - NO FINANCES! */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -732,12 +798,17 @@ function DriverDashboard({ language }: { language: string }) {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         <Card className="bg-card/50 backdrop-blur-sm border-border/50">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base font-semibold">{language === 'de' ? 'Status aktualisieren' : 'Update Status'}</CardTitle>
+            <CardTitle className="text-base font-semibold">{language === 'de' ? 'Lieferstatus aktualisieren' : 'Update Delivery Status'}</CardTitle>
           </CardHeader>
           <CardContent className="grid grid-cols-2 gap-2">
-            {['Abgeholt', 'Unterwegs', 'Verzögerung', 'Ankunft'].map((status, idx) => (
+            {[
+              { de: 'Abgeholt', en: 'Picked Up' },
+              { de: 'Unterwegs', en: 'In Transit' },
+              { de: 'Verzögerung', en: 'Delayed' },
+              { de: 'Ankunft', en: 'Arrived' },
+            ].map((status, idx) => (
               <Button key={idx} variant="outline" size="sm">
-                {status}
+                {language === 'de' ? status.de : status.en}
               </Button>
             ))}
           </CardContent>
