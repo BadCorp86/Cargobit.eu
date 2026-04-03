@@ -18,14 +18,14 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Administrator',
     icon: 'Shield',
     description: 'Vollzugriff auf alle Plattformfunktionen',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'analytics', 'blog', 'wallet', 'advertising', 'settings'],
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'analytics', 'blog', 'wallet', 'advertising', 'memberships', 'settings'],
   },
   {
     id: 'dispatcher',
     label: 'Disponent',
     icon: 'Radio',
     description: 'Sendungsverwaltung und Routenplanung',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'wallet', 'settings'],
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'wallet', 'memberships', 'settings'],
   },
   {
     id: 'driver',
@@ -39,7 +39,7 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Versender',
     icon: 'Package',
     description: 'Sendungen erstellen und Pakete verfolgen',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'capacity', 'wallet', 'settings'],
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'capacity', 'wallet', 'memberships', 'settings'],
   },
   {
     id: 'warehouse',

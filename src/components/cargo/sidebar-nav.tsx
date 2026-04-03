@@ -32,6 +32,7 @@ import {
   Clock,
   Wallet,
   Megaphone,
+  CreditCard,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -65,6 +66,7 @@ const tabIconMap: Record<NavigationTab, React.ElementType> = {
   settings: Settings,
   wallet: Wallet,
   advertising: Megaphone,
+  memberships: CreditCard,
 };
 
 export function SidebarNav() {

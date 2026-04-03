@@ -1,11 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useCargoBitStore } from '@/lib/store';
 import { t } from '@/lib/i18n';
 import { shipments, formatCurrency, formatDate, getStatusColor } from '@/lib/mock-data';
-import type { Shipment, ShipmentStatus } from '@/types';
+import { calculateAIRecommendedPrice, formatEUR } from '@/lib/membership-data';
+import type { Shipment, ShipmentStatus, AIPriceRecommendation } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -47,6 +48,10 @@ import {
   User,
   X,
   ChevronRight,
+  Sparkles,
+  Info,
+  Gavel,
+  Clock,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -357,8 +362,53 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
   const { language } = useCargoBitStore();
   const [step, setStep] = useState(1);
 
+  // Form state
+  const [weight, setWeight] = useState<string>('');
+  const [priority, setPriority] = useState<'standard' | 'express' | 'overnight'>('standard');
+  const [shipmentType, setShipmentType] = useState<'direct' | 'auction'>('direct');
+  const [price, setPrice] = useState<string>('');
+  const [auctionDuration, setAuctionDuration] = useState<string>('48');
+  const [hasUserEditedPrice, setHasUserEditedPrice] = useState(false);
+
+  // Calculate AI recommendation using useMemo (derived state)
+  const aiRecommendation = useMemo(() => {
+    if (step < 2) return null;
+    const w = parseFloat(weight) || 0;
+    if (w <= 0) return null;
+    return calculateAIRecommendedPrice({
+      distance: 350, // default distance for demo
+      weight: w,
+      priority,
+    });
+  }, [weight, priority, step]);
+
+  // Display price: user-entered price, or AI recommendation if not manually edited
+  const displayPrice = hasUserEditedPrice ? price : (aiRecommendation ? aiRecommendation.recommendedPrice.toFixed(2) : price);
+
+  const handlePriceChange = (val: string) => {
+    setPrice(val);
+    setHasUserEditedPrice(true);
+  };
+
+  const applyRecommendation = () => {
+    if (aiRecommendation) {
+      setPrice(aiRecommendation.recommendedPrice.toFixed(2));
+      setHasUserEditedPrice(true);
+    }
+  };
+
+  const resetForm = useCallback(() => {
+    setStep(1);
+    setWeight('');
+    setPriority('standard');
+    setShipmentType('direct');
+    setPrice('');
+    setAuctionDuration('48');
+    setHasUserEditedPrice(false);
+  }, []);
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
       <DialogContent className="max-w-xl max-h-[85vh] overflow-y-auto custom-scrollbar">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
@@ -401,7 +451,7 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <Input placeholder={t('receiverAddress', language)} />
             </div>
             <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white" onClick={() => setStep(2)}>
-              {language === 'de' ? 'Weiter' : 'Next'}
+              {t('continue', language)}
             </Button>
           </div>
         )}
@@ -411,7 +461,12 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>{t('weight', language)} (kg)</Label>
-                <Input type="number" placeholder="0" />
+                <Input
+                  type="number"
+                  placeholder="0"
+                  value={weight}
+                  onChange={(e) => setWeight(e.target.value)}
+                />
               </div>
               <div className="space-y-2">
                 <Label>{t('dimensions', language)}</Label>
@@ -420,7 +475,7 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             </div>
             <div className="space-y-2">
               <Label>{t('priority', language)}</Label>
-              <Select defaultValue="standard">
+              <Select value={priority} onValueChange={(v) => setPriority(v as 'standard' | 'express' | 'overnight')}>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="standard">{t('standard', language)}</SelectItem>
@@ -433,12 +488,64 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <input type="checkbox" id="insurance" className="rounded" />
               <Label htmlFor="insurance">{t('insurance', language)}</Label>
             </div>
+
+            {/* AI Price Recommendation */}
+            {aiRecommendation && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl bg-gradient-to-r from-orange-500/10 to-amber-500/10 border border-orange-500/20 p-4 space-y-3"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-orange-500 to-amber-500 flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-orange-600 dark:text-orange-400">
+                      {t('aiPriceRecommendation', language)}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <Info className="w-3 h-3" />
+                      {t('basedOnFactors', language)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xl font-bold text-orange-600 dark:text-orange-400">
+                      {formatEUR(aiRecommendation.recommendedPrice)}
+                    </p>
+                    <Badge className="bg-orange-100 text-orange-600 dark:bg-orange-900/30 dark:text-orange-400 border-0 text-[10px]">
+                      {t('recommended', language)}
+                    </Badge>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-orange-400" />
+                    {language === 'de' ? `Distanz: 350 km` : `Distance: 350 km`}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-orange-400" />
+                    {t('weight', language)}: {weight} kg
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-orange-400" />
+                    {t('priority', language)}: {t(priority, language)}
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-green-400" />
+                    {t('bidFloor', language)}: {formatEUR(aiRecommendation.bidFloor)}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setStep(1)}>
-                {language === 'de' ? 'Zurück' : 'Back'}
+                {t('back', language)}
               </Button>
               <Button className="flex-1 bg-orange-500 hover:bg-orange-600 text-white" onClick={() => setStep(3)}>
-                {language === 'de' ? 'Weiter' : 'Next'}
+                {t('continue', language)}
               </Button>
             </div>
           </div>
@@ -446,6 +553,110 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
         {step === 3 && (
           <div className="space-y-4">
+            {/* Shipment Type */}
+            <div className="space-y-2">
+              <Label>{t('shipmentType', language)}</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShipmentType('direct')}
+                  className={cn(
+                    'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200',
+                    shipmentType === 'direct'
+                      ? 'border-orange-500 bg-orange-500/5'
+                      : 'border-border/50 bg-card/50 hover:border-orange-300'
+                  )}
+                >
+                  <Truck className={cn('w-5 h-5', shipmentType === 'direct' ? 'text-orange-500' : 'text-muted-foreground')} />
+                  <span className={cn('text-sm font-medium', shipmentType === 'direct' ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground')}>
+                    {t('directTransport', language)}
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShipmentType('auction')}
+                  className={cn(
+                    'flex flex-col items-center gap-2 p-4 rounded-xl border-2 transition-all duration-200',
+                    shipmentType === 'auction'
+                      ? 'border-orange-500 bg-orange-500/5'
+                      : 'border-border/50 bg-card/50 hover:border-orange-300'
+                  )}
+                >
+                  <Gavel className={cn('w-5 h-5', shipmentType === 'auction' ? 'text-orange-500' : 'text-muted-foreground')} />
+                  <span className={cn('text-sm font-medium', shipmentType === 'auction' ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground')}>
+                    {t('auctionShipment', language)}
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            {/* Price */}
+            <div className="space-y-2">
+              <Label>{t('yourPrice', language)} (EUR)</Label>
+              <div className="relative">
+                <Input
+                  type="number"
+                  placeholder="0.00"
+                  value={displayPrice}
+                  onChange={(e) => handlePriceChange(e.target.value)}
+                  className="pr-4 text-lg font-semibold"
+                />
+                {aiRecommendation && (
+                  <button
+                    type="button"
+                    onClick={applyRecommendation}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-orange-500 hover:text-orange-600 font-medium px-2 py-1 rounded-md bg-orange-500/10 hover:bg-orange-500/15 transition-colors"
+                  >
+                    {t('recommended', language)}
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Auction specific fields */}
+            {shipmentType === 'auction' && aiRecommendation && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                className="space-y-4"
+              >
+                {/* Auction Info */}
+                <div className="rounded-xl bg-muted/30 border border-border/50 p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Gavel className="w-4 h-4 text-orange-500" />
+                    <p className="text-sm font-semibold">{t('auctionInfo', language)}</p>
+                  </div>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t('startPrice', language)}</span>
+                      <span className="font-semibold">{formatEUR(parseFloat(price) || 0)}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-muted-foreground">{t('minBidForBidders', language)}</span>
+                      <Badge className="bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-400 border-0 text-xs">
+                        {formatEUR(aiRecommendation.bidFloor)}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Auction Duration */}
+                <div className="space-y-2">
+                  <Label>{t('auctionDuration', language)}</Label>
+                  <Select value={auctionDuration} onValueChange={setAuctionDuration}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="24">{t('hours24', language)}</SelectItem>
+                      <SelectItem value="48">{t('hours48', language)}</SelectItem>
+                      <SelectItem value="72">{t('hours72', language)}</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </motion.div>
+            )}
+
             <div className="space-y-2">
               <Label>{t('pickupDate', language)}</Label>
               <Input type="date" />
@@ -456,7 +667,7 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             </div>
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setStep(2)}>
-                {language === 'de' ? 'Zurück' : 'Back'}
+                {t('back', language)}
               </Button>
               <Button
                 className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/25"

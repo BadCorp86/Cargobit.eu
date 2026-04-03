@@ -15,6 +15,7 @@ import { BlogPage } from './blog/blog-page';
 import { SettingsPage } from './settings/settings-page';
 import { WalletPage } from './wallet/wallet-page';
 import { AdvertisingPage } from './advertising/advertising-page';
+import { MembershipsPage } from './memberships/memberships-page';
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -45,6 +46,8 @@ export function AppShell() {
         return <WalletPage />;
       case 'advertising':
         return <AdvertisingPage />;
+      case 'memberships':
+        return <MembershipsPage />;
       case 'support':
         return <SupportPage />;
       case 'analytics':

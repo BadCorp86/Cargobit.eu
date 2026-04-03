@@ -31,7 +31,8 @@ export type NavigationTab =
   | 'blog'
   | 'settings'
   | 'wallet'
-  | 'advertising';
+  | 'advertising'
+  | 'memberships';
 
 export type DriverStatus = 'available' | 'en_route' | 'on_break' | 'offline' | 'resting';
 export type VehicleStatus = 'active' | 'maintenance' | 'parked' | 'loading' | 'unloading';
@@ -286,6 +287,52 @@ export interface AdApplication {
   preferredPositions: string[];
   status: 'pending' | 'approved' | 'rejected';
   submittedAt: string;
+}
+
+export type MembershipTier = 'free' | 'starter' | 'professional' | 'enterprise';
+export type BillingCycle = 'monthly' | 'yearly';
+
+export interface MembershipPlan {
+  id: string;
+  tier: MembershipTier;
+  name: string;
+  nameEn: string;
+  description: string;
+  descriptionEn: string;
+  priceMonthly: number;
+  priceYearly: number;
+  freeTrialMonths: number;
+  maxShipments: number | null;
+  features: string[];
+  featuresEn: string[];
+  transportCommission: Record<UserRole, number>;
+  walletFee: Record<UserRole, number>;
+  popular?: boolean;
+}
+
+export interface AIPriceRecommendation {
+  basePrice: number;
+  markup: number;
+  recommendedPrice: number;
+  bidFloor: number;
+  currency: string;
+  factors: {
+    distance: number;
+    weight: number;
+    priority: 'standard' | 'express' | 'overnight';
+    vehicleType?: string;
+  };
+}
+
+export interface AuctionBid {
+  id: string;
+  auctionId: string;
+  bidderId: string;
+  bidderName: string;
+  amount: number;
+  status: 'pending' | 'accepted' | 'rejected' | 'outbid';
+  reason?: string;
+  createdAt: string;
 }
 
 export function getDriverStatusColor(status: DriverStatus): string {

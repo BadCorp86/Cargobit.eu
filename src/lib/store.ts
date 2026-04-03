@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { UserRole, NavigationTab, Language } from '@/types';
+import type { UserRole, NavigationTab, Language, MembershipTier, BillingCycle } from '@/types';
 
 interface CargoBitState {
   // Auth & Role
@@ -52,6 +52,14 @@ interface CargoBitState {
   // Ad application dialog
   showAdApplication: boolean;
   setShowAdApplication: (show: boolean) => void;
+
+  // Membership
+  currentMembership: MembershipTier;
+  setCurrentMembership: (tier: MembershipTier) => void;
+  billingCycle: BillingCycle;
+  setBillingCycle: (cycle: BillingCycle) => void;
+  showMembershipModal: boolean;
+  setShowMembershipModal: (show: boolean) => void;
 }
 
 export const useCargoBitStore = create<CargoBitState>((set) => ({
@@ -105,4 +113,12 @@ export const useCargoBitStore = create<CargoBitState>((set) => ({
   // Ad application
   showAdApplication: false,
   setShowAdApplication: (show) => set({ showAdApplication: show }),
+
+  // Membership
+  currentMembership: 'free',
+  setCurrentMembership: (tier) => set({ currentMembership: tier }),
+  billingCycle: 'monthly',
+  setBillingCycle: (cycle) => set({ billingCycle: cycle }),
+  showMembershipModal: false,
+  setShowMembershipModal: (show) => set({ showMembershipModal: show }),
 }));
