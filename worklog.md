@@ -1,20 +1,20 @@
 ---
-Task ID: 1
+Task ID: 1-2-3
 Agent: Main Agent
-Task: Projektstand prüfen, UI-Fehler beheben, GitHub-Push
+Task: Wallet-System + Werbebanner-Add-on erstellen
 
 Work Log:
-- Analysiert den aktuellen Projektstand von CargoBit
-- Festgestellt, dass Fleet Management und Capacity-Matching Seiten bereits existieren (780+ bzw. 900+ Zeilen)
-- Alle 9 Sprachübersetzungen (DE, EN, PL, CZ, GR, TR, SI, HU, RO) bereits vollständig vorhanden
-- Profil-Dropdown in HeaderBar implementiert (Avatar → Profil, Einstellungen, Sprache, Logout)
-- Sprachwechsler als Sub-Menü im Profil-Dropdown (alle 9 Sprachen mit Flaggen)
-- Benachrichtigungs-Dropdown mit Mock-Daten (4 Benachrichtigungen mit Icons)
-- Build erfolgreich getestet (0 Errors)
-- Alle 110 Dateien zu GitHub gepusht (https://github.com/BadCorp86/Cargobit.eu.git)
+- Projekt-Status analysiert (bereits 11 Seiten, 9 Sprachen, Fleet/Capacity vorhanden)
+- Types erweitert: WalletTransaction, WalletInvoice, PaymentMethod, AdCampaign, AdPosition, AdApplication
+- Mock-Daten-Datei erstellt: mock-data-wallet.ts mit 15 Transaktionen, 6 Rechnungen, 3 Zahlungsmethoden, 6 Kampagnen, 6 Positionen, 4 Werbeanträge
+- Wallet-Seite erstellt (wallet-page.tsx): Guthaben-Karten, Transaktionsverlauf mit Filter/Suche, Rechnungen, Zahlungsmethoden, Provisionsoverblick, Top-Up/Withdraw Dialoge
+- Werbebanner-Seite erstellt (advertising-page.tsx): Kampagnenübersicht, Bannerpositionen, Werbeanfragen, Pricing-Tabelle, Mengenrabatte, Kampagnenerstellungs- und Bewerbungsformular
+- App-Shell aktualisiert mit Wallet + Advertising Imports und Routes
+- Build erfolgreich: 0 Errors
+- GitHub-Push erfolgreich (Commit 9ac41a3)
 
 Stage Summary:
-- Alle UI-Fehler behoben (Profil-Dropdown, Sprachwechsler, Benachrichtigungen)
-- Build fehlerfrei
-- GitHub-Push erfolgreich (Commit 1365f3e)
-- Plattform vollständig: Login, Dashboard, Sendungen, Sendungsverfolgung, Flottenmanagement, Kapazitätsabgleich, Support, Analytik, Blog, Einstellungen
+- Neue Dateien: wallet-page.tsx (340 Zeilen), advertising-page.tsx (480 Zeilen), mock-data-wallet.ts, i18n-wallet.ts
+- Plattform hat jetzt 11 funktionale Seiten
+- Wallet mit Provisionssystem (5-8% Transport, 3-5% Auktion, +2% Express)
+- Werbesystem mit 6 Positionen (€199-599/Monat) und Mengenrabatten
