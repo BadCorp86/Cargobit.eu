@@ -3,16 +3,31 @@ import type { MembershipPlan, MembershipTier, AIPriceRecommendation, UserRole } 
 // ==========================================
 // MEMBERSHIP PLANS
 // ==========================================
+//
+// GESCHÄFTSREGELN:
+//
+// 1. SPEDITEUR / FAHRER → zahlen monatliches Abo + Provision/Wallet-Gebühr
+// 2. TRANSPORTUNTERNEHMER / VERLADER (Auktionsersteller) → KEIN monatliches Abo!
+//    Nur 4% Vermittlungsgebühr/Auktionsprovision auf den Zuschlagspreis.
+//    Beispiel: Auktion startet bei €1.000, endet bei €800 → Verlader zahlt 4% von €800 = €32
+// 3. KOSTENLOSER ZUGANG → 2 Monate Starter-Limitiert:
+//    - Kann alles SEHEN aber nicht alles nutzen
+//    - Max. 5 Aufträge annehmen & durchführen
+//    - Transportprovision: 14% pro abgeschlossenem Auftrag
+//    - Wallet-Gebühr: 3,5%
+// ==========================================
 
-const zeroCommissions: Record<UserRole, number> = {
-  admin: 0,
-  dispatcher: 0,
-  driver: 0,
-  shipper: 0,
-  warehouse: 0,
-  support: 0,
-  finance: 0,
-  customer: 0,
+// Vermittlungsgebühr für Verlader/Auktionsersteller (4% auf Zuschlagspreis)
+export const VERLADER_BROKERAGE_FEE = 4.0;
+
+// Free-Tier Konfiguration
+export const FREE_TIER = {
+  maxOrdersInTrial: 5,
+  trialMonths: 2,
+  transportCommission: 14,
+  walletFee: 3.5,
+  canViewEverything: true,
+  canUseEverything: false,
 };
 
 export const membershipPlans: MembershipPlan[] = [
@@ -23,8 +38,8 @@ export const membershipPlans: MembershipPlan[] = [
     nameEn: 'Starter',
     description: 'Perfekt für den Einstieg in die digitale Frachtbörse',
     descriptionEn: 'Perfect for getting started with digital freight exchange',
-    priceMonthly: 29,
-    priceYearly: 290,
+    priceMonthly: 89,
+    priceYearly: 890,
     freeTrialMonths: 2,
     maxShipments: 50,
     features: [
@@ -43,11 +58,12 @@ export const membershipPlans: MembershipPlan[] = [
       'Auction Feature',
       'Shipment Tracking',
     ],
+    // Spediteur provisionen
     transportCommission: {
       admin: 0,
       dispatcher: 8,
       driver: 0,
-      shipper: 6,
+      shipper: 0, // Verlader zahlt KEIN Abo, nur 4% Auktionsprovision
       warehouse: 0,
       support: 0,
       finance: 0,
@@ -71,8 +87,8 @@ export const membershipPlans: MembershipPlan[] = [
     nameEn: 'Professional',
     description: 'Für wachsende Transportunternehmen mit erweitertem Bedarf',
     descriptionEn: 'For growing transport companies with advanced needs',
-    priceMonthly: 79,
-    priceYearly: 790,
+    priceMonthly: 499,
+    priceYearly: 4990,
     freeTrialMonths: 2,
     maxShipments: 500,
     features: [
@@ -99,7 +115,7 @@ export const membershipPlans: MembershipPlan[] = [
       admin: 0,
       dispatcher: 5,
       driver: 0,
-      shipper: 4,
+      shipper: 0, // Verlader zahlt KEIN Abo
       warehouse: 0,
       support: 0,
       finance: 0,
@@ -124,8 +140,8 @@ export const membershipPlans: MembershipPlan[] = [
     nameEn: 'Enterprise',
     description: 'Maximale Leistung für große Logistikunternehmen',
     descriptionEn: 'Maximum performance for large logistics companies',
-    priceMonthly: 199,
-    priceYearly: 1990,
+    priceMonthly: 899,
+    priceYearly: 8990,
     freeTrialMonths: 2,
     maxShipments: null, // unlimited
     features: [
@@ -156,7 +172,7 @@ export const membershipPlans: MembershipPlan[] = [
       admin: 0,
       dispatcher: 2,
       driver: 0,
-      shipper: 1.5,
+      shipper: 0, // Verlader zahlt KEIN Abo
       warehouse: 0,
       support: 0,
       finance: 0,
@@ -179,24 +195,59 @@ export const membershipPlans: MembershipPlan[] = [
 // COMMISSION HELPERS
 // ==========================================
 
+/**
+ * Transportprovision für Spediteur/Fahrer (Abo-basiert)
+ * Verlader hat hier immer 0% – sie zahlen stattdessen die Auktionsprovision
+ */
 export function getTransportCommission(tier: MembershipTier, role: UserRole): number {
   if (role === 'admin' || role === 'support' || role === 'finance' || role === 'warehouse' || role === 'customer') return 0;
+  if (role === 'shipper') return 0; // Verlader zahlt keine Transportprovision, nur Auktionsprovision
+
+  if (tier === 'free') return FREE_TIER.transportCommission;
+
   const plan = membershipPlans.find((p) => p.tier === tier);
-  if (!plan) return 0;
-  return plan.transportCommission[role] ?? 0;
+  if (!plan) return FREE_TIER.transportCommission;
+  return plan.transportCommission[role] ?? FREE_TIER.transportCommission;
 }
 
+/**
+ * Wallet-Gebühr für Fahrer (Abo-basiert)
+ */
 export function getWalletFee(tier: MembershipTier, role: UserRole): number {
   if (role === 'admin' || role === 'support' || role === 'finance' || role === 'warehouse' || role === 'customer' || role === 'dispatcher' || role === 'shipper') return 0;
+
+  if (tier === 'free') return FREE_TIER.walletFee;
+
   const plan = membershipPlans.find((p) => p.tier === tier);
-  if (!plan) return 0;
-  return plan.walletFee[role] ?? 0;
+  if (!plan) return FREE_TIER.walletFee;
+  return plan.walletFee[role] ?? FREE_TIER.walletFee;
 }
 
+/**
+ * Vermittlungsgebühr/Auktionsprovision für Verlader/Auktionsersteller
+ * IMMER 4% auf den Zuschlagspreis, unabhängig vom Abo-Tier
+ * Beispiel: Zuschlag bei €800 → 4% von €800 = €32 Vermittlungsgebühr
+ */
+export function getVerladerBrokerageFee(): number {
+  return VERLADER_BROKERAGE_FEE;
+}
+
+/**
+ * Berechnet die tatsächliche Vermittlungsgebühr für den Verlader
+ * @param winningBidAmount Der Zuschlagspreis (Betrag, den der Transporteur erhält)
+ * @returns Die Vermittlungsgebühr, die der Verlader an CargoBit zahlt
+ */
+export function calculateVerladerFee(winningBidAmount: number): number {
+  return Math.round(winningBidAmount * (VERLADER_BROKERAGE_FEE / 100) * 100) / 100;
+}
+
+/**
+ * Maximale Sendungen je Tier
+ */
 export function getMaxShipments(tier: MembershipTier): number | null {
-  if (tier === 'free') return 5;
+  if (tier === 'free') return FREE_TIER.maxOrdersInTrial;
   const plan = membershipPlans.find((p) => p.tier === tier);
-  if (!plan) return 5;
+  if (!plan) return FREE_TIER.maxOrdersInTrial;
   return plan.maxShipments;
 }
 
@@ -204,12 +255,20 @@ export function getPlan(tier: MembershipTier): MembershipPlan | undefined {
   return membershipPlans.find((p) => p.tier === tier);
 }
 
+/**
+ * Prüft ob eine Rolle ein monatliches Abo benötigt
+ * Verlader (shipper) benötigen KEIN Abo – nur 4% Auktionsprovision
+ */
+export function requiresMonthlyFee(role: UserRole): boolean {
+  return role !== 'shipper';
+}
+
 // ==========================================
 // AI PRICE RECOMMENDATION
 // ==========================================
 
-const HIDDEN_MARKUP = 0.20; // 20%
-const BID_FLOOR_DISCOUNT = 0.65; // 35% below recommended price
+const HIDDEN_MARKUP = 0.20; // 20% versteckter Aufschlag
+const BID_FLOOR_DISCOUNT = 0.65; // 35% unter dem empfohlenen Preis
 
 const priorityMultiplier: Record<string, number> = {
   standard: 1.0,
@@ -235,28 +294,28 @@ export interface AIPricingParams {
 export function calculateAIRecommendedPrice(params: AIPricingParams): AIPriceRecommendation {
   const { distance, weight, priority, vehicleType } = params;
 
-  // Base price formula: (distance * 0.12) + (weight * 0.08)
+  // Basispreis-Formel: (Distanz × 0,12€) + (Gewicht × 0,08€)
   const baseDistanceCost = distance * 0.12;
   const baseWeightCost = weight * 0.08;
   let basePrice = baseDistanceCost + baseWeightCost;
 
-  // Apply priority multiplier
+  // Prioritätsmultiplikator
   const pMultiplier = priorityMultiplier[priority] ?? 1.0;
   basePrice = basePrice * pMultiplier;
 
-  // Apply vehicle type multiplier if provided
+  // Fahrzeugtyp-Multiplikator
   if (vehicleType) {
     const vMultiplier = vehicleTypeMultiplier[vehicleType] ?? 1.0;
     basePrice = basePrice * vMultiplier;
   }
 
-  // Round base price to 2 decimal places
+  // Auf 2 Dezimalstellen runden
   basePrice = Math.round(basePrice * 100) / 100;
 
-  // Apply 20% hidden markup to get recommended price
+  // 20% versteckter Aufschlag → Empfohlener Preis (Erschaffer sieht NUR diesen)
   const recommendedPrice = Math.round(basePrice * (1 + HIDDEN_MARKUP) * 100) / 100;
 
-  // Bid floor = 35% below recommended price
+  // Mindestgebot = 35% unter dem empfohlenen Preis
   const bidFloor = Math.round(recommendedPrice * BID_FLOOR_DISCOUNT * 100) / 100;
 
   return {
