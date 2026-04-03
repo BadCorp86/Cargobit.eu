@@ -114,8 +114,8 @@ export function SupportPage() {
         </Button>
       </div>
 
-      {/* Info Banner for Dispatcher - Support nur für Zwischenfälle */}
-      {currentRole === 'dispatcher' && (
+      {/* Info Banner - Support nur für Zwischenfälle (for all roles except admin/support) */}
+      {currentRole !== 'admin' && currentRole !== 'support' && (
         <Card className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50">
           <CardContent className="p-4">
             <div className="flex items-start gap-3">
@@ -123,13 +123,13 @@ export function SupportPage() {
               <div>
                 <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
                   {language === 'de' 
-                    ? 'Support nur für Zwischenfälle' 
-                    : 'Support for Incidents Only'}
+                    ? '⚠️ Support nur für Zwischenfälle' 
+                    : '⚠️ Support for Incidents Only'}
                 </p>
                 <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
                   {language === 'de'
-                    ? 'Dieses Support-System ist ausschließlich für Zwischenfälle während eines aktiven Transports gedacht. Für allgemeine Kommunikation nutzen Sie bitte den Transport-Chat mit dem Auftraggeber bzw. Empfänger.'
-                    : 'This support system is exclusively for incidents during an active transport. For general communication, please use the transport chat with the shipper or receiver.'}
+                    ? 'Dieses Support-System ist ausschließlich für Zwischenfälle während eines aktiven Transports gedacht (z.B. Unfälle, beschädigte Ware, Lieferprobleme). Für allgemeine Kommunikation nutzen Sie bitte den Transport-Chat.'
+                    : 'This support system is exclusively for incidents during an active transport (e.g., accidents, damaged goods, delivery issues). For general communication, please use the transport chat.'}
                 </p>
               </div>
             </div>

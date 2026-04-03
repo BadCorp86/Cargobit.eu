@@ -553,19 +553,20 @@ export const kpiData = {
   driver: [
     { label: 'deliveriesToday', value: 8, change: 2, changeLabel: 'heute erledigt', icon: 'Truck' },
     { label: 'activeShipments', value: 2, change: 0, changeLabel: 'restlich', icon: 'Package' },
-    { label: 'revenue', value: 1450, change: 15.2, changeLabel: 'heute verdient', icon: 'TrendingUp' },
+    // Driver: NO revenue/finances - only operational metrics
     { label: 'avgRating', value: 4.9, change: 0.3, changeLabel: 'Kundenrating', icon: 'Star' },
+    { label: 'hoursToday', value: 6.5, change: 1.5, changeLabel: 'Stunden heute', icon: 'Clock' },
   ],
   shipper: [
     { label: 'activeShipments', value: 15, change: 3, changeLabel: 'aktive Sendungen', icon: 'Package' },
-    { label: 'revenue', value: 12850, change: 5.5, changeLabel: 'dieser Monat', icon: 'TrendingUp' },
+    { label: 'walletBalance', value: 12850, change: 5.5, changeLabel: 'dieser Monat', icon: 'Wallet' },
     { label: 'deliveriesToday', value: 3, change: 1, changeLabel: 'heute geliefert', icon: 'Truck' },
     { label: 'avgRating', value: 4.7, change: 0.1, changeLabel: 'Liefer-Qualität', icon: 'Star' },
   ],
   support: [
-    { label: 'activeShipments', value: 7, change: 2, changeLabel: 'offene Tickets', icon: 'Package' },
-    { label: 'revenue', value: 95.2, change: 3.4, changeLabel: 'Lösungsrate %', icon: 'TrendingUp' },
-    { label: 'deliveriesToday', value: 23, change: 5, changeLabel: 'heute bearbeitet', icon: 'Truck' },
+    { label: 'open', value: 7, change: 2, changeLabel: 'offene Tickets', icon: 'Package' },
+    { label: 'inProgress', value: 3, change: 1, changeLabel: 'in Bearbeitung', icon: 'Clock' },
+    { label: 'resolved', value: 95, change: 3.4, changeLabel: 'Lösungsrate %', icon: 'CheckCircle' },
     { label: 'avgRating', value: 4.6, change: 0.2, changeLabel: 'Zufriedenheit', icon: 'Star' },
   ],
 };
