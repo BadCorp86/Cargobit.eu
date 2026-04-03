@@ -64,20 +64,14 @@ export const membershipPlans: MembershipPlan[] = [
       dispatcher: 8,
       driver: 0,
       shipper: 0, // Verlader zahlt KEIN Abo, nur 4% Auktionsprovision
-      warehouse: 0,
       support: 0,
-      finance: 0,
-      customer: 0,
     },
     walletFee: {
       admin: 0,
       dispatcher: 0,
       driver: 3,
       shipper: 0,
-      warehouse: 0,
       support: 0,
-      finance: 0,
-      customer: 0,
     },
   },
   {
@@ -116,20 +110,14 @@ export const membershipPlans: MembershipPlan[] = [
       dispatcher: 5,
       driver: 0,
       shipper: 0, // Verlader zahlt KEIN Abo
-      warehouse: 0,
       support: 0,
-      finance: 0,
-      customer: 0,
     },
     walletFee: {
       admin: 0,
       dispatcher: 0,
       driver: 2,
       shipper: 0,
-      warehouse: 0,
       support: 0,
-      finance: 0,
-      customer: 0,
     },
     popular: true,
   },
@@ -173,20 +161,14 @@ export const membershipPlans: MembershipPlan[] = [
       dispatcher: 3.5,  // was 2, now 3.5%
       driver: 0,
       shipper: 0, // Verlader zahlt KEIN Abo
-      warehouse: 0,
       support: 0,
-      finance: 0,
-      customer: 0,
     },
     walletFee: {
       admin: 0,
       dispatcher: 0,
       driver: 0.5,
       shipper: 0,
-      warehouse: 0,
       support: 0,
-      finance: 0,
-      customer: 0,
     },
   },
 ];
@@ -200,7 +182,7 @@ export const membershipPlans: MembershipPlan[] = [
  * Verlader hat hier immer 0% – sie zahlen stattdessen die Auktionsprovision
  */
 export function getTransportCommission(tier: MembershipTier, role: UserRole): number {
-  if (role === 'admin' || role === 'support' || role === 'finance' || role === 'warehouse' || role === 'customer') return 0;
+  if (role === 'admin' || role === 'support') return 0;
   if (role === 'shipper') return 0; // Verlader zahlt keine Transportprovision, nur Auktionsprovision
 
   if (tier === 'free') return FREE_TIER.transportCommission;
@@ -214,7 +196,7 @@ export function getTransportCommission(tier: MembershipTier, role: UserRole): nu
  * Wallet-Gebühr für Fahrer (Abo-basiert)
  */
 export function getWalletFee(tier: MembershipTier, role: UserRole): number {
-  if (role === 'admin' || role === 'support' || role === 'finance' || role === 'warehouse' || role === 'customer' || role === 'dispatcher' || role === 'shipper') return 0;
+  if (role !== 'driver') return 0;
 
   if (tier === 'free') return FREE_TIER.walletFee;
 

@@ -3,10 +3,7 @@ export type UserRole =
   | 'dispatcher'
   | 'driver'
   | 'shipper'
-  | 'warehouse'
-  | 'support'
-  | 'finance'
-  | 'customer';
+  | 'support';
 
 export type ShipmentStatus =
   | 'pending'

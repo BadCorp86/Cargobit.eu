@@ -47,14 +47,6 @@ export const roleConfigs: RoleConfig[] = [
     isPublic: true,
   },
   {
-    id: 'warehouse',
-    label: 'Lager',
-    icon: 'Warehouse',
-    description: 'Bestandsverwaltung und Lagerverwaltung',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'analytics', 'settings'],
-    isPublic: true,
-  },
-  {
     id: 'support',
     label: 'Support',
     icon: 'Headphones',
@@ -62,22 +54,6 @@ export const roleConfigs: RoleConfig[] = [
     availableTabs: ['dashboard', 'support', 'tracking', 'wallet', 'settings'],
     isPublic: false,
     ownerOnly: true,
-  },
-  {
-    id: 'finance',
-    label: 'Finanzen',
-    icon: 'Euro',
-    description: 'Rechnungen, Zahlungen und Berichte',
-    availableTabs: ['dashboard', 'shipments', 'capacity', 'analytics', 'wallet', 'advertising', 'settings'],
-    isPublic: true,
-  },
-  {
-    id: 'customer',
-    label: 'Kunde',
-    icon: 'User',
-    description: 'Pakete verfolgen und Support kontaktieren',
-    availableTabs: ['dashboard', 'tracking', 'support', 'blog', 'settings'],
-    isPublic: true,
   },
 ];
 
@@ -586,29 +562,11 @@ export const kpiData = {
     { label: 'deliveriesToday', value: 3, change: 1, changeLabel: 'heute geliefert', icon: 'Truck' },
     { label: 'avgRating', value: 4.7, change: 0.1, changeLabel: 'Liefer-Qualität', icon: 'Star' },
   ],
-  warehouse: [
-    { label: 'activeShipments', value: 45, change: 7.2, changeLabel: 'im Lager', icon: 'Package' },
-    { label: 'revenue', value: 18500, change: 4.8, changeLabel: 'Umsatz heute', icon: 'TrendingUp' },
-    { label: 'deliveriesToday', value: 28, change: 12, changeLabel: 'Ausgang heute', icon: 'Truck' },
-    { label: 'avgRating', value: 4.5, change: 0.2, changeLabel: 'Prozesseffizienz', icon: 'Star' },
-  ],
   support: [
     { label: 'activeShipments', value: 7, change: 2, changeLabel: 'offene Tickets', icon: 'Package' },
     { label: 'revenue', value: 95.2, change: 3.4, changeLabel: 'Lösungsrate %', icon: 'TrendingUp' },
     { label: 'deliveriesToday', value: 23, change: 5, changeLabel: 'heute bearbeitet', icon: 'Truck' },
     { label: 'avgRating', value: 4.6, change: 0.2, changeLabel: 'Zufriedenheit', icon: 'Star' },
-  ],
-  finance: [
-    { label: 'revenue', value: 298000, change: 11.1, changeLabel: 'Monatsumsatz', icon: 'TrendingUp' },
-    { label: 'activeShipments', value: 245, change: 15.3, changeLabel: 'offene Rechnungen', icon: 'Package' },
-    { label: 'deliveriesToday', value: 18, change: 4, changeLabel: 'Zahlungen heute', icon: 'Truck' },
-    { label: 'avgRating', value: 97.8, change: 1.2, changeLabel: 'Zahlungsquote %', icon: 'Star' },
-  ],
-  customer: [
-    { label: 'activeShipments', value: 3, change: 1, changeLabel: 'aktive Sendungen', icon: 'Package' },
-    { label: 'revenue', value: 2450, change: 0, changeLabel: 'offener Betrag', icon: 'TrendingUp' },
-    { label: 'deliveriesToday', value: 1, change: 1, changeLabel: 'heute geliefert', icon: 'Truck' },
-    { label: 'avgRating', value: 4.8, change: 0, changeLabel: 'Gesamtbewertung', icon: 'Star' },
   ],
 };
 
