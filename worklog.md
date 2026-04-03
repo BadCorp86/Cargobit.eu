@@ -56,3 +56,31 @@ Implement three major features for the CargoBit freight exchange platform:
 - TypeScript compiles cleanly
 - Dev server running without issues
 - All text goes through i18n system
+
+---
+## Task ID: cargo-role-membership-update
+Agent: Main Agent
+Task: Update RoleConfig types, role visibility on login, enterprise commission, and membership example calculation
+
+### Work Task
+Apply 6 changes to the CargoBit platform:
+1. Add isPublic/ownerOnly/marketingByApplication fields to RoleConfig
+2. Update roleConfigs with visibility flags, add publicRoleConfigs/ownerOnlyRoles/MARKETING_ACCESS
+3. Update login page to only show public roles (6 instead of 8), change grid to lg:grid-cols-3
+4. Change Enterprise dispatcher commission from 2% to 3.5%, add calculateTransporteurCommission/calculateTransporteurNetIncome helpers
+5. Verify FREE_TIER dispatcher commission is 14%
+6. Replace memberships page example calculation with comprehensive dual-side auction billing example
+
+### Work Summary
+
+#### Files Modified:
+- **`src/types/index.ts`**: Added `isPublic?: boolean`, `ownerOnly?: boolean`, `marketingByApplication?: boolean` fields to RoleConfig interface
+- **`src/lib/mock-data.ts`**: Updated all 8 role configs with isPublic/ownerOnly flags. Admin & Support marked as `isPublic: false, ownerOnly: true`. 6 public roles marked as `isPublic: true`. Added `publicRoleConfigs` (filtered array), `ownerOnlyRoles` (filtered array), and `MARKETING_ACCESS` constant
+- **`src/components/cargo/login-screen.tsx`**: Changed import to include `publicRoleConfigs`. Replaced `roleConfigs` with `publicRoleConfigs` in role grid. Changed grid from `lg:grid-cols-4` to `lg:grid-cols-3` for better layout with 6 public roles
+- **`src/lib/membership-data.ts`**: Changed Enterprise plan dispatcher commission from 2% to 3.5%. Added `calculateTransporteurCommission()` and `calculateTransporteurNetIncome()` helper functions
+- **`src/components/cargo/memberships/memberships-page.tsx`**: Updated imports to include new helpers and VERLADER_BROKERAGE_FEE. Added Truck icon import. Updated commission table enterprise value from 2 to 3.5. Replaced simple example with comprehensive dual-side auction billing showing: Verlader side (4% on €800 = €32), Transporteur side (tier comparison table with commission/net income for all 4 tiers), and CargoBit total revenue summary (€72 for Professional example)
+
+#### Quality:
+- ESLint: 0 errors, 0 warnings
+- Dev server compiles cleanly (no errors in dev.log)
+- All user-visible text in German with English fallback

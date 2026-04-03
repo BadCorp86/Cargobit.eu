@@ -17,8 +17,10 @@ export const roleConfigs: RoleConfig[] = [
     id: 'admin',
     label: 'Administrator',
     icon: 'Shield',
-    description: 'Vollzugriff auf alle Plattformfunktionen',
+    description: 'Vollzugriff auf alle Plattformfunktionen – Nur vom Plattformbetreiber zuweisbar',
     availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'analytics', 'blog', 'wallet', 'advertising', 'memberships', 'settings'],
+    isPublic: false,
+    ownerOnly: true,
   },
   {
     id: 'dispatcher',
@@ -26,6 +28,7 @@ export const roleConfigs: RoleConfig[] = [
     icon: 'Radio',
     description: 'Sendungsverwaltung und Routenplanung',
     availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'wallet', 'memberships', 'settings'],
+    isPublic: true,
   },
   {
     id: 'driver',
@@ -33,6 +36,7 @@ export const roleConfigs: RoleConfig[] = [
     icon: 'Truck',
     description: 'Aktive Lieferungen und Routennavigation',
     availableTabs: ['dashboard', 'tracking', 'fleet', 'settings'],
+    isPublic: true,
   },
   {
     id: 'shipper',
@@ -40,6 +44,7 @@ export const roleConfigs: RoleConfig[] = [
     icon: 'Package',
     description: 'Sendungen erstellen und Pakete verfolgen',
     availableTabs: ['dashboard', 'shipments', 'tracking', 'capacity', 'wallet', 'memberships', 'settings'],
+    isPublic: true,
   },
   {
     id: 'warehouse',
@@ -47,13 +52,16 @@ export const roleConfigs: RoleConfig[] = [
     icon: 'Warehouse',
     description: 'Bestandsverwaltung und Lagerverwaltung',
     availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'analytics', 'settings'],
+    isPublic: true,
   },
   {
     id: 'support',
     label: 'Support',
     icon: 'Headphones',
-    description: 'Ticketverwaltung und Konfliktlösung',
+    description: 'Ticketverwaltung und Konfliktlösung – Nur vom Plattformbetreiber zuweisbar',
     availableTabs: ['dashboard', 'support', 'tracking', 'wallet', 'settings'],
+    isPublic: false,
+    ownerOnly: true,
   },
   {
     id: 'finance',
@@ -61,6 +69,7 @@ export const roleConfigs: RoleConfig[] = [
     icon: 'Euro',
     description: 'Rechnungen, Zahlungen und Berichte',
     availableTabs: ['dashboard', 'shipments', 'capacity', 'analytics', 'wallet', 'advertising', 'settings'],
+    isPublic: true,
   },
   {
     id: 'customer',
@@ -68,8 +77,22 @@ export const roleConfigs: RoleConfig[] = [
     icon: 'User',
     description: 'Pakete verfolgen und Support kontaktieren',
     availableTabs: ['dashboard', 'tracking', 'support', 'blog', 'settings'],
+    isPublic: true,
   },
 ];
+
+// Publicly available roles (shown on login page)
+export const publicRoleConfigs = roleConfigs.filter(r => r.isPublic !== false);
+
+// Owner-only roles (admin, support) - not publicly available
+export const ownerOnlyRoles = roleConfigs.filter(r => r.ownerOnly === true);
+
+// Marketing/Bewerbung access: only granted by platform owner after application
+export const MARKETING_ACCESS = {
+  requiresApplication: true,
+  description: 'Zugang zur Werbebuchung nur nach Bewerbung durch den Plattformbetreiber',
+  descriptionEn: 'Access to advertising booking only after application to the platform owner',
+};
 
 export const shipments: Shipment[] = [
   {

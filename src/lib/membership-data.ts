@@ -170,7 +170,7 @@ export const membershipPlans: MembershipPlan[] = [
     ],
     transportCommission: {
       admin: 0,
-      dispatcher: 2,
+      dispatcher: 3.5,  // was 2, now 3.5%
       driver: 0,
       shipper: 0, // Verlader zahlt KEIN Abo
       warehouse: 0,
@@ -336,6 +336,26 @@ export function calculateAIRecommendedPrice(params: AIPricingParams): AIPriceRec
 // ==========================================
 // FORMAT HELPERS
 // ==========================================
+
+/**
+ * Berechnet die Transporteur-Provision auf den Zuschlagspreis
+ * Transporteur = Spediteur (dispatcher), der die Auktion gewinnt
+ * @param winningBidAmount Der Zuschlagspreis
+ * @param tier Das Abo-Tier des Transporteurs
+ * @returns Die Provision, die der Transporteur an CargoBit zahlt
+ */
+export function calculateTransporteurCommission(winningBidAmount: number, tier: MembershipTier): number {
+  const commissionPercent = getTransportCommission(tier, 'dispatcher');
+  return Math.round(winningBidAmount * (commissionPercent / 100) * 100) / 100;
+}
+
+/**
+ * Berechnet den Netto-Betrag den der Transporteur nach Abzug der Provision erhält
+ */
+export function calculateTransporteurNetIncome(winningBidAmount: number, tier: MembershipTier): number {
+  const commission = calculateTransporteurCommission(winningBidAmount, tier);
+  return Math.round((winningBidAmount - commission) * 100) / 100;
+}
 
 export function formatEUR(amount: number): string {
   return new Intl.NumberFormat('de-DE', {

@@ -2,7 +2,7 @@
 
 import { motion } from 'framer-motion';
 import { useCargoBitStore } from '@/lib/store';
-import { roleConfigs } from '@/lib/mock-data';
+import { roleConfigs, publicRoleConfigs } from '@/lib/mock-data';
 import { t } from '@/lib/i18n';
 import { Language } from '@/types';
 import Image from 'next/image';
@@ -126,8 +126,8 @@ export function LoginScreen() {
             </p>
 
             {/* Role Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {roleConfigs.map((role, index) => {
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {publicRoleConfigs.map((role, index) => {
                 const Icon = iconMap[role.icon] || User;
                 return (
                   <motion.div

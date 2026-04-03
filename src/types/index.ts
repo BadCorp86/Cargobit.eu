@@ -128,6 +128,9 @@ export interface RoleConfig {
   icon: string;
   description: string;
   availableTabs: NavigationTab[];
+  isPublic?: boolean; // true = publicly selectable on login, false/undefined = owner-assigned only
+  ownerOnly?: boolean; // true = only the platform owner can create/assign this role
+  marketingByApplication?: boolean; // true = access only after approved application to owner
 }
 
 export interface Shipment {

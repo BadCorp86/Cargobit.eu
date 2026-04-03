@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useCargoBitStore } from '@/lib/store';
 import { t } from '@/lib/i18n';
-import { membershipPlans, formatEUR, getTransportCommission, getWalletFee, getVerladerBrokerageFee, FREE_TIER } from '@/lib/membership-data';
+import { membershipPlans, formatEUR, getTransportCommission, getWalletFee, getVerladerBrokerageFee, FREE_TIER, calculateTransporteurCommission, calculateTransporteurNetIncome, VERLADER_BROKERAGE_FEE } from '@/lib/membership-data';
 import type { MembershipTier, BillingCycle } from '@/types';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ import {
   Lock,
   Info,
   Package,
+  Truck,
   Wallet,
   UserCircle,
   AlertCircle,
@@ -409,39 +410,133 @@ export function MembershipsPage() {
               </div>
             </div>
 
-            {/* Beispiel-Rechnung */}
-            <div className="p-4 rounded-xl bg-muted/30 border border-border/50 space-y-3">
+            {/* Beispiel-Rechnung – Vollständige Auktionsabrechnung */}
+            <div className="p-4 rounded-xl bg-muted/30 border border-border/50 space-y-4">
               <div className="flex items-center gap-2">
                 <Info className="w-4 h-4 text-orange-500" />
                 <p className="text-sm font-semibold">
-                  {language === 'de' ? 'Beispielrechnung' : 'Example Calculation'}
+                  {language === 'de' ? 'Beispielrechnung – Vollständige Auktionsabrechnung' : 'Example Calculation – Complete Auction Billing'}
                 </p>
               </div>
+
+              {/* Auction header */}
+              <div className="flex items-center justify-between p-3 rounded-lg bg-background/80 border border-border/50">
+                <div className="flex items-center gap-2">
+                  <Package className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{language === 'de' ? 'Auktion' : 'Auction'}</span>
+                </div>
+                <span className="text-sm text-muted-foreground">
+                  {language === 'de' ? 'Startpreis' : 'Start'} €1.000 → {language === 'de' ? 'Zuschlag' : 'Winning Bid'} <span className="font-bold text-green-600 dark:text-green-400">€800</span>
+                </span>
+              </div>
+
+              {/* Seite 1 – Verlader */}
               <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    {language === 'de' ? 'Auktion Startpreis' : 'Auction Starting Price'}
-                  </span>
-                  <span className="font-medium">€1.000,00</span>
+                <div className="flex items-center gap-2 mb-1">
+                  <UserCircle className="w-4 h-4 text-emerald-500" />
+                  <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    {language === 'de' ? 'Seite 1 – Verlader (Auktionsersteller)' : 'Side 1 – Shipper (Auction Creator)'}
+                  </p>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">
-                    {language === 'de' ? 'Zuschlagspreis (niedrigstes Gebot)' : 'Winning Bid (lowest bid)'}
+                    {verladerFee}% {language === 'de' ? 'Vermittlungsgebühr auf €800' : 'Brokerage fee on €800'}
                   </span>
-                  <span className="font-medium text-green-600 dark:text-green-400">€800,00</span>
+                  <span className="font-semibold">= {formatEUR(800 * verladerFee / 100)}</span>
                 </div>
-                <Separator className="bg-border/50" />
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">
-                    {verladerFee}% {language === 'de' ? 'Vermittlungsgebühr' : 'Brokerage Fee'}
-                  </span>
-                  <span className="font-bold text-orange-500">{formatEUR(800 * verladerFee / 100)}</span>
-                </div>
-                <div className="flex justify-between text-sm pt-1">
-                  <span className="text-muted-foreground">
+                <div className="flex justify-between text-sm p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20">
+                  <span className="font-medium text-emerald-700 dark:text-emerald-400">
                     {language === 'de' ? 'Verlader zahlt an CargoBit' : 'Shipper pays to CargoBit'}
                   </span>
-                  <span className="font-bold text-lg">{formatEUR(800 * verladerFee / 100)}</span>
+                  <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 font-mono text-xs">
+                    {formatEUR(800 * verladerFee / 100)}
+                  </Badge>
+                </div>
+              </div>
+
+              <Separator className="bg-border/50" />
+
+              {/* Seite 2 – Transporteur (Gewinner der Auktion) */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <Truck className="w-4 h-4 text-blue-500" />
+                  <p className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                    {language === 'de' ? 'Seite 2 – Transporteur (Gewinner der Auktion)' : 'Side 2 – Transport Provider (Auction Winner)'}
+                  </p>
+                </div>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-border/50">
+                        <th className="text-left py-1.5 text-xs text-muted-foreground font-medium">{language === 'de' ? 'Abo-Tier' : 'Plan Tier'}</th>
+                        <th className="text-right py-1.5 text-xs text-muted-foreground font-medium">{language === 'de' ? 'Provision' : 'Commission'}</th>
+                        <th className="text-right py-1.5 text-xs text-muted-foreground font-medium">{language === 'de' ? 'Netto-Einkommen' : 'Net Income'}</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {(['free', 'starter', 'professional', 'enterprise'] as const).map((tier) => {
+                        const commission = calculateTransporteurCommission(800, tier);
+                        const netIncome = calculateTransporteurNetIncome(800, tier);
+                        const tierLabel = tier === 'free'
+                          ? (language === 'de' ? 'Kostenlos' : 'Free')
+                          : tier === 'starter'
+                            ? (language === 'de' ? 'Starter' : 'Starter')
+                            : tier === 'professional'
+                              ? (language === 'de' ? 'Professional' : 'Professional')
+                              : (language === 'de' ? 'Enterprise' : 'Enterprise');
+                        return (
+                          <tr key={tier} className="border-b border-border/30">
+                            <td className="py-1.5 font-medium text-xs">{tierLabel}</td>
+                            <td className="py-1.5 text-right text-xs text-orange-600 dark:text-orange-400">
+                              {getTransportCommission(tier, 'dispatcher')}% = {formatEUR(commission)}
+                            </td>
+                            <td className="py-1.5 text-right text-xs font-semibold text-green-600 dark:text-green-400">
+                              {formatEUR(netIncome)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <Separator className="bg-border/50" />
+
+              {/* CargoBit Gesamteinnahmen */}
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-1">
+                  <TrendingUp className="w-4 h-4 text-orange-500" />
+                  <p className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">
+                    {language === 'de' ? 'CargoBit Gesamteinnahmen pro Auktion (Beispiel Professional)' : 'CargoBit Total Revenue per Auction (Example Professional)'}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {language === 'de' ? 'Von Verlader (Vermittlungsgebühr)' : 'From Shipper (Brokerage Fee)'}
+                    </span>
+                    <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 font-mono text-xs">
+                      {formatEUR(800 * verladerFee / 100)}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-muted-foreground">
+                      {language === 'de' ? 'Von Transporteur (5% Provision)' : 'From Transport Provider (5% Commission)'}
+                    </span>
+                    <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 font-mono text-xs">
+                      {formatEUR(calculateTransporteurCommission(800, 'professional'))}
+                    </Badge>
+                  </div>
+                  <Separator className="bg-border/50" />
+                  <div className="flex justify-between text-sm p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                    <span className="font-bold text-orange-600 dark:text-orange-400">
+                      {language === 'de' ? 'Gesamteinnahmen CargoBit' : 'Total CargoBit Revenue'}
+                    </span>
+                    <span className="font-bold text-orange-600 dark:text-orange-400 text-base">
+                      {formatEUR(800 * verladerFee / 100 + calculateTransporteurCommission(800, 'professional'))}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -499,7 +594,7 @@ export function MembershipsPage() {
                   <CommissionTableRow
                     label={language === 'de' ? 'Spediteur (Transportprovision)' : 'Dispatcher (Transport Commission)'}
                     description={language === 'de' ? 'Monatl. Abo erforderlich' : 'Monthly sub required'}
-                    values={[FREE_TIER.transportCommission, 8, 5, 2]}
+                    values={[FREE_TIER.transportCommission, 8, 5, 3.5]}
                     language={language}
                     highlightIndex={-1}
                   />
