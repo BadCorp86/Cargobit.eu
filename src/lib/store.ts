@@ -44,6 +44,14 @@ interface CargoBitState {
   // Create ticket dialog
   showCreateTicket: boolean;
   setShowCreateTicket: (show: boolean) => void;
+
+  // Create campaign dialog
+  showCreateCampaign: boolean;
+  setShowCreateCampaign: (show: boolean) => void;
+
+  // Ad application dialog
+  showAdApplication: boolean;
+  setShowAdApplication: (show: boolean) => void;
 }
 
 export const useCargoBitStore = create<CargoBitState>((set) => ({
@@ -89,4 +97,12 @@ export const useCargoBitStore = create<CargoBitState>((set) => ({
   // Create ticket
   showCreateTicket: false,
   setShowCreateTicket: (show) => set({ showCreateTicket: show }),
+
+  // Create campaign
+  showCreateCampaign: false,
+  setShowCreateCampaign: (show) => set({ showCreateCampaign: show }),
+
+  // Ad application
+  showAdApplication: false,
+  setShowAdApplication: (show) => set({ showAdApplication: show }),
 }));

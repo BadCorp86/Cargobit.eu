@@ -29,7 +29,9 @@ export type NavigationTab =
   | 'support'
   | 'analytics'
   | 'blog'
-  | 'settings';
+  | 'settings'
+  | 'wallet'
+  | 'advertising';
 
 export type DriverStatus = 'available' | 'en_route' | 'on_break' | 'offline' | 'resting';
 export type VehicleStatus = 'active' | 'maintenance' | 'parked' | 'loading' | 'unloading';
@@ -209,6 +211,81 @@ export interface LanguageOption {
   code: Language;
   label: string;
   flag: string;
+}
+
+export interface WalletTransaction {
+  id: string;
+  type: 'transport_fee' | 'commission' | 'auction_fee' | 'express_surcharge' | 'refund' | 'deposit' | 'withdrawal';
+  amount: number;
+  currency: string;
+  status: 'completed' | 'pending' | 'failed';
+  reference: string;
+  description: string;
+  shipmentId?: string;
+  createdAt: string;
+  balanceAfter: number;
+}
+
+export interface WalletInvoice {
+  id: string;
+  invoiceNumber: string;
+  amount: number;
+  status: 'paid' | 'pending' | 'overdue';
+  createdAt: string;
+  dueDate: string;
+  customerName: string;
+  shipmentIds: string[];
+}
+
+export interface PaymentMethod {
+  id: string;
+  type: 'bank_transfer' | 'credit_card' | 'sepa';
+  label: string;
+  details: string;
+  isDefault: boolean;
+}
+
+export interface AdCampaign {
+  id: string;
+  name: string;
+  advertiser: string;
+  status: 'active' | 'pending_review' | 'paused' | 'completed' | 'rejected';
+  position: string;
+  bannerUrl: string;
+  targetUrl: string;
+  impressions: number;
+  clicks: number;
+  budget: number;
+  budgetUsed: number;
+  startDate: string;
+  endDate: string;
+  ctr: number;
+  createdAt: string;
+}
+
+export interface AdPosition {
+  id: string;
+  name: string;
+  location: string;
+  dimensions: string;
+  pricePerMonth: number;
+  available: boolean;
+  currentAdvertiser?: string;
+}
+
+export interface AdApplication {
+  id: string;
+  companyName: string;
+  contactPerson: string;
+  email: string;
+  phone: string;
+  website: string;
+  description: string;
+  targetAudience: string[];
+  budgetRange: string;
+  preferredPositions: string[];
+  status: 'pending' | 'approved' | 'rejected';
+  submittedAt: string;
 }
 
 export function getDriverStatusColor(status: DriverStatus): string {

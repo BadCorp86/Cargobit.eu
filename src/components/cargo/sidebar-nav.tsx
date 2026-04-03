@@ -30,6 +30,8 @@ import {
   PackageCheck,
   AlertTriangle,
   Clock,
+  Wallet,
+  Megaphone,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -61,6 +63,8 @@ const tabIconMap: Record<NavigationTab, React.ElementType> = {
   analytics: BarChart3,
   blog: Newspaper,
   settings: Settings,
+  wallet: Wallet,
+  advertising: Megaphone,
 };
 
 export function SidebarNav() {

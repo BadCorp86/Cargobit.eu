@@ -13,6 +13,8 @@ import { SupportPage } from './support/support-page';
 import { AnalyticsPage } from './analytics/analytics-page';
 import { BlogPage } from './blog/blog-page';
 import { SettingsPage } from './settings/settings-page';
+import { WalletPage } from './wallet/wallet-page';
+import { AdvertisingPage } from './advertising/advertising-page';
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -39,6 +41,10 @@ export function AppShell() {
         return <FleetPage />;
       case 'capacity':
         return <CapacityPage />;
+      case 'wallet':
+        return <WalletPage />;
+      case 'advertising':
+        return <AdvertisingPage />;
       case 'support':
         return <SupportPage />;
       case 'analytics':

@@ -18,14 +18,14 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Administrator',
     icon: 'Shield',
     description: 'Vollzugriff auf alle Plattformfunktionen',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'analytics', 'blog', 'settings'],
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'analytics', 'blog', 'wallet', 'advertising', 'settings'],
   },
   {
     id: 'dispatcher',
     label: 'Disponent',
     icon: 'Radio',
     description: 'Sendungsverwaltung und Routenplanung',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'settings'],
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'wallet', 'settings'],
   },
   {
     id: 'driver',
@@ -39,7 +39,7 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Versender',
     icon: 'Package',
     description: 'Sendungen erstellen und Pakete verfolgen',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'capacity', 'settings'],
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'capacity', 'wallet', 'settings'],
   },
   {
     id: 'warehouse',
@@ -53,14 +53,14 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Support',
     icon: 'Headphones',
     description: 'Ticketverwaltung und Konfliktlösung',
-    availableTabs: ['dashboard', 'support', 'tracking', 'settings'],
+    availableTabs: ['dashboard', 'support', 'tracking', 'wallet', 'settings'],
   },
   {
     id: 'finance',
     label: 'Finanzen',
     icon: 'Euro',
     description: 'Rechnungen, Zahlungen und Berichte',
-    availableTabs: ['dashboard', 'shipments', 'capacity', 'analytics', 'settings'],
+    availableTabs: ['dashboard', 'shipments', 'capacity', 'analytics', 'wallet', 'advertising', 'settings'],
   },
   {
     id: 'customer',
