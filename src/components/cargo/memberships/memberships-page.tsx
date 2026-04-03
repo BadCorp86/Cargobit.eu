@@ -326,18 +326,18 @@ export function MembershipsPage() {
 
                   <Separator className="bg-border/50" />
 
-                  {/* Commission rates for Spediteur & Fahrer */}
+                  {/* Commission rates for Disponent */}
                   <div>
                     <p className="text-sm font-semibold mb-3">{t('transportCommission', language)}</p>
                     <div className="space-y-2">
                       <CommissionRow
-                        label={language === 'de' ? 'Spediteur' : 'Dispatcher'}
+                        label={language === 'de' ? 'Spediteur (Transportprovision)' : 'Dispatcher (Transport Commission)'}
                         value={plan.transportCommission.dispatcher}
                         language={language}
                       />
                       <CommissionRow
-                        label={language === 'de' ? 'Fahrer (Wallet)' : 'Driver (Wallet)'}
-                        value={plan.walletFee.driver}
+                        label={language === 'de' ? 'Disponent (Wallet-Gebühr)' : 'Dispatcher (Wallet Fee)'}
+                        value={plan.walletFee.dispatcher}
                         language={language}
                       />
                     </div>
@@ -605,9 +605,9 @@ export function MembershipsPage() {
                     language={language}
                     highlightIndex={-1}
                   />
-                  {/* Fahrer - Wallet-Gebühr (Abo-basiert) */}
+                  {/* Disponent - Wallet-Gebühr (Abo-basiert) */}
                   <CommissionTableRow
-                    label={language === 'de' ? 'Fahrer (Wallet-Gebühr)' : 'Driver (Wallet Fee)'}
+                    label={language === 'de' ? 'Disponent (Wallet-Gebühr)' : 'Dispatcher (Wallet Fee)'}
                     description={language === 'de' ? 'Monatl. Abo erforderlich' : 'Monthly sub required'}
                     values={[FREE_TIER.walletFee, 3, 2.5, 2]}
                     language={language}
