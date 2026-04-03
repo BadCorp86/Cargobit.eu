@@ -51,7 +51,7 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Support',
     icon: 'Headphones',
     description: 'Ticketverwaltung und Konfliktlösung – Nur vom Plattformbetreiber zuweisbar',
-    availableTabs: ['dashboard', 'support', 'tracking', 'chat', 'wallet', 'settings'],
+    availableTabs: ['dashboard', 'support', 'tracking', 'chat', 'settings'],
     isPublic: false,
     ownerOnly: true,
   },
