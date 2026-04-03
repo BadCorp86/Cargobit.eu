@@ -37,6 +37,8 @@ import {
   Building,
   Palette,
   Shield,
+  Upload,
+  Camera,
 } from 'lucide-react';
 import { useTheme } from 'next-themes';
 import { cn } from '@/lib/utils';
@@ -47,6 +49,18 @@ export function SettingsPage() {
   const [emailNotif, setEmailNotif] = useState(true);
   const [pushNotif, setPushNotif] = useState(true);
   const [smsNotif, setSmsNotif] = useState(false);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCompanyLogo(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   const themeOptions = [
     { value: 'light', icon: Sun, label: t('light', language) },
@@ -108,6 +122,81 @@ export function SettingsPage() {
           <Button className="mt-4 bg-orange-500 hover:bg-orange-600 text-white">
             {t('save', language)}
           </Button>
+        </CardContent>
+      </Card>
+
+      {/* Company Profile - Logo Upload */}
+      <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base font-semibold flex items-center gap-2">
+            <Building className="w-4 h-4 text-orange-500" />
+            {language === 'de' ? 'Firmenprofil' : 'Company Profile'}
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-6 pb-6">
+          <div className="flex items-start gap-6 mb-6">
+            {/* Logo Upload */}
+            <div className="flex flex-col items-center gap-3">
+              <div className="relative group">
+                <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-orange-100 to-amber-100 dark:from-orange-900/30 dark:to-amber-900/30 border-2 border-dashed border-orange-300 dark:border-orange-700/50 flex items-center justify-center overflow-hidden transition-all group-hover:border-orange-500">
+                  {companyLogo ? (
+                    <img src={companyLogo} alt="Company Logo" className="w-full h-full object-cover" />
+                  ) : (
+                    <Building className="w-10 h-10 text-orange-400 dark:text-orange-500" />
+                  )}
+                </div>
+                <label className="absolute inset-0 flex items-center justify-center bg-black/50 rounded-2xl opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer">
+                  <Camera className="w-6 h-6 text-white" />
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleLogoUpload}
+                  />
+                </label>
+              </div>
+              <p className="text-xs text-muted-foreground text-center">
+                {language === 'de' ? 'Klicken zum Hochladen' : 'Click to upload'}
+              </p>
+            </div>
+            {/* Company Details */}
+            <div className="flex-1 space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>{language === 'de' ? 'Firmenname' : 'Company Name'}</Label>
+                  <Input defaultValue="CargoBit GmbH" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{language === 'de' ? 'Firmen-ID' : 'Company ID'}</Label>
+                  <Input defaultValue="CB-2024-001" disabled className="bg-muted/50" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{language === 'de' ? 'Adresse' : 'Address'}</Label>
+                  <Input defaultValue="Logistikstraße 42, 10115 Berlin" />
+                </div>
+                <div className="space-y-2">
+                  <Label>{language === 'de' ? 'Website' : 'Website'}</Label>
+                  <Input defaultValue="https://cargobit.eu" />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <Button className="bg-orange-500 hover:bg-orange-600 text-white">
+              <Upload className="w-4 h-4 mr-2" />
+              {language === 'de' ? 'Logo speichern' : 'Save Logo'}
+            </Button>
+            {companyLogo && (
+              <Button variant="outline" onClick={() => setCompanyLogo(null)}>
+                {language === 'de' ? 'Logo entfernen' : 'Remove Logo'}
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground mt-3">
+            {language === 'de'
+              ? 'Empfohlene Größe: 200x200 Pixel. Unterstützte Formate: PNG, JPG, SVG.'
+              : 'Recommended size: 200x200 pixels. Supported formats: PNG, JPG, SVG.'}
+          </p>
         </CardContent>
       </Card>
 

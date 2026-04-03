@@ -503,42 +503,44 @@ export function MembershipsPage() {
 
               <Separator className="bg-border/50" />
 
-              {/* CargoBit Gesamteinnahmen */}
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4 text-orange-500" />
-                  <p className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">
-                    {language === 'de' ? 'CargoBit Gesamteinnahmen pro Auktion (Beispiel Professional)' : 'CargoBit Total Revenue per Auction (Example Professional)'}
-                  </p>
+              {/* CargoBit Gesamteinnahmen - Nur für Admin sichtbar */}
+              {currentRole === 'admin' && (
+                <div className="space-y-2">
+                  <div className="flex items-center gap-2 mb-1">
+                    <TrendingUp className="w-4 h-4 text-orange-500" />
+                    <p className="text-xs font-bold text-orange-600 dark:text-orange-400 uppercase tracking-wider">
+                      {language === 'de' ? 'CargoBit Gesamteinnahmen pro Auktion (Beispiel Professional)' : 'CargoBit Total Revenue per Auction (Example Professional)'}
+                    </p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {language === 'de' ? 'Von Verlader (Vermittlungsgebühr)' : 'From Shipper (Brokerage Fee)'}
+                      </span>
+                      <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 font-mono text-xs">
+                        {formatEUR(800 * verladerFee / 100)}
+                      </Badge>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {language === 'de' ? 'Von Transporteur (5% Provision)' : 'From Transport Provider (5% Commission)'}
+                      </span>
+                      <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 font-mono text-xs">
+                        {formatEUR(calculateTransporteurCommission(800, 'professional'))}
+                      </Badge>
+                    </div>
+                    <Separator className="bg-border/50" />
+                    <div className="flex justify-between text-sm p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
+                      <span className="font-bold text-orange-600 dark:text-orange-400">
+                        {language === 'de' ? 'Gesamteinnahmen CargoBit' : 'Total CargoBit Revenue'}
+                      </span>
+                      <span className="font-bold text-orange-600 dark:text-orange-400 text-base">
+                        {formatEUR(800 * verladerFee / 100 + calculateTransporteurCommission(800, 'professional'))}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {language === 'de' ? 'Von Verlader (Vermittlungsgebühr)' : 'From Shipper (Brokerage Fee)'}
-                    </span>
-                    <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 font-mono text-xs">
-                      {formatEUR(800 * verladerFee / 100)}
-                    </Badge>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {language === 'de' ? 'Von Transporteur (5% Provision)' : 'From Transport Provider (5% Commission)'}
-                    </span>
-                    <Badge className="bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400 border-0 font-mono text-xs">
-                      {formatEUR(calculateTransporteurCommission(800, 'professional'))}
-                    </Badge>
-                  </div>
-                  <Separator className="bg-border/50" />
-                  <div className="flex justify-between text-sm p-2 rounded-lg bg-orange-500/10 border border-orange-500/30">
-                    <span className="font-bold text-orange-600 dark:text-orange-400">
-                      {language === 'de' ? 'Gesamteinnahmen CargoBit' : 'Total CargoBit Revenue'}
-                    </span>
-                    <span className="font-bold text-orange-600 dark:text-orange-400 text-base">
-                      {formatEUR(800 * verladerFee / 100 + calculateTransporteurCommission(800, 'professional'))}
-                    </span>
-                  </div>
-                </div>
-              </div>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -602,7 +604,7 @@ export function MembershipsPage() {
                   <CommissionTableRow
                     label={language === 'de' ? 'Fahrer (Wallet-Gebühr)' : 'Driver (Wallet Fee)'}
                     description={language === 'de' ? 'Monatl. Abo erforderlich' : 'Monthly sub required'}
-                    values={[FREE_TIER.walletFee, 3, 2, 0.5]}
+                    values={[FREE_TIER.walletFee, 3, 2.5, 2]}
                     language={language}
                     highlightIndex={-1}
                   />
@@ -627,14 +629,6 @@ export function MembershipsPage() {
                       </div>
                     </TableCell>
                   </TableRow>
-                  {/* Admin / Support */}
-                  <CommissionTableRow
-                    label={language === 'de' ? 'Admin / Support / Finanzen' : 'Admin / Support / Finance'}
-                    description=""
-                    values={[0, 0, 0, 0]}
-                    language={language}
-                    highlightIndex={-1}
-                  />
                 </TableBody>
               </Table>
             </div>

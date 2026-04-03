@@ -66,7 +66,7 @@ const statusColors: Record<TicketStatus, string> = {
 };
 
 export function SupportPage() {
-  const { language, showCreateTicket, setShowCreateTicket, selectedTicketId, setSelectedTicketId } = useCargoBitStore();
+  const { language, currentRole, showCreateTicket, setShowCreateTicket, selectedTicketId, setSelectedTicketId } = useCargoBitStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -113,6 +113,29 @@ export function SupportPage() {
           {t('newTicket', language)}
         </Button>
       </div>
+
+      {/* Info Banner for Dispatcher - Support nur für Zwischenfälle */}
+      {currentRole === 'dispatcher' && (
+        <Card className="bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800/50">
+          <CardContent className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="w-5 h-5 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  {language === 'de' 
+                    ? 'Support nur für Zwischenfälle' 
+                    : 'Support for Incidents Only'}
+                </p>
+                <p className="text-xs text-amber-700 dark:text-amber-300 mt-1">
+                  {language === 'de'
+                    ? 'Dieses Support-System ist ausschließlich für Zwischenfälle während eines aktiven Transports gedacht. Für allgemeine Kommunikation nutzen Sie bitte den Transport-Chat mit dem Auftraggeber bzw. Empfänger.'
+                    : 'This support system is exclusively for incidents during an active transport. For general communication, please use the transport chat with the shipper or receiver.'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Filters */}
       <Card className="bg-card/50 backdrop-blur-sm border-border/50">

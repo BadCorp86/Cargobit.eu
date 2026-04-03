@@ -78,7 +78,7 @@ const invoiceStatusColors: Record<string, string> = {
 };
 
 export function WalletPage() {
-  const { language } = useCargoBitStore();
+  const { language, currentRole } = useCargoBitStore();
   const [txFilter, setTxFilter] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -385,10 +385,10 @@ export function WalletPage() {
             <CardContent>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {[
-                  { label: t('transportFee', language), rate: '5 – 8 %', desc: 'Pro Transport' },
-                  { label: t('auctionFee', language), rate: '3 – 5 %', desc: 'Pro Auktion' },
-                  { label: t('expressSurcharge', language), rate: '+ 2 %', desc: 'Express-Aufschlag' },
-                  { label: t('refund', language), rate: '100 %', desc: 'Vollständige Rückerstattung' },
+                  { label: t('transportFee', language), rate: '5 – 8 %', desc: language === 'de' ? 'Pro Transport' : 'Per Transport' },
+                  ...(currentRole === 'shipper' ? [{ label: t('auctionFee', language), rate: '3 – 5 %', desc: language === 'de' ? 'Pro Auktion' : 'Per Auction' }] : []),
+                  { label: t('expressSurcharge', language), rate: '+ 2 %', desc: language === 'de' ? 'Express-Aufschlag' : 'Express Surcharge' },
+                  { label: t('refund', language), rate: '100 %', desc: language === 'de' ? 'Vollständige Rückerstattung' : 'Full Refund' },
                 ].map((item) => (
                   <div key={item.label} className="p-3 rounded-xl bg-muted/30 border border-border/50">
                     <p className="text-xs text-muted-foreground">{item.desc}</p>

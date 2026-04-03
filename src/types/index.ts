@@ -29,7 +29,8 @@ export type NavigationTab =
   | 'settings'
   | 'wallet'
   | 'advertising'
-  | 'memberships';
+  | 'memberships'
+  | 'chat';
 
 export type DriverStatus = 'available' | 'en_route' | 'on_break' | 'offline' | 'resting';
 export type VehicleStatus = 'active' | 'maintenance' | 'parked' | 'loading' | 'unloading';

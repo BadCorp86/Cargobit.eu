@@ -16,6 +16,7 @@ import { SettingsPage } from './settings/settings-page';
 import { WalletPage } from './wallet/wallet-page';
 import { AdvertisingPage } from './advertising/advertising-page';
 import { MembershipsPage } from './memberships/memberships-page';
+import { TransportChatPage } from './chat/transport-chat-page';
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -56,6 +57,8 @@ export function AppShell() {
         return <BlogPage />;
       case 'settings':
         return <SettingsPage />;
+      case 'chat':
+        return <TransportChatPage />;
       default:
         return <DashboardPage />;
     }

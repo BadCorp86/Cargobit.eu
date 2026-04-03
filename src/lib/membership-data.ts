@@ -115,7 +115,7 @@ export const membershipPlans: MembershipPlan[] = [
     walletFee: {
       admin: 0,
       dispatcher: 0,
-      driver: 2,
+      driver: 2.5,
       shipper: 0,
       support: 0,
     },
@@ -166,7 +166,7 @@ export const membershipPlans: MembershipPlan[] = [
     walletFee: {
       admin: 0,
       dispatcher: 0,
-      driver: 0.5,
+      driver: 2,
       shipper: 0,
       support: 0,
     },

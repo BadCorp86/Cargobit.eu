@@ -477,11 +477,13 @@ function FilterPills({
   selected,
   onSelect,
   allLabel,
+  language,
 }: {
   options: string[];
   selected: string;
   onSelect: (val: string) => void;
   allLabel: string;
+  language: string;
 }) {
   return (
     <div className="flex items-center gap-1.5 flex-wrap">
@@ -507,7 +509,7 @@ function FilterPills({
               : 'bg-muted/80 text-muted-foreground hover:bg-muted hover:text-foreground'
           )}
         >
-          {opt}
+          {fl(opt, language)}
         </button>
       ))}
     </div>
@@ -688,6 +690,7 @@ export function FleetPage() {
                 selected={driverStatusFilter}
                 onSelect={setDriverStatusFilter}
                 allLabel={t('all', lang)}
+                language={lang}
               />
             </div>
 
@@ -739,6 +742,7 @@ export function FleetPage() {
                     selected={vehicleStatusFilter}
                     onSelect={setVehicleStatusFilter}
                     allLabel={t('all', lang)}
+                    language={lang}
                   />
                 </div>
                 <div className="flex items-center gap-2">
@@ -750,6 +754,7 @@ export function FleetPage() {
                     selected={vehicleTypeFilter}
                     onSelect={setVehicleTypeFilter}
                     allLabel={t('all', lang)}
+                    language={lang}
                   />
                 </div>
               </div>
