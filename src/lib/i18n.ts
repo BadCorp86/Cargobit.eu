@@ -357,6 +357,36 @@ const translations = {
     conflictResolution: 'Konfliktlösung',
     incidentOnly: 'Nur für Zwischenfälle',
     incidentOnlyDesc: 'Dieses Support-System ist ausschließlich für Zwischenfälle während eines aktiven Transports gedacht.',
+    // Legal pages
+    agb: 'AGB',
+    ecmr: 'e-CMR',
+    cookies: 'Cookie-Einstellungen',
+    'delivery-confirmation': 'Lieferquittierung',
+    // Shipment types
+    palette: 'Palette',
+    auto: 'Auto',
+    schuettgut: 'Schüttgut',
+    stueckgut: 'Stückgut',
+    gefaehrgut: 'Gefahrgut',
+    kuhlgut: 'Kühlgut',
+    // Dimensions
+    length: 'Länge',
+    width: 'Breite',
+    height: 'Höhe',
+    // Driver status
+    verfuegbar: 'Verfügbar',
+    unterwegs: 'Unterwegs',
+    pause: 'Pause',
+    ruhend: 'Ruhend',
+    // AI Price
+    kiPreisempfehlung: 'KI-Preisempfehlung',
+    preisBerechnen: 'Preis berechnen',
+    // Delivery confirmation
+    deliveryConfirmed: 'Lieferung bestätigt',
+    signatureCaptured: 'Unterschrift erfasst',
+    gpsCoordinates: 'GPS-Koordinaten',
+    fraudProtection: 'Betrugsschutz',
+    blockchainVerified: 'Blockchain-verifiziert',
   },
   en: {
     appName: 'CargoBit',
@@ -712,6 +742,36 @@ const translations = {
     conflictResolution: 'Conflict Resolution',
     incidentOnly: 'Incidents Only',
     incidentOnlyDesc: 'This support system is exclusively for incidents during an active transport.',
+    // Legal pages
+    agb: 'Terms & Conditions',
+    ecmr: 'e-CMR',
+    cookies: 'Cookie Settings',
+    'delivery-confirmation': 'Delivery Confirmation',
+    // Shipment types
+    palette: 'Pallet',
+    auto: 'Car',
+    schuettgut: 'Bulk Cargo',
+    stueckgut: 'General Cargo',
+    gefaehrgut: 'Hazardous Goods',
+    kuhlgut: 'Refrigerated Goods',
+    // Dimensions
+    length: 'Length',
+    width: 'Width',
+    height: 'Height',
+    // Driver status
+    verfuegbar: 'Available',
+    unterwegs: 'En Route',
+    pause: 'Break',
+    ruhend: 'Resting',
+    // AI Price
+    kiPreisempfehlung: 'AI Price Recommendation',
+    preisBerechnen: 'Calculate Price',
+    // Delivery confirmation
+    deliveryConfirmed: 'Delivery Confirmed',
+    signatureCaptured: 'Signature Captured',
+    gpsCoordinates: 'GPS Coordinates',
+    fraudProtection: 'Fraud Protection',
+    blockchainVerified: 'Blockchain Verified',
   },
   pl: {
     appName: 'CargoBit',

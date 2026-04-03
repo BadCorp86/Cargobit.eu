@@ -34,6 +34,10 @@ import {
   Megaphone,
   CreditCard,
   MessageSquare,
+  FileText,
+  Cookie,
+  Signature,
+  Shield,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -69,6 +73,10 @@ const tabIconMap: Record<NavigationTab, React.ElementType> = {
   advertising: Megaphone,
   memberships: CreditCard,
   chat: MessageSquare,
+  agb: FileText,
+  ecmr: FileText,
+  cookies: Cookie,
+  'delivery-confirmation': Signature,
 };
 
 export function SidebarNav() {

@@ -30,7 +30,13 @@ export type NavigationTab =
   | 'wallet'
   | 'advertising'
   | 'memberships'
-  | 'chat';
+  | 'chat'
+  | 'agb'
+  | 'ecmr'
+  | 'cookies'
+  | 'delivery-confirmation';
+
+export type ShipmentType = 'palette' | 'auto' | 'schuettgut' | 'stueckgut' | 'gefaehrgut' | 'kuhlgut';
 
 export type DriverStatus = 'available' | 'en_route' | 'on_break' | 'offline' | 'resting';
 export type VehicleStatus = 'active' | 'maintenance' | 'parked' | 'loading' | 'unloading';

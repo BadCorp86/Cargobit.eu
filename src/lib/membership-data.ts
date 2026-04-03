@@ -68,8 +68,8 @@ export const membershipPlans: MembershipPlan[] = [
     },
     walletFee: {
       admin: 0,
-      dispatcher: 0,
-      driver: 3,
+      dispatcher: 3, // Starter: 3% Wallet-Gebühr für Disponenten
+      driver: 0,
       shipper: 0,
       support: 0,
     },
@@ -114,8 +114,8 @@ export const membershipPlans: MembershipPlan[] = [
     },
     walletFee: {
       admin: 0,
-      dispatcher: 0,
-      driver: 2.5, // Professional: 2.5% Wallet-Gebühr für Fahrer
+      dispatcher: 2.5, // Professional: 2.5% Wallet-Gebühr für Disponenten
+      driver: 0,
       shipper: 0,
       support: 0,
     },
@@ -165,8 +165,8 @@ export const membershipPlans: MembershipPlan[] = [
     },
     walletFee: {
       admin: 0,
-      dispatcher: 0,
-      driver: 2, // Enterprise: 2% Wallet-Gebühr für Fahrer
+      dispatcher: 2, // Enterprise: 2% Wallet-Gebühr für Disponenten
+      driver: 0,
       shipper: 0,
       support: 0,
     },
@@ -193,10 +193,11 @@ export function getTransportCommission(tier: MembershipTier, role: UserRole): nu
 }
 
 /**
- * Wallet-Gebühr für Fahrer (Abo-basiert)
+ * Wallet-Gebühr für Disponenten (Abo-basiert)
+ * Disponenten erhalten das Geld auf ihr Wallet, daher zahlen sie die Wallet-Gebühr
  */
 export function getWalletFee(tier: MembershipTier, role: UserRole): number {
-  if (role !== 'driver') return 0;
+  if (role !== 'dispatcher') return 0;
 
   if (tier === 'free') return FREE_TIER.walletFee;
 

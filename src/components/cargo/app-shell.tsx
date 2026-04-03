@@ -17,6 +17,10 @@ import { WalletPage } from './wallet/wallet-page';
 import { AdvertisingPage } from './advertising/advertising-page';
 import { MembershipsPage } from './memberships/memberships-page';
 import { TransportChatPage } from './chat/transport-chat-page';
+import { AGBPage } from './legal/agb-page';
+import { ECMRPage } from './legal/ecmr-page';
+import { CookieSettingsPage } from './legal/cookie-settings-page';
+import { DeliveryConfirmationPage } from './delivery/delivery-confirmation-page';
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -59,6 +63,14 @@ export function AppShell() {
         return <SettingsPage />;
       case 'chat':
         return <TransportChatPage />;
+      case 'agb':
+        return <AGBPage />;
+      case 'ecmr':
+        return <ECMRPage />;
+      case 'cookies':
+        return <CookieSettingsPage />;
+      case 'delivery-confirmation':
+        return <DeliveryConfirmationPage />;
       default:
         return <DashboardPage />;
     }
