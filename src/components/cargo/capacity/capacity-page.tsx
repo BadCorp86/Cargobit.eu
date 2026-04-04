@@ -321,7 +321,7 @@ function DriverCapacityCard({ vehicle, driver, language, onUpdateCapacity }: Dri
 
         {/* Free Capacity Display - "3 Paletten frei" style */}
         {!isEditing ? (
-          <div className="space-y-3">
+          <div className="space-y-4">
             {/* Main "X Paletten frei" Display */}
             <div className="flex items-center justify-center py-3 px-4 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-200/30 dark:border-green-800/30">
               <div className="flex items-center gap-3">
@@ -354,33 +354,33 @@ function DriverCapacityCard({ vehicle, driver, language, onUpdateCapacity }: Dri
             </div>
 
             {/* Weight and Volume */}
-            <div className="grid grid-cols-2 gap-2">
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
                 <Weight className="w-4 h-4 text-orange-500" />
                 <div>
                   <p className="text-lg font-bold">{formatNumber(freeWeight)}</p>
-                  <p className="text-[10px] text-muted-foreground">kg {language === 'de' ? 'frei' : 'free'}</p>
+                  <p className="text-xs text-muted-foreground">kg {language === 'de' ? 'frei' : 'free'}</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+              <div className="flex items-center gap-2 p-3 rounded-lg bg-muted/50">
                 <Box className="w-4 h-4 text-purple-500" />
                 <div>
                   <p className="text-lg font-bold">{freeVolume}</p>
-                  <p className="text-[10px] text-muted-foreground">m³ {language === 'de' ? 'frei' : 'free'}</p>
+                  <p className="text-xs text-muted-foreground">m³ {language === 'de' ? 'frei' : 'free'}</p>
                 </div>
               </div>
             </div>
 
             {/* Utilization bar */}
-            <div className="space-y-1">
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">{language === 'de' ? 'Auslastung' : 'Utilization'}</span>
+            <div className="space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-xs text-muted-foreground">{language === 'de' ? 'Auslastung' : 'Utilization'}</span>
                 <span className={cn(
-                  'font-medium',
+                  'text-lg font-bold',
                   utilPercent < 50 ? 'text-green-500' : utilPercent < 80 ? 'text-yellow-500' : 'text-red-500'
                 )}>{utilPercent}%</span>
               </div>
-              <div className="h-2 rounded-full bg-muted overflow-hidden">
+              <div className="h-2.5 rounded-full bg-muted overflow-hidden">
                 <motion.div
                   initial={{ width: 0 }}
                   animate={{ width: `${utilPercent}%` }}
@@ -406,7 +406,7 @@ function DriverCapacityCard({ vehicle, driver, language, onUpdateCapacity }: Dri
           </div>
         ) : (
           /* Edit Mode */
-          <div className="space-y-3">
+          <div className="space-y-4">
             <div className="space-y-2">
               <Label className="text-xs">{language === 'de' ? 'Freies Gewicht (kg)' : 'Free Weight (kg)'}</Label>
               <div className="flex items-center gap-2">

@@ -169,3 +169,100 @@ Stage Summary:
 - Express transport has real geolocation-based driver detection
 - PWA support complete with manifest, icons, and meta tags
 - All features work without API keys with graceful fallbacks
+
+---
+## Task ID: 1-7 - Full-Stack-Entwickler
+### Work Task
+CargoBit.eu Full-Stack Entwicklungsarbeiten: Kapazitäts-Karten Layout, Auktions-Preisberechnung Sichtbarkeit, Werbungssystem Bewerbungsprozess, AGB-Ergänzung, Auto-Moderation API, Rechnungserstellung, Benutzer-Sperrung
+
+### Work Summary
+
+## 1. Kapazitäts-Karten Layout repariert (`/src/components/cargo/capacity/capacity-page.tsx`)
+- Auslastungsbalken exakt dem Prozentwert entsprechend animiert (width: `${utilPercent}%`)
+- Alle Abstände mit `gap-4` vereinheitlicht
+- Textgrößen standardisiert:
+  - Zahlen: `text-lg font-bold`
+  - Labels: `text-xs text-muted-foreground`
+- Höhere Auslastungsbalken (h-2.5) für bessere Sichtbarkeit
+
+## 2. Auktions-Preisberechnung nur für Verlader (shipper) sichtbar (`/src/components/cargo/shipments/shipments-page.tsx`)
+- `currentRole` aus `useCargoBitStore()` abgerufen
+- AI Price Recommendation nur sichtbar wenn `currentRole === 'shipper'`
+- Auction Info (Startpreis, Mindestgebot) nur für Shipper sichtbar
+- Andere Rollen (admin, dispatcher, driver, support) sehen diese Preisberechnungen NICHT
+
+## 3. Werbungssystem - Bewerbungsprozess erweitert
+**Neue Komponente:** `/src/components/cargo/advertising/ad-application-form.tsx`
+- Bewerbungsformular mit allen Pflichtfeldern:
+  - Unternehmen, Ansprechpartner, E-Mail, Telefon, Website
+  - Produktbeschreibung, Beworbenes Produkt
+  - Budget-Rahmen, Kampagnenlaufzeit
+  - Bevorzugte Werbeplätze
+- Volumenrabatte: 10% (3+ Monate), 20% (6+ Monate), 30% (12+ Monate)
+- AGB-Akzeptanz für §13 Werbung
+- Erfolgsbestätigung nach Absenden
+
+## 4. AGB ergänzen (`/src/components/cargo/legal/agb-page.tsx`)
+- Neuer Paragraph §13 "Werbung und Advertising" hinzugefügt:
+  - 13.1 CargoBit bietet Werbeplätze an
+  - 13.2 CargoBit ist NICHT verantwortlich für Werbeinhalte
+  - 13.3 Automatische Prüfung auf Verstöße (Gewalt, Pornografie, Hassrede, illegale Inhalte)
+  - 13.4 Automatische Sperrung bei Verstoß
+  - 13.5 Recht zur Entfernung ohne Rückerstattung
+  - 13.6 Monatliche Rechnungserstellung, Sperrung bei Nichtzahlung
+- Schlussbestimmungen zu §14 umbenannt
+- Referenz in §11.4 aktualisiert
+
+## 5. Auto-Moderation API (`/src/app/api/moderation/route.ts`)
+- Verwendet z-ai-web-dev-sdk VLM zur Bild-/Videoanalyse
+- Erkennt: Gewalt, Pornografie, Hasssymbole, illegale Inhalte
+- Automatische Benutzer-Sperrung bei Verstoß (confidence >= 70%)
+- Moderation-Ergebnis wird in Datenbank gespeichert
+- Manuelle Überprüfung durch Admin/Support möglich
+
+## 6. Automatische Rechnungserstellung (`/src/app/api/invoices/route.ts`)
+- Berechnet Advertising-Kosten basierend auf:
+  - Gebuchten Positionen
+  - Laufzeit
+  - Volumenrabatten (10%, 20%, 30%)
+- Rechnungsnummer automatisch generiert (INV-YYYY-NNNNNN)
+- Fälligkeitsdatum: 14 Tage nach Erstellung
+- Bei Nichtzahlung nach 14 Tagen: automatische Sperrre
+
+## 7. Benutzer-Sperrung implementiert
+**Prisma-Schema erweitert:**
+- User-Modell: `isBlocked`, `blockReason`, `blockedAt`, `blockedBy`
+- Neue UserStatus: `BLOCKED`
+- Neue Modelle:
+  - `ModerationResult` - Moderation-Ergebnisse
+  - `Invoice` - Automatische Rechnungen
+  - `AdCampaign` - Werbekampagnen
+  - `AdApplication` - Bewerbungen
+
+**Neue Utility-Funktionen:** `/src/lib/user-blocking.ts`
+- `blockUser()` - Benutzer sperren
+- `unblockUser()` - Benutzer freischalten (Admin/Support)
+- `getBlockedUsers()` - Gesperrte Benutzer auflisten
+- `isUserBlocked()` - Sperrstatus prüfen
+- `blockUsersWithOverdueInvoices()` - Automatische Sperrung bei Zahlungsrückstand
+
+## Neue API-Endpunkte:
+- `POST /api/moderation` - Inhalt analysieren und moderieren
+- `GET /api/moderation` - Moderation-Ergebnisse abrufen
+- `PUT /api/moderation` - Manuelle Überprüfung
+- `POST /api/invoices` - Rechnung erstellen
+- `GET /api/invoices` - Rechnungen abrufen
+- `PUT /api/invoices` - Rechnung aktualisieren (bezahlt/storniert)
+- `DELETE /api/invoices` - Rechnung stornieren
+
+## Datenbank-Schema aktualisiert:
+```bash
+npm run db:push
+```
+
+Alle Tabellen erfolgreich erstellt:
+- users (erweitert)
+- moderation_results
+- invoices
+- ad_campaigns
+- ad_applications

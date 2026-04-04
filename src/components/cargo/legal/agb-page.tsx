@@ -21,7 +21,8 @@ import {
   Scale,
   Lock,
   Globe,
-  CreditCard
+  CreditCard,
+  Megaphone
 } from 'lucide-react';
 
 interface AGBSection {
@@ -224,20 +225,34 @@ const agbSections: AGBSection[] = [
       '11.1 Bei Streitigkeiten zwischen Nutzern bietet CargoBit ein Mediationsverfahren über das Support-System an.',
       '11.2 Das Support-System für Konfliktlösung ist ausschließlich für Zwischenfälle während eines aktiven Transports gedacht.',
       '11.3 Chats werden nach Abschluss des Transports automatisch nach 24 Stunden gelöscht.',
-      '11.4 Für rechtliche Auseinandersetzungen gilt die Gerichtsstandvereinbarung gemäß §12.',
+      '11.4 Für rechtliche Auseinandersetzungen gilt die Gerichtsstandvereinbarung gemäß §14.',
+    ],
+  },
+  {
+    id: 'werbung',
+    titleKey: 'advertising',
+    titleDe: '§13 Werbung und Advertising',
+    icon: <Megaphone className="h-5 w-5" />,
+    contentDe: [
+      '13.1 CargoBit bietet Werbeplätze auf der Plattform an. Die Buchung erfolgt über das Advertising-Modul.',
+      '13.2 CargoBit ist NICHT verantwortlich für den Inhalt der geschalteten Werbung. Der Werbetreibende trägt die volle Verantwortung für die Richtigkeit, Legalität und Angemessenheit seiner Werbeinhalte.',
+      '13.3 Alle Werbebilder und -videos werden automatisch auf Verstöße (Gewalt, Pornografie, Hassrede, illegale Inhalte) geprüft.',
+      '13.4 Bei Verstoß gegen die Inhaltsrichtlinien wird der Benutzer automatisch gesperrt. Eine Freischaltung erfolgt nur nach manueller Prüfung durch Admin oder Support.',
+      '13.5 CargoBit behält sich das Recht vor, Werbeanzeigen ohne Rückerstattung zu entfernen, wenn sie gegen geltendes Recht oder diese AGB verstoßen.',
+      '13.6 Die automatische Rechnungserstellung erfolgt monatlich. Bei Nichtzahlung wird der Zugang zum Advertising-Modul gesperrt.',
     ],
   },
   {
     id: 'schlussbestimmungen',
     titleKey: 'finalProvisions',
-    titleDe: '§12 Schlussbestimmungen',
+    titleDe: '§14 Schlussbestimmungen',
     icon: <Scale className="h-5 w-5" />,
     contentDe: [
-      '12.1 Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.',
-      '12.2 Ausschließlicher Gerichtsstand für alle Streitigkeiten aus diesem Vertrag ist Berlin, Deutschland, sofern der Nutzer Kaufmann ist.',
-      '12.3 Sollten einzelne Bestimmungen dieser AGB unwirksam sein oder werden, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt.',
-      '12.4 CargoBit behält sich das Recht vor, diese AGB jederzeit zu ändern. Änderungen werden den Nutzern mindestens 4 Wochen vor Inkrafttreten mitgeteilt.',
-      '12.5 Die aktuelle Version der AGB ist stets auf cargobit.eu/agb abrufbar.',
+      '14.1 Es gilt das Recht der Bundesrepublik Deutschland unter Ausschluss des UN-Kaufrechts.',
+      '14.2 Ausschließlicher Gerichtsstand für alle Streitigkeiten aus diesem Vertrag ist Berlin, Deutschland, sofern der Nutzer Kaufmann ist.',
+      '14.3 Sollten einzelne Bestimmungen dieser AGB unwirksam sein oder werden, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt.',
+      '14.4 CargoBit behält sich das Recht vor, diese AGB jederzeit zu ändern. Änderungen werden den Nutzern mindestens 4 Wochen vor Inkrafttreten mitgeteilt.',
+      '14.5 Die aktuelle Version der AGB ist stets auf cargobit.eu/agb abrufbar.',
     ],
   },
 ];

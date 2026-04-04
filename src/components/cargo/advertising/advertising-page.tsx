@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Switch } from '@/components/ui/switch';
+import { AdApplicationForm } from './ad-application-form';
 import {
   Megaphone,
   Eye,
@@ -186,74 +187,7 @@ export function AdvertisingPage() {
           </DialogContent>
         </Dialog>
 
-        <Dialog>
-          <DialogTrigger asChild>
-            <Button variant="outline" className="gap-2">
-              <FileText className="w-4 h-4" />
-              {t('applyForAdvertising', language)}
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="glass-card sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-orange-500" />
-                {t('applyForAdvertising', language)}
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 pt-2 max-h-[60vh] overflow-y-auto pr-2">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>{t('companyName', language)}</Label>
-                  <Input placeholder="Unternehmen GmbH" className="mt-1.5" />
-                </div>
-                <div>
-                  <Label>{t('contactPerson', language)}</Label>
-                  <Input placeholder="Max Mustermann" className="mt-1.5" />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label>E-Mail</Label>
-                  <Input placeholder="info@unternehmen.de" type="email" className="mt-1.5" />
-                </div>
-                <div>
-                  <Label>{t('phone', language)}</Label>
-                  <Input placeholder="+49 123 456789" className="mt-1.5" />
-                </div>
-              </div>
-              <div>
-                <Label>{t('website', language)}</Label>
-                <Input placeholder="https://unternehmen.de" className="mt-1.5" />
-              </div>
-              <div>
-                <Label>{t('description', language)}</Label>
-                <Textarea placeholder="Beschreiben Sie Ihr Unternehmen und Ihre Werbeziele..." className="mt-1.5" rows={3} />
-              </div>
-              <div>
-                <Label>{t('budgetRange', language)}</Label>
-                <Input placeholder="€500 – €2.000/Monat" className="mt-1.5" />
-              </div>
-              <div>
-                <Label>{t('preferredPositions', language)}</Label>
-                <div className="grid grid-cols-2 gap-2 mt-1.5">
-                  {adPositions.map((pos) => (
-                    <label key={pos.id} className="flex items-center gap-2 text-sm p-2 rounded-lg border border-border/50 hover:border-orange-500/50 cursor-pointer transition-colors">
-                      <input type="checkbox" className="accent-orange-500 rounded" />
-                      <span className="text-xs">{pos.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <Switch />
-                <Label className="text-sm">AGB gelesen und akzeptiert</Label>
-              </div>
-              <Button className="w-full bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white">
-                {t('createNew', language)}
-              </Button>
-            </div>
-          </DialogContent>
-        </Dialog>
+        <AdApplicationForm />
       </div>
 
       {/* Tabs */}

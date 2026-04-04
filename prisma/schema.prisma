@@ -33,6 +33,7 @@ enum UserStatus {
   PENDING
   SUSPENDED
   VERIFIED
+  BLOCKED
 }
 
 // Main User model
@@ -76,6 +77,12 @@ model User {
   // Wallet
   walletBalance Float          @default(0)
   
+  // Blocking (for moderation violations or non-payment)
+  isBlocked     Boolean        @default(false)
+  blockReason   String?
+  blockedAt     DateTime?
+  blockedBy     String?        // Admin user ID
+  
   // Timestamps
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
@@ -90,6 +97,10 @@ model User {
   walletTransactions   WalletTransaction[]
   supportTickets       SupportTicket[] @relation("SupportTicketsByUser")
   assignedTickets      SupportTicket[] @relation("SupportTicketsAssigned")
+  moderationResults    ModerationResult[]
+  invoices             Invoice[]
+  adCampaigns          AdCampaign[]
+  adApplications       AdApplication[]
   
   @@map("users")
 }
@@ -736,4 +747,171 @@ model CapacityAlert {
   @@index([status])
   @@index([fromLat, fromLng])
   @@map("capacity_alerts")
+}
+
+// Moderation Result - AI content moderation
+model ModerationResult {
+  id              String    @id @default(cuid())
+  
+  // What was moderated
+  contentType     String    // image, video, text
+  contentUrl      String?   // URL to the content
+  contentBase64   String?   // Base64 if stored directly
+  
+  // Source
+  userId          String
+  entityType      String    // ad_campaign, profile_image, document
+  entityId        String?
+  
+  // AI Analysis
+  isViolating     Boolean   @default(false)
+  violationTypes  String?   // JSON array: ["violence", "pornography", "hate_speech", "illegal"]
+  confidence      Float?    // 0-1
+  aiDescription   String?   // AI explanation
+  
+  // Action taken
+  action          String    @default("none") // none, flagged, blocked, auto_blocked
+  blockedAt       DateTime?
+  
+  // Manual review
+  reviewedBy      String?   // Admin user ID
+  reviewedAt      DateTime?
+  reviewNotes     String?
+  reviewDecision  String?   // approved, rejected, pending
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([isViolating])
+  @@index([contentType])
+  @@map("moderation_results")
+}
+
+// Invoice - Automatic billing for advertising
+model Invoice {
+  id              String    @id @default(cuid())
+  invoiceNumber   String    @unique // INV-2025-001234
+  
+  // User
+  userId          String
+  
+  // Billing period
+  periodStart     DateTime
+  periodEnd       DateTime
+  
+  // Line items (JSON array)
+  lineItems       String    // [{description, quantity, unitPrice, total}]
+  
+  // Totals
+  subtotal        Float
+  volumeDiscount  Float     @default(0)  // 10%, 20%, 30%
+  discountPercent Int       @default(0)
+  total          Float
+  currency        String    @default("EUR")
+  
+  // Payment
+  status          String    @default("pending") // pending, paid, overdue, cancelled
+  paidAt          DateTime?
+  paymentMethod   String?
+  
+  // Overdue handling
+  dueDate         DateTime
+  overdueNotices  Int       @default(0)
+  blockedDueToNonPayment Boolean @default(false)
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+  @@index([dueDate])
+  @@map("invoices")
+}
+
+// Ad Campaign - Advertising campaigns
+model AdCampaign {
+  id              String    @id @default(cuid())
+  
+  // Owner
+  userId          String
+  name            String
+  
+  // Content
+  bannerUrl       String?
+  bannerBase64    String?
+  targetUrl       String
+  position        String    // header, sidebar, dashboard, newsletter, popup, footer
+  dimensions      String    // 728x90, 300x250, etc.
+  
+  // Budget
+  budget          Float
+  budgetUsed      Float     @default(0)
+  dailyBudget     Float?
+  
+  // Stats
+  impressions     Int       @default(0)
+  clicks          Int       @default(0)
+  ctr             Float     @default(0)
+  
+  // Schedule
+  startDate       DateTime
+  endDate         DateTime?
+  
+  // Status
+  status          String    @default("pending_review") // pending_review, active, paused, completed, rejected
+  rejectionReason String?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+  @@map("ad_campaigns")
+}
+
+// Ad Application - Advertising application process
+model AdApplication {
+  id              String    @id @default(cuid())
+  
+  // Applicant
+  userId          String
+  companyName     String
+  contactPerson   String
+  email           String
+  phone           String
+  website         String?
+  
+  // Campaign info
+  productDescription String?
+  advertisedProduct  String?
+  budgetRange        String?
+  preferredPositions String?  // JSON array
+  campaignDuration   String?
+  additionalNotes    String?
+  
+  // Status
+  status          String    @default("pending") // pending, approved, rejected
+  reviewedBy      String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([status])
+  @@map("ad_applications")
 }

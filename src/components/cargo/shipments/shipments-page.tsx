@@ -67,7 +67,7 @@ const statusLabels: Record<ShipmentStatus, string> = {
 };
 
 export function ShipmentsPage() {
-  const { language, showCreateShipment, setShowCreateShipment, selectedShipmentId, setSelectedShipmentId } = useCargoBitStore();
+  const { language, currentRole, showCreateShipment, setShowCreateShipment, selectedShipmentId, setSelectedShipmentId } = useCargoBitStore();
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
@@ -360,7 +360,7 @@ function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType; lab
 }
 
 function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
-  const { language } = useCargoBitStore();
+  const { language, currentRole } = useCargoBitStore();
   const [step, setStep] = useState(1);
 
   // Form state
@@ -574,8 +574,8 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               <Label htmlFor="insurance">{t('insurance', language)}</Label>
             </div>
 
-            {/* AI Price Recommendation */}
-            {aiRecommendation && (
+            {/* AI Price Recommendation - Only visible for Shipper */}
+            {aiRecommendation && currentRole === 'shipper' && (
               <motion.div
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
@@ -698,8 +698,8 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               </div>
             </div>
 
-            {/* Auction specific fields */}
-            {shipmentType === 'auction' && aiRecommendation && (
+            {/* Auction specific fields - Only visible for Shipper */}
+            {shipmentType === 'auction' && aiRecommendation && currentRole === 'shipper' && (
               <motion.div
                 initial={{ opacity: 0, height: 0 }}
                 animate={{ opacity: 1, height: 'auto' }}
