@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -13,20 +10,464 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// User roles in the CargoBit platform
+enum UserRole {
+  ADMIN
+  DISPATCHER      // Disponent/Transportunternehmer
+  DRIVER          // Fahrer
+  SHIPPER         // Verlader/Auktionsersteller
+  SUPPORT
 }
 
-model Post {
-  id        String   @id @default(cuid())
-  title     String
-  content   String?
-  published Boolean  @default(false)
-  authorId  String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+// Membership tiers
+enum MembershipTier {
+  FREE          // Free tier for testing
+  STARTER       // €89/month
+  PROFESSIONAL  // €499/month
+  ENTERPRISE    // €899/month
+}
+
+// User status
+enum UserStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  VERIFIED
+}
+
+// Main User model
+model User {
+  id            String         @id @default(cuid())
+  email         String         @unique
+  name          String?
+  passwordHash  String?
+  
+  // Role and permissions
+  role          UserRole       @default(DISPATCHER)
+  status        UserStatus     @default(PENDING)
+  
+  // Company info (for dispatchers/shippers)
+  companyName   String?
+  companyAddress String?
+  taxId         String?
+  vatNumber     String?
+  registrationNumber String?
+  
+  // Contact
+  phone         String?
+  
+  // Membership
+  membershipTier  MembershipTier @default(FREE)
+  membershipStart DateTime?
+  membershipEnd   DateTime?
+  
+  // Driver specific
+  driverLicenseNumber String?
+  driverLicenseExpiry DateTime?
+  driverLicenseClass  String?
+  driverCardExpiry    DateTime?
+  adrCertificate      String?
+  
+  // GPS/Location
+  currentLat    Float?
+  currentLng    Float?
+  lastLocationUpdate DateTime?
+  
+  // Wallet
+  walletBalance Float          @default(0)
+  
+  // Timestamps
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  lastLoginAt   DateTime?
+  
+  // Relations
+  shipmentsAsSender    Shipment[]      @relation("ShipmentsAsSender")
+  shipmentsAsCarrier   Shipment[]      @relation("ShipmentsAsCarrier")
+  shipmentsAsDriver    Shipment[]      @relation("ShipmentsAsDriver")
+  vehicles             Vehicle[]
+  documents            Document[]
+  walletTransactions   WalletTransaction[]
+  supportTickets       SupportTicket[] @relation("SupportTicketsByUser")
+  assignedTickets      SupportTicket[] @relation("SupportTicketsAssigned")
+  
+  @@map("users")
+}
+
+// Vehicle model for fleet management
+model Vehicle {
+  id            String   @id @default(cuid())
+  userId        String
+  
+  // Vehicle details
+  plateNumber   String   @unique
+  vehicleType   String   // Sprinter, LKW 7.5t, LKW 18t, LKW 40t, etc.
+  brand         String?
+  model         String?
+  year          Int?
+  
+  // Capacity
+  maxWeight     Float    // in kg
+  maxVolume     Float    // in m³
+  length        Float?   // in meters
+  width         Float?   // in meters
+  height        Float?   // in meters
+  
+  // Equipment
+  hasLift       Boolean  @default(false)
+  hasCooling    Boolean  @default(false)
+  adrCertified  Boolean  @default(false)
+  
+  // Status
+  isActive      Boolean  @default(true)
+  lastInspection DateTime?
+  nextInspection DateTime?
+  
+  // GPS tracking
+  currentLat    Float?
+  currentLng    Float?
+  lastUpdate    DateTime?
+  
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("vehicles")
+}
+
+// Shipment model
+model Shipment {
+  id                String        @id @default(cuid())
+  shipmentNumber    String        @unique // CB-2024-1847 format
+  
+  // Sender (Shipper)
+  senderId          String
+  senderName        String
+  senderAddress     String
+  senderContact     String?
+  
+  // Receiver
+  receiverName      String
+  receiverAddress   String
+  receiverContact   String?
+  
+  // Carrier (Dispatcher)
+  carrierId         String?
+  carrierName       String?
+  
+  // Driver
+  driverId          String?
+  driverName        String?
+  vehicleId         String?
+  vehiclePlate      String?
+  
+  // Route
+  pickupPlace       String
+  pickupDate        DateTime
+  pickupTime        String?
+  deliveryPlace     String
+  deliveryDate      DateTime?
+  deliveryTime      String?
+  
+  // Goods
+  goodsDescription  String
+  weight            Float         // in kg
+  volume            Float?        // in m³
+  packages          Int           @default(1)
+  specialInstructions String?
+  
+  // Pricing
+  price             Float
+  currency          String        @default("EUR")
+  platformFee       Float         @default(0)
+  carrierNetPrice   Float?        // price minus platform fee
+  
+  // Type
+  shipmentType      String        @default("direct") // direct, auction
+  auctionId         String?
+  
+  // Status
+  status            String        @default("pending") // pending, assigned, in_transit, delivered, cancelled
+  
+  // Tracking
+  currentLat        Float?
+  currentLng        Float?
+  lastTrackingUpdate DateTime?
+  
+  // Delivery confirmation
+  deliveredAt       DateTime?
+  deliverySignature String?       // base64 signature image
+  deliveryGpsLat    Float?
+  deliveryGpsLng    Float?
+  deliveryPhoto     String?       // base64 photo
+  
+  // Timestamps
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  
+  // Relations
+  sender            User          @relation("ShipmentsAsSender", fields: [senderId], references: [id])
+  carrier           User?         @relation("ShipmentsAsCarrier", fields: [carrierId], references: [id])
+  driver            User?         @relation("ShipmentsAsDriver", fields: [driverId], references: [id])
+  eCMR              ECMR?
+  
+  @@index([status])
+  @@index([senderId])
+  @@index([carrierId])
+  @@index([driverId])
+  @@map("shipments")
+}
+
+// e-CMR (Electronic Waybill)
+model ECMR {
+  id                String    @id @default(cuid())
+  ecmrNumber        String    @unique // eCMR-2025-001234 format
+  
+  // Linked shipment
+  shipmentId        String    @unique
+  
+  // Parties
+  senderName        String
+  senderAddress     String
+  senderContact     String?
+  
+  receiverName      String
+  receiverAddress   String
+  receiverContact   String?
+  
+  carrierName       String
+  carrierAddress    String
+  carrierContact    String?
+  
+  // Transport details
+  vehiclePlate      String
+  driverName        String
+  pickupPlace       String
+  pickupDate        DateTime
+  deliveryPlace     String
+  deliveryDate      DateTime?
+  
+  // Goods
+  goodsDescription  String
+  weight            Float
+  volume            Float?
+  packages          Int        @default(1)
+  specialInstructions String?
+  
+  // Status
+  status            String     @default("draft") // draft, active, completed, archived
+  
+  // Blockchain
+  blockchainHash    String?    // Hash stored on blockchain
+  blockchainNetwork String?    @default("ethereum")
+  blockchainTxHash  String?    // Transaction hash
+  blockchainTimestamp DateTime?
+  
+  // Digital signatures
+  senderSignature   String?    // base64 signature
+  senderSignedAt    DateTime?
+  senderGpsLat      Float?
+  senderGpsLng      Float?
+  
+  carrierSignature  String?    // base64 signature
+  carrierSignedAt   DateTime?
+  carrierGpsLat     Float?
+  carrierGpsLng     Float?
+  
+  receiverSignature String?    // base64 signature
+  receiverSignedAt  DateTime?
+  receiverGpsLat    Float?
+  receiverGpsLng    Float?
+  
+  // Document storage
+  pdfUrl            String?    // URL to stored PDF
+  
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+  
+  shipment          Shipment   @relation(fields: [shipmentId], references: [id], onDelete: Cascade)
+  
+  @@map("ecmrs")
+}
+
+// Document model for ODC
+model Document {
+  id              String    @id @default(cuid())
+  userId          String
+  
+  // Document type
+  documentType    String    // frachtbrief, fuehrerschein, company, driver_docs
+  
+  // Original file
+  fileName        String
+  fileUrl         String    // base64 or URL
+  fileSize        Int?
+  mimeType        String?
+  
+  // OCR results
+  extractedData   String?   // JSON string of extracted data
+  confidence      Float?    // 0-1
+  warnings        String?   // JSON array of warnings
+  
+  // Processing status
+  status          String    @default("pending") // pending, processed, failed
+  
+  // Verification
+  isVerified      Boolean   @default(false)
+  verifiedBy      String?   // Admin user ID
+  verifiedAt      DateTime?
+  
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([documentType])
+  @@map("documents")
+}
+
+// Wallet transactions
+model WalletTransaction {
+  id              String    @id @default(cuid())
+  userId          String
+  
+  // Transaction details
+  type            String    // deposit, withdrawal, fee, payout, refund
+  amount          Float
+  currency        String    @default("EUR")
+  
+  // Reference
+  referenceType   String?   // shipment, auction, membership
+  referenceId     String?
+  
+  // Status
+  status          String    @default("pending") // pending, completed, failed, cancelled
+  
+  // Payment method for deposits
+  paymentMethod   String?   // sepa, credit_card, paypal
+  
+  // For withdrawals
+  bankAccount     String?   // IBAN (masked)
+  bankName        String?
+  
+  // Fees
+  platformFee     Float     @default(0)
+  walletFee       Float     @default(0) // Wallet fee for dispatchers only
+  
+  description     String?
+  
+  createdAt       DateTime  @default(now())
+  processedAt     DateTime?
+  
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([type])
+  @@index([status])
+  @@map("wallet_transactions")
+}
+
+// Support tickets
+model SupportTicket {
+  id              String    @id @default(cuid())
+  ticketNumber    String    @unique
+  
+  // Users
+  createdById     String
+  assignedToId    String?
+  
+  // Ticket details
+  subject         String
+  description     String
+  category        String?   // technical, billing, shipment, other
+  priority        String    @default("normal") // low, normal, high, urgent
+  
+  // Status
+  status          String    @default("open") // open, in_progress, waiting, resolved, closed
+  
+  // Shipment reference
+  shipmentId      String?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  resolvedAt      DateTime?
+  closedAt        DateTime?
+  
+  // Relations
+  createdBy       User      @relation("SupportTicketsByUser", fields: [createdById], references: [id])
+  assignedTo      User?     @relation("SupportTicketsAssigned", fields: [assignedToId], references: [id])
+  messages        SupportMessage[]
+  
+  @@index([status])
+  @@map("support_tickets")
+}
+
+// Support ticket messages
+model SupportMessage {
+  id              String    @id @default(cuid())
+  ticketId        String
+  
+  // Sender
+  senderId        String
+  senderName      String
+  senderRole      String
+  
+  // Message
+  message         String
+  attachments     String?   // JSON array of attachment URLs
+  
+  // Internal note (only visible to support staff)
+  isInternal      Boolean   @default(false)
+  
+  createdAt       DateTime  @default(now())
+  
+  ticket          SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  
+  @@index([ticketId])
+  @@map("support_messages")
+}
+
+// Audit log for admin actions
+model AuditLog {
+  id              String    @id @default(cuid())
+  
+  // Who performed the action
+  userId          String
+  userEmail       String
+  userRole        String
+  
+  // Action details
+  action          String    // user_create, user_update, shipment_create, etc.
+  entityType      String    // user, shipment, ecmr, document
+  entityId        String?
+  
+  // Changes
+  oldValue        String?   // JSON
+  newValue        String?   // JSON
+  
+  // Request info
+  ipAddress       String?
+  userAgent       String?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
+
+// System settings (key-value store)
+model SystemSetting {
+  id              String    @id @default(cuid())
+  key             String    @unique
+  value           String    // JSON value
+  description     String?
+  
+  updatedAt       DateTime  @updatedAt
+  
+  @@map("system_settings")
 }
