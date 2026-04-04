@@ -128,6 +128,9 @@ model Vehicle {
   currentLng    Float?
   lastUpdate    DateTime?
   
+  // Capacity tracking
+  capacity      VehicleCapacity?
+  
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
   
@@ -470,4 +473,267 @@ model SystemSetting {
   updatedAt       DateTime  @updatedAt
   
   @@map("system_settings")
+}
+
+// Vehicle Capacity - Real-time tracking of available space
+model VehicleCapacity {
+  id              String    @id @default(cuid())
+  vehicleId       String    @unique
+  
+  // Current capacity
+  availableWeight Float     @default(0)  // kg available
+  availableVolume Float     @default(0)  // m³ available
+  availablePallets Int      @default(0)  // pallet spaces available
+  availableLength Float     @default(0)  // meters of loading space
+  
+  // Status
+  status          String    @default("available") // available, partially_loaded, full, offline
+  
+  // Location when capacity was updated
+  lat             Float?
+  lng             Float?
+  locationName    String?   // City name
+  
+  // Route info
+  currentRoute    String?   // e.g., "Berlin → München"
+  headingTo       String?   // Destination city
+  
+  // Timestamps
+  updatedAt       DateTime  @updatedAt
+  
+  vehicle         Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  
+  @@index([status])
+  @@index([lat, lng])
+  @@map("vehicle_capacities")
+}
+
+// Express Transport Request - Instant transport alerts
+model ExpressTransport {
+  id              String    @id @default(cuid())
+  
+  // Creator (Shipper)
+  creatorId       String
+  creatorName     String
+  creatorPhone    String?
+  
+  // Pickup
+  pickupAddress   String
+  pickupLat       Float
+  pickupLng       Float
+  pickupPlace     String    // City name
+  pickupDeadline  DateTime  // Must be picked up by
+  
+  // Delivery
+  deliveryAddress String
+  deliveryLat     Float?
+  deliveryLng     Float?
+  deliveryPlace   String?
+  
+  // Cargo
+  weight          Float     // kg
+  volume          Float?    // m³
+  pallets         Int       @default(0)
+  description     String
+  specialRequirements String? // "Lift, ADR, Cooling"
+  
+  // Pricing
+  offeredPrice    Float
+  currency        String    @default("EUR")
+  
+  // Alert radius
+  alertRadiusKm   Int       @default(20)  // Alert drivers within 20km
+  
+  // Status
+  status          String    @default("active") // active, accepted, expired, cancelled
+  
+  // Accepted by
+  acceptedById    String?
+  acceptedByName  String?
+  acceptedAt      DateTime?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime  // When the alert expires
+  
+  // Notifications sent
+  notificationsSent Int     @default(0)
+  
+  @@index([status])
+  @@index([pickupLat, pickupLng])
+  @@map("express_transports")
+}
+
+// GPS Position History - Track movement
+model GPSPosition {
+  id              String    @id @default(cuid())
+  
+  // What is being tracked
+  entityType      String    // user, vehicle, shipment
+  entityId        String
+  
+  // Position
+  lat             Float
+  lng             Float
+  accuracy        Float?    // meters
+  speed           Float?    // km/h
+  heading         Float?    // degrees 0-360
+  altitude        Float?    // meters
+  
+  // Context
+  locationName    String?   // City/address from reverse geocoding
+  isMoving        Boolean   @default(false)
+  
+  // Battery/device info
+  batteryLevel    Float?    // 0-1
+  isCharging      Boolean   @default(false)
+  
+  // Timestamp
+  recordedAt      DateTime  @default(now())
+  
+  @@index([entityType, entityId])
+  @@index([recordedAt])
+  @@map("gps_positions")
+}
+
+// Push Notification Token - For mobile apps
+model PushToken {
+  id              String    @id @default(cuid())
+  userId          String
+  
+  // Device info
+  deviceToken     String    @unique  // FCM token or APNS token
+  platform        String    // android, ios, web
+  deviceName      String?   // "iPhone 15 Pro", "Samsung Galaxy S24"
+  deviceModel     String?
+  osVersion       String?
+  appVersion      String?
+  
+  // Preferences
+  receiveExpress  Boolean   @default(true)  // Express transport alerts
+  receiveShipment Boolean   @default(true)  // Shipment updates
+  receiveChat     Boolean   @default(true)  // Chat messages
+  receiveMarketing Boolean  @default(false) // Marketing
+  
+  // Status
+  isActive        Boolean   @default(true)
+  lastUsedAt      DateTime?
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  @@index([userId])
+  @@map("push_tokens")
+}
+
+// Push Notification Log
+model PushNotification {
+  id              String    @id @default(cuid())
+  
+  // Recipient
+  userId          String
+  pushTokenId     String?
+  
+  // Content
+  title           String
+  body            String
+  data            String?   // JSON payload
+  
+  // Type
+  type            String    // express, shipment, chat, system
+  
+  // Status
+  status          String    @default("pending") // pending, sent, delivered, failed
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  error           String?
+  
+  // Related entity
+  entityType      String?
+  entityId        String?
+  
+  createdAt       DateTime  @default(now())
+  
+  @@index([userId])
+  @@index([status])
+  @@map("push_notifications")
+}
+
+// Optimized Route - AI route suggestions
+model OptimizedRoute {
+  id              String    @id @default(cuid())
+  
+  // Vehicle/Driver
+  vehicleId       String?
+  driverId        String?
+  
+  // Route waypoints (JSON array)
+  waypoints       String    // [{lat, lng, type: "pickup|delivery|depot", shipmentId}]
+  
+  // Optimization details
+  totalDistance   Float     // km
+  totalDuration   Int       // minutes
+  totalStops      Int
+  
+  // Savings
+  savedKm         Float     @default(0)  // km saved vs original
+  savedMinutes    Int       @default(0)  // time saved
+  savedEuros      Float     @default(0)  // fuel + time savings
+  
+  // AI recommendation
+  aiRecommendation String?  // Explanation of the route
+  
+  // Status
+  status          String    @default("suggested") // suggested, accepted, active, completed
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  acceptedAt      DateTime?
+  startedAt       DateTime?
+  completedAt     DateTime?
+  
+  @@index([driverId])
+  @@index([status])
+  @@map("optimized_routes")
+}
+
+// Capacity Alert - When someone needs capacity on a route
+model CapacityAlert {
+  id              String    @id @default(cuid())
+  
+  // Creator
+  creatorId       String
+  creatorType     String    // shipper, dispatcher
+  
+  // Route needed
+  fromCity        String
+  toCity          String?
+  fromLat         Float?
+  fromLng         Float?
+  toLat           Float?
+  toLng           Float?
+  
+  // What's needed
+  weight          Float?
+  volume          Float?
+  pallets         Int?
+  
+  // When
+  pickupDate      DateTime?
+  flexible        Boolean   @default(false)
+  
+  // Budget
+  maxPrice        Float?
+  
+  // Status
+  status          String    @default("active") // active, matched, expired
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  expiresAt       DateTime?
+  
+  @@index([status])
+  @@index([fromLat, fromLng])
+  @@map("capacity_alerts")
 }
