@@ -4,12 +4,13 @@ import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useCargoBitStore } from '@/lib/store';
 import { t } from '@/lib/i18n';
-import { capacityMatches, routeOptimizations, fleetVehicles } from '@/lib/mock-data';
+import { capacityMatches, routeOptimizations, fleetVehicles, fleetDrivers } from '@/lib/mock-data';
 import { formatNumber } from '@/lib/mock-data';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
@@ -44,6 +45,13 @@ import {
   Zap,
   BarChart3,
   Gauge,
+  Box,
+  Weight,
+  Edit3,
+  Save,
+  X,
+  Plus,
+  Minus,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -236,6 +244,279 @@ function CapacityKPICard({
   );
 }
 
+// ─── Driver Free Capacity Card ("3 Paletten frei" style) ─────────────────────────────────────
+interface DriverCapacityCardProps {
+  vehicle: typeof fleetVehicles[0];
+  driver: typeof fleetDrivers[0] | undefined;
+  language: string;
+  onUpdateCapacity: (vehicleId: string, freeWeight: number, freeVolume: number, freePallets: number) => void;
+}
+
+function DriverCapacityCard({ vehicle, driver, language, onUpdateCapacity }: DriverCapacityCardProps) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editWeight, setEditWeight] = useState(vehicle.maxWeight - vehicle.currentWeight);
+  const [editVolume, setEditVolume] = useState(vehicle.maxVolume - vehicle.currentVolume);
+  const [editPallets, setEditPallets] = useState(Math.floor((vehicle.maxVolume - vehicle.currentVolume) / 2));
+
+  const freeWeight = vehicle.maxWeight - vehicle.currentWeight;
+  const freeVolume = vehicle.maxVolume - vehicle.currentVolume;
+  const freePallets = Math.floor(freeVolume / 2);
+  const utilPercent = Math.round((vehicle.currentWeight / vehicle.maxWeight) * 100);
+
+  const statusColor = vehicle.status === 'active' ? 'bg-green-500' : 
+                      vehicle.status === 'loading' ? 'bg-yellow-500' :
+                      vehicle.status === 'parked' ? 'bg-gray-400' : 'bg-red-500';
+
+  const handleSave = () => {
+    onUpdateCapacity(vehicle.id, editWeight, editVolume, editPallets);
+    setIsEditing(false);
+    toast.success(language === 'de' ? 'Kapazität aktualisiert' : 'Capacity updated', {
+      description: `${vehicle.plate}: ${editWeight}kg, ${editVolume}m³, ${editPallets} Paletten frei`,
+    });
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className="relative overflow-hidden rounded-xl border border-border/50 bg-card/80 backdrop-blur-sm hover:shadow-lg hover:shadow-orange-500/10 transition-all duration-300"
+    >
+      {/* Status indicator */}
+      <div className={cn('absolute top-0 left-0 right-0 h-1', statusColor)} />
+      
+      <div className="p-4">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-orange-500/20 to-amber-500/20 flex items-center justify-center border border-orange-200/30 dark:border-orange-800/30">
+              <Truck className="w-5 h-5 text-orange-500" />
+            </div>
+            <div>
+              <p className="font-semibold text-sm">{vehicle.plate}</p>
+              <p className="text-xs text-muted-foreground">{vehicle.make} {vehicle.model}</p>
+            </div>
+          </div>
+          <Badge variant="outline" className={cn(
+            'text-[10px] px-2',
+            vehicle.status === 'active' && 'bg-green-50 text-green-600 border-green-200 dark:bg-green-900/30 dark:text-green-400',
+            vehicle.status === 'loading' && 'bg-yellow-50 text-yellow-600 border-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-400',
+            vehicle.status === 'parked' && 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-900/30 dark:text-gray-400',
+          )}>
+            {vehicle.status}
+          </Badge>
+        </div>
+
+        {/* Driver info */}
+        {driver && (
+          <div className="mb-3 pb-3 border-b border-border/30">
+            <p className="text-xs text-muted-foreground">{language === 'de' ? 'Fahrer' : 'Driver'}: <span className="font-medium text-foreground">{driver.name}</span></p>
+            {vehicle.currentRoute && (
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                <MapPin className="w-3 h-3 inline mr-1" />
+                {vehicle.currentRoute}
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Free Capacity Display - "3 Paletten frei" style */}
+        {!isEditing ? (
+          <div className="space-y-3">
+            {/* Main "X Paletten frei" Display */}
+            <div className="flex items-center justify-center py-3 px-4 rounded-lg bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-200/30 dark:border-green-800/30">
+              <div className="flex items-center gap-3">
+                <div className="flex items-center gap-1">
+                  {[...Array(Math.min(freePallets, 6))].map((_, i) => (
+                    <motion.div
+                      key={i}
+                      initial={{ scale: 0, rotate: -180 }}
+                      animate={{ scale: 1, rotate: 0 }}
+                      transition={{ delay: i * 0.05, type: 'spring', stiffness: 200 }}
+                    >
+                      <Box className="w-6 h-6 text-green-500" />
+                    </motion.div>
+                  ))}
+                  {freePallets > 6 && (
+                    <span className="text-sm font-medium text-green-600 dark:text-green-400 ml-1">
+                      +{freePallets - 6}
+                    </span>
+                  )}
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                    {freePallets}
+                  </p>
+                  <p className="text-xs text-green-600/70 dark:text-green-400/70">
+                    {language === 'de' ? 'Paletten frei' : 'Pallets free'}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Weight and Volume */}
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                <Weight className="w-4 h-4 text-orange-500" />
+                <div>
+                  <p className="text-lg font-bold">{formatNumber(freeWeight)}</p>
+                  <p className="text-[10px] text-muted-foreground">kg {language === 'de' ? 'frei' : 'free'}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
+                <Box className="w-4 h-4 text-purple-500" />
+                <div>
+                  <p className="text-lg font-bold">{freeVolume}</p>
+                  <p className="text-[10px] text-muted-foreground">m³ {language === 'de' ? 'frei' : 'free'}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Utilization bar */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted-foreground">{language === 'de' ? 'Auslastung' : 'Utilization'}</span>
+                <span className={cn(
+                  'font-medium',
+                  utilPercent < 50 ? 'text-green-500' : utilPercent < 80 ? 'text-yellow-500' : 'text-red-500'
+                )}>{utilPercent}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-muted overflow-hidden">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${utilPercent}%` }}
+                  transition={{ duration: 0.8 }}
+                  className={cn(
+                    'h-full rounded-full',
+                    utilPercent < 50 ? 'bg-green-500' : utilPercent < 80 ? 'bg-yellow-500' : 'bg-red-500'
+                  )}
+                />
+              </div>
+            </div>
+
+            {/* Edit button */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs"
+              onClick={() => setIsEditing(true)}
+            >
+              <Edit3 className="w-3.5 h-3.5 mr-1.5" />
+              {language === 'de' ? 'Kapazität bearbeiten' : 'Edit Capacity'}
+            </Button>
+          </div>
+        ) : (
+          /* Edit Mode */
+          <div className="space-y-3">
+            <div className="space-y-2">
+              <Label className="text-xs">{language === 'de' ? 'Freies Gewicht (kg)' : 'Free Weight (kg)'}</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEditWeight(Math.max(0, editWeight - 100))}
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <Input
+                  type="number"
+                  value={editWeight}
+                  onChange={(e) => setEditWeight(parseInt(e.target.value) || 0)}
+                  className="flex-1 h-8 text-center"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEditWeight(Math.min(vehicle.maxWeight, editWeight + 100))}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+            
+            <div className="space-y-2">
+              <Label className="text-xs">{language === 'de' ? 'Freies Volumen (m³)' : 'Free Volume (m³)'}</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEditVolume(Math.max(0, editVolume - 1))}
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <Input
+                  type="number"
+                  value={editVolume}
+                  onChange={(e) => setEditVolume(parseInt(e.target.value) || 0)}
+                  className="flex-1 h-8 text-center"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEditVolume(Math.min(vehicle.maxVolume, editVolume + 1))}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label className="text-xs">{language === 'de' ? 'Freie Paletten' : 'Free Pallets'}</Label>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEditPallets(Math.max(0, editPallets - 1))}
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <Input
+                  type="number"
+                  value={editPallets}
+                  onChange={(e) => setEditPallets(parseInt(e.target.value) || 0)}
+                  className="flex-1 h-8 text-center"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => setEditPallets(editPallets + 1)}
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1 h-8"
+                onClick={() => setIsEditing(false)}
+              >
+                <X className="w-3.5 h-3.5 mr-1" />
+                {language === 'de' ? 'Abbrechen' : 'Cancel'}
+              </Button>
+              <Button
+                size="sm"
+                className="flex-1 h-8 bg-orange-500 hover:bg-orange-600"
+                onClick={handleSave}
+              >
+                <Save className="w-3.5 h-3.5 mr-1" />
+                {language === 'de' ? 'Speichern' : 'Save'}
+              </Button>
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
 // ─── Main Component ────────────────────────────────────────────────────────────
 export function CapacityPage() {
   const { language } = useCargoBitStore();
@@ -246,20 +527,34 @@ export function CapacityPage() {
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [etaFilter, setEtaFilter] = useState<string>('all');
   const [expandedRoutes, setExpandedRoutes] = useState<Set<string>>(new Set());
+  
+  // Vehicle capacities state (for updates)
+  const [vehicleCapacities, setVehicleCapacities] = useState(() => {
+    const map = new Map<string, { freeWeight: number; freeVolume: number; freePallets: number }>();
+    fleetVehicles.forEach(v => {
+      map.set(v.id, {
+        freeWeight: v.maxWeight - v.currentWeight,
+        freeVolume: v.maxVolume - v.currentVolume,
+        freePallets: Math.floor((v.maxVolume - v.currentVolume) / 2),
+      });
+    });
+    return map;
+  });
 
   // KPI calculations
   const kpis = useMemo(() => {
     const activeVehicles = fleetVehicles.filter((v) => v.status === 'active');
-    const totalFreeWeight = activeVehicles.reduce((sum, v) => sum + (v.maxWeight - v.currentWeight), 0);
-    const totalFreeVolume = activeVehicles.reduce((sum, v) => sum + (v.maxVolume - v.currentVolume), 0);
+    const totalFreeWeight = activeVehicles.reduce((sum, v) => sum + (vehicleCapacities.get(v.id)?.freeWeight || (v.maxWeight - v.currentWeight)), 0);
+    const totalFreeVolume = activeVehicles.reduce((sum, v) => sum + (vehicleCapacities.get(v.id)?.freeVolume || (v.maxVolume - v.currentVolume)), 0);
+    const totalFreePallets = activeVehicles.reduce((sum, v) => sum + (vehicleCapacities.get(v.id)?.freePallets || Math.floor((v.maxVolume - v.currentVolume) / 2)), 0);
     const pendingShipments = new Set(capacityMatches.map((m) => m.shipmentId)).size;
     const optimalMatches = capacityMatches.filter((m) => m.matchScore > 80).length;
     const avgScore =
       capacityMatches.length > 0
         ? Math.round(capacityMatches.reduce((sum, m) => sum + m.matchScore, 0) / capacityMatches.length)
         : 0;
-    return { totalFreeWeight, totalFreeVolume, pendingShipments, optimalMatches, avgScore };
-  }, []);
+    return { totalFreeWeight, totalFreeVolume, totalFreePallets, pendingShipments, optimalMatches, avgScore };
+  }, [vehicleCapacities]);
 
   // Filtered matches
   const filteredMatches = useMemo(() => {
@@ -281,10 +576,20 @@ export function CapacityPage() {
       .map((v) => ({
         name: v.plate,
         usedWeight: v.currentWeight,
-        freeWeight: v.maxWeight - v.currentWeight,
+        freeWeight: vehicleCapacities.get(v.id)?.freeWeight || (v.maxWeight - v.currentWeight),
         usedVolume: v.currentVolume,
-        freeVolume: v.maxVolume - v.currentVolume,
+        freeVolume: vehicleCapacities.get(v.id)?.freeVolume || (v.maxVolume - v.currentVolume),
         utilization: Math.round((v.currentWeight / v.maxWeight) * 100),
+      }));
+  }, [vehicleCapacities]);
+
+  // Active vehicles with drivers for capacity cards
+  const activeVehiclesWithDrivers = useMemo(() => {
+    return fleetVehicles
+      .filter(v => v.status === 'active' || v.status === 'loading')
+      .map(vehicle => ({
+        vehicle,
+        driver: fleetDrivers.find(d => d.currentVehicle === vehicle.id),
       }));
   }, []);
 
@@ -303,6 +608,14 @@ export function CapacityPage() {
   const handleAssign = (matchId: string, tracking: string) => {
     toast.success(t('shipmentAssigned', lang), {
       description: `${tracking} → ${matchId}`,
+    });
+  };
+
+  const handleUpdateCapacity = (vehicleId: string, freeWeight: number, freeVolume: number, freePallets: number) => {
+    setVehicleCapacities(prev => {
+      const next = new Map(prev);
+      next.set(vehicleId, { freeWeight, freeVolume, freePallets });
+      return next;
     });
   };
 
@@ -353,7 +666,7 @@ export function CapacityPage() {
       </motion.div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <CapacityKPICard
           label={t('availableCapacity', lang)}
           value={formatNumber(kpis.totalFreeWeight)}
@@ -363,18 +676,25 @@ export function CapacityPage() {
           index={0}
         />
         <CapacityKPICard
+          label={lang === 'de' ? 'Freie Paletten' : 'Free Pallets'}
+          value={kpis.totalFreePallets}
+          icon={Box}
+          color="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-200/30 dark:border-green-800/30 text-green-500"
+          index={1}
+        />
+        <CapacityKPICard
           label={t('pendingShipments', lang)}
           value={kpis.pendingShipments}
           icon={Package}
           color="bg-gradient-to-br from-blue-500/10 to-cyan-500/10 border-blue-200/30 dark:border-blue-800/30 text-blue-500"
-          index={1}
+          index={2}
         />
         <CapacityKPICard
           label={t('optimalMatches', lang)}
           value={kpis.optimalMatches}
           icon={Target}
           color="bg-gradient-to-br from-green-500/10 to-emerald-500/10 border-green-200/30 dark:border-green-800/30 text-green-500"
-          index={2}
+          index={3}
         />
         <CapacityKPICard
           label={t('avgMatchScore', lang)}
@@ -382,9 +702,51 @@ export function CapacityPage() {
           suffix="%"
           icon={TrendingUp}
           color="bg-gradient-to-br from-purple-500/10 to-pink-500/10 border-purple-200/30 dark:border-purple-800/30 text-purple-500"
-          index={3}
+          index={4}
         />
       </div>
+
+      {/* Driver Free Capacity Section - "3 Paletten frei" style */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.15 }}
+      >
+        <Card className="bg-card/50 backdrop-blur-sm border-border/50">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-green-500/20 to-emerald-500/20 flex items-center justify-center">
+                  <Box className="w-4 h-4 text-green-500" />
+                </div>
+                {lang === 'de' ? 'Freie Kapazitäten' : 'Free Capacity'} — {lang === 'de' ? 'Fahrer Übersicht' : 'Driver Overview'}
+                <Badge variant="secondary" className="ml-2 text-xs bg-green-50 text-green-600 dark:bg-green-900/30 dark:text-green-400 border-0">
+                  {activeVehiclesWithDrivers.length} {lang === 'de' ? 'aktiv' : 'active'}
+                </Badge>
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {activeVehiclesWithDrivers.map(({ vehicle, driver }, index) => (
+                <motion.div
+                  key={vehicle.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <DriverCapacityCard
+                    vehicle={vehicle}
+                    driver={driver}
+                    language={lang}
+                    onUpdateCapacity={handleUpdateCapacity}
+                  />
+                </motion.div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
 
       {/* Smart Matching Table */}
       <motion.div
@@ -881,7 +1243,7 @@ export function CapacityPage() {
                       <span className="text-xs font-medium truncate">{vehicle.name}</span>
                     </div>
                     <span
-                      className="text-xs font-bold shrink-0"
+                      className="text-xs font-semibold shrink-0"
                       style={{ color: getUtilColor(vehicle.utilization) }}
                     >
                       {vehicle.utilization}%
@@ -896,3 +1258,5 @@ export function CapacityPage() {
     </div>
   );
 }
+
+export default CapacityPage;
