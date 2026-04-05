@@ -266,3 +266,82 @@ Alle Tabellen erfolgreich erstellt:
 - invoices
 - ad_campaigns
 - ad_applications
+
+---
+## Task ID: 1-4 - Full-Stack-Entwickler
+### Work Task
+CargoBit.eu Full-Stack Entwicklungsarbeiten: Shipper Dashboard KPIs korrigieren, Sidebar Navigation rollenspezifisch anpassen, KI-Preisgenerierung in Sendungserstellung (Schritt 3), i18n Ergänzen
+
+### Work Summary
+
+## 1. Shipper Dashboard KPIs korrigiert (`/src/components/cargo/dashboard/dashboard-page.tsx`)
+**Problem:** Shipper generiert KEINEN Umsatz, hat nur KOSTEN. Das Dashboard zeigte falsche KPIs.
+
+**Änderungen:**
+- `revenue` KPI entfernt und durch `totalCosts` ersetzt
+- Neue KPI-Struktur für Shipper:
+  - `activeShipments`: 15 aktive Sendungen
+  - `deliveriesToday`: 3 heute geliefert
+  - `totalCosts`: €12.850 Transportkosten diesen Monat
+  - `avgRating`: 4.7 Liefer-Qualität
+- KPICard-Komponente erweitert: `totalCosts` wird jetzt mit €-Prefix angezeigt
+
+## 2. Sidebar Navigation rollenspezifisch angepasst (`/src/lib/mock-data.ts`)
+**roleConfigs.availableTabs** für jede Rolle angepasst:
+
+**Shipper (Verlader)** darf NICHT sehen:
+- `capacity` - nur für Dispatcher/Driver
+- `fleet` - nur für Dispatcher
+- `memberships` - Shipper zahlt KEIN Abo, nur 4% Vermittlungsgebühr
+
+**Driver (Fahrer)** darf NICHT sehen:
+- `wallet` - keine Finanzen
+- `memberships` - keine Abonnements
+- `capacity` - nur anzeigen, nicht bearbeiten
+- `shipments` hinzugefügt für Auftragsübersicht
+
+**Support** darf NICHT sehen:
+- `wallet` - keine Finanzen
+- `memberships` - keine Abonnements
+- `capacity` - keine Kapazitätsverwaltung
+- `fleet` - keine Flottenverwaltung
+- `shipments` hinzugefügt für Support-Fälle
+
+## 3. KI-Preisgenerierung in Sendungserstellung (Schritt 3) (`/src/components/cargo/shipments/shipments-page.tsx`)
+**Problem:** In Schritt 3 wurde kein KI-Preis prominent angezeigt, nur ein Eingabefeld.
+
+**Änderungen:**
+- Prominente KI-Preisempfehlung oben in Schritt 3 (grüner Kasten mit Sparkles-Icon)
+- Anzeige: "KI-empfoohtener Preis: €XXX.XX"
+- Faktoren-Anzeige: "Basierend auf XXXkm, XXXkg, Priorität"
+- "Übernehmen"-Button (grün) zum direkten Anwenden des KI-Preises
+- Preis-Eingabefeld vergrößert (h-12)
+- "KI-Preis"-Button im Eingabefeld (grün statt orange)
+- Mindestgebot-Info unter dem Preisfeld
+- Alle KI-Features nur sichtbar für `currentRole === 'shipper'`
+
+## 4. i18n Ergänzt (`/src/lib/i18n.ts`)
+Neue Übersetzungen hinzugefügt:
+
+**Deutsch:**
+- `totalCosts`: "Gesamtkosten"
+- `transportCosts`: "Transportkosten"
+- `aiRecommendedPrice`: "KI-empfoohtener Preis"
+- `applyAiPrice`: "KI-Preis übernehmen"
+- `minimumBid`: "Mindestgebot für Auktion"
+
+**Englisch:**
+- `totalCosts`: "Total Costs"
+- `transportCosts`: "Transport Costs"
+- `aiRecommendedPrice`: "AI-recommended price"
+- `applyAiPrice`: "Apply AI Price"
+- `minimumBid`: "Minimum bid for auction"
+
+## Dateien geändert:
+- `/src/components/cargo/dashboard/dashboard-page.tsx`
+- `/src/lib/mock-data.ts`
+- `/src/components/cargo/shipments/shipments-page.tsx`
+- `/src/lib/i18n.ts`
+
+## Lint-Check:
+- `npm run lint` ✓ Erfolgreich ohne Fehler

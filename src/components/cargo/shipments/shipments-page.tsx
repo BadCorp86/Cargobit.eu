@@ -209,12 +209,14 @@ export function ShipmentsPage() {
                     <ArrowUpDown className="w-3 h-3 ml-1" />
                   </Button>
                 </TableHead>
+                {currentRole !== 'driver' && (
                 <TableHead className="text-xs font-semibold hidden lg:table-cell">
                   <Button variant="ghost" size="sm" className="h-auto p-0 font-semibold text-xs" onClick={() => toggleSort('cost')}>
                     {t('cost', language)}
                     <ArrowUpDown className="w-3 h-3 ml-1" />
                   </Button>
                 </TableHead>
+                )}
                 <TableHead className="text-xs font-semibold">{t('actions', language)}</TableHead>
               </TableRow>
             </TableHeader>
@@ -244,7 +246,9 @@ export function ShipmentsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="hidden lg:table-cell text-sm">{shipment.weight.toLocaleString()} kg</TableCell>
+                  {currentRole !== 'driver' && (
                   <TableCell className="hidden lg:table-cell text-sm font-medium">{formatCurrency(shipment.cost)}</TableCell>
+                )}
                   <TableCell>
                     <Button variant="ghost" size="icon" className="h-8 w-8" onClick={(e) => { e.stopPropagation(); setSelectedShipmentId(shipment.id); }}>
                       <Eye className="w-4 h-4 text-muted-foreground hover:text-orange-500" />
@@ -254,7 +258,7 @@ export function ShipmentsPage() {
               ))}
               {filteredShipments.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-center py-12 text-muted-foreground">
+                  <TableCell colSpan={currentRole === 'driver' ? 8 : 9} className="text-center py-12 text-muted-foreground">
                     {t('noData', language)}
                   </TableCell>
                 </TableRow>
@@ -323,11 +327,13 @@ export function ShipmentsPage() {
                 <Separator />
 
                 <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs text-muted-foreground">{t('cost', language)}</p>
-                    <p className="text-2xl font-bold text-orange-500">{formatCurrency(selectedShipment.cost)}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
+                  {currentRole !== 'driver' && (
+                    <div>
+                      <p className="text-xs text-muted-foreground">{t('cost', language)}</p>
+                      <p className="text-2xl font-bold text-orange-500">{formatCurrency(selectedShipment.cost)}</p>
+                    </div>
+                  )}
+                  <div className={cn("flex items-center gap-2", currentRole === 'driver' && "ml-auto")}>
                     <Badge variant={selectedShipment.insurance ? 'default' : 'secondary'} className={cn(selectedShipment.insurance ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 border-0' : '')}>
                       {t('insurance', language)}: {selectedShipment.insurance ? t('yes', language) : t('no', language)}
                     </Badge>
@@ -638,6 +644,40 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
         {step === 3 && (
           <div className="space-y-4">
+            {/* KI-Preisempfehlung - PROMINENT oben angezeigt */}
+            {aiRecommendation && currentRole === 'shipper' && (
+              <motion.div
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="rounded-xl bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 p-5"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-14 h-14 rounded-xl bg-green-500/20 flex items-center justify-center shrink-0">
+                    <Sparkles className="w-7 h-7 text-green-500" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-sm text-muted-foreground">
+                      {language === 'de' ? 'KI-empfohlener Preis' : 'AI-recommended price'}
+                    </p>
+                    <p className="text-3xl font-bold text-green-600 dark:text-green-400">
+                      {formatEUR(aiRecommendation.recommendedPrice)}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {language === 'de'
+                        ? `Basierend auf ${aiRecommendation.factors.distance}km, ${aiRecommendation.factors.weight}kg, ${t(aiRecommendation.factors.priority, language)}`
+                        : `Based on ${aiRecommendation.factors.distance}km, ${aiRecommendation.factors.weight}kg, ${t(aiRecommendation.factors.priority, language)}`}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={applyRecommendation}
+                    className="bg-green-500 hover:bg-green-600 text-white shrink-0"
+                  >
+                    {language === 'de' ? 'Übernehmen' : 'Apply'}
+                  </Button>
+                </div>
+              </motion.div>
+            )}
+
             {/* Shipment Type */}
             <div className="space-y-2">
               <Label>{t('shipmentType', language)}</Label>
@@ -684,18 +724,26 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
                   placeholder="0.00"
                   value={displayPrice}
                   onChange={(e) => handlePriceChange(e.target.value)}
-                  className="pr-4 text-lg font-semibold"
+                  className="pr-4 text-lg font-semibold h-12"
                 />
-                {aiRecommendation && (
+                {aiRecommendation && currentRole === 'shipper' && (
                   <button
                     type="button"
                     onClick={applyRecommendation}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-orange-500 hover:text-orange-600 font-medium px-2 py-1 rounded-md bg-orange-500/10 hover:bg-orange-500/15 transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-green-500 hover:text-green-600 font-medium px-2 py-1 rounded-md bg-green-500/10 hover:bg-green-500/15 transition-colors"
                   >
-                    {t('recommended', language)}
+                    {language === 'de' ? 'KI-Preis' : 'AI Price'}
                   </button>
                 )}
               </div>
+              {aiRecommendation && currentRole === 'shipper' && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1.5 mt-1">
+                  <Info className="w-3 h-3" />
+                  {language === 'de'
+                    ? `Mindestgebot für Auktion: ${formatEUR(aiRecommendation.bidFloor)}`
+                    : `Minimum bid for auction: ${formatEUR(aiRecommendation.bidFloor)}`}
+                </p>
+              )}
             </div>
 
             {/* Auction specific fields - Only visible for Shipper */}

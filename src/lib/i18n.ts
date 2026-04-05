@@ -387,6 +387,13 @@ const translations = {
     gpsCoordinates: 'GPS-Koordinaten',
     fraudProtection: 'Betrugsschutz',
     blockchainVerified: 'Blockchain-verifiziert',
+    // Shipper Costs (kein Umsatz, nur Kosten)
+    totalCosts: 'Gesamtkosten',
+    transportCosts: 'Transportkosten',
+    // AI Price Recommendations
+    aiRecommendedPrice: 'KI-empfohlener Preis',
+    applyAiPrice: 'KI-Preis übernehmen',
+    minimumBid: 'Mindestgebot für Auktion',
   },
   en: {
     appName: 'CargoBit',
@@ -772,6 +779,13 @@ const translations = {
     gpsCoordinates: 'GPS Coordinates',
     fraudProtection: 'Fraud Protection',
     blockchainVerified: 'Blockchain Verified',
+    // Shipper Costs (no revenue, only costs)
+    totalCosts: 'Total Costs',
+    transportCosts: 'Transport Costs',
+    // AI Price Recommendations
+    aiRecommendedPrice: 'AI-recommended price',
+    applyAiPrice: 'Apply AI Price',
+    minimumBid: 'Minimum bid for auction',
   },
   pl: {
     appName: 'CargoBit',

@@ -127,7 +127,7 @@ function KPICard({ item, index, language, colorOverride }: { item: { label: stri
           <p className="text-2xl font-bold tracking-tight">
             {isRating ? (
               <AnimatedCounter value={item.value} suffix=" / 5.0" isDecimal />
-            ) : item.label === 'revenue' || item.label === 'walletBalance' ? (
+            ) : item.label === 'revenue' || item.label === 'walletBalance' || item.label === 'totalCosts' ? (
               <AnimatedCounter value={item.value} prefix="€" />
             ) : (
               <AnimatedCounter value={item.value} />
@@ -300,11 +300,12 @@ function AdminDashboard({ language }: { language: string }) {
 // ==========================================
 function ShipperDashboard({ language }: { language: string }) {
   const { setActiveTab, setShowCreateShipment } = useCargoBitStore();
-  
+
+  // Shipper hat KEINEN Umsatz, nur KOSTEN für Transporte
   const shipperKPIs = [
     { label: 'activeShipments', value: 15, change: 3, changeLabel: 'aktive Sendungen', icon: 'Package' },
     { label: 'deliveriesToday', value: 3, change: 1, changeLabel: 'heute geliefert', icon: 'Truck' },
-    { label: 'revenue', value: 12850, change: 5.5, changeLabel: 'dieser Monat', icon: 'TrendingUp' },
+    { label: 'totalCosts', value: 12850, change: 5.5, changeLabel: 'Transportkosten diesen Monat', icon: 'TrendingUp' },
     { label: 'avgRating', value: 4.7, change: 0.1, changeLabel: 'Liefer-Qualität', icon: 'Star' },
   ];
 

@@ -27,6 +27,7 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Disponent',
     icon: 'Radio',
     description: 'Sendungsverwaltung und Routenplanung',
+    // Dispatcher: Volle Funktionalität inkl. Fleet, Capacity, Wallet, Memberships
     availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'chat', 'wallet', 'memberships', 'settings'],
     isPublic: true,
   },
@@ -35,7 +36,8 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Fahrer',
     icon: 'Truck',
     description: 'Aktive Lieferungen und Routennavigation',
-    availableTabs: ['dashboard', 'tracking', 'chat', 'settings'],
+    // Driver: KEIN Wallet, KEINE Abonnements, KEINE Finanzen!
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'chat', 'settings'],
     isPublic: true,
   },
   {
@@ -43,7 +45,8 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Versender',
     icon: 'Package',
     description: 'Sendungen erstellen und Pakete verfolgen',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'capacity', 'chat', 'wallet', 'memberships', 'settings'],
+    // Shipper (Verlader): KEIN Fleet, KEIN Capacity, KEINE Abonnements (zahlt nur 4% Vermittlungsgebühr)
+    availableTabs: ['dashboard', 'shipments', 'tracking', 'support', 'chat', 'wallet', 'settings'],
     isPublic: true,
   },
   {
@@ -51,7 +54,8 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Support',
     icon: 'Headphones',
     description: 'Ticketverwaltung und Konfliktlösung – Nur vom Plattformbetreiber zuweisbar',
-    availableTabs: ['dashboard', 'support', 'tracking', 'chat', 'settings'],
+    // Support: KEIN Wallet, KEINE Abonnements, KEIN Fleet, KEIN Capacity
+    availableTabs: ['dashboard', 'shipments', 'support', 'tracking', 'chat', 'settings'],
     isPublic: false,
     ownerOnly: true,
   },
@@ -559,8 +563,9 @@ export const kpiData = {
   ],
   shipper: [
     { label: 'activeShipments', value: 15, change: 3, changeLabel: 'aktive Sendungen', icon: 'Package' },
-    { label: 'walletBalance', value: 12850, change: 5.5, changeLabel: 'dieser Monat', icon: 'Wallet' },
     { label: 'deliveriesToday', value: 3, change: 1, changeLabel: 'heute geliefert', icon: 'Truck' },
+    // Shipper hat KEINEN Umsatz, nur KOSTEN
+    { label: 'totalCosts', value: 12850, change: 5.5, changeLabel: 'Transportkosten diesen Monat', icon: 'TrendingUp' },
     { label: 'avgRating', value: 4.7, change: 0.1, changeLabel: 'Liefer-Qualität', icon: 'Star' },
   ],
   support: [
