@@ -21,6 +21,7 @@ import { AGBPage } from './legal/agb-page';
 import { ECMRPage } from './legal/ecmr-page';
 import { CookieSettingsPage } from './legal/cookie-settings-page';
 import { DeliveryConfirmationPage } from './delivery/delivery-confirmation-page';
+import { UsersAdminPage } from './admin/users-admin-page';
 
 const pageVariants = {
   initial: { opacity: 0, y: 12 },
@@ -71,6 +72,8 @@ export function AppShell() {
         return <CookieSettingsPage />;
       case 'delivery-confirmation':
         return <DeliveryConfirmationPage />;
+      case 'admin':
+        return <UsersAdminPage />;
       default:
         return <DashboardPage />;
     }

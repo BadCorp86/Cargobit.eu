@@ -77,6 +77,7 @@ const tabIconMap: Record<NavigationTab, React.ElementType> = {
   ecmr: FileText,
   cookies: Cookie,
   'delivery-confirmation': Signature,
+  admin: Shield,
 };
 
 export function SidebarNav() {

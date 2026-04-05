@@ -34,7 +34,8 @@ export type NavigationTab =
   | 'agb'
   | 'ecmr'
   | 'cookies'
-  | 'delivery-confirmation';
+  | 'delivery-confirmation'
+  | 'admin';
 
 export type ShipmentType = 'palette' | 'auto' | 'schuettgut' | 'stueckgut' | 'gefaehrgut' | 'kuhlgut';
 

@@ -199,7 +199,6 @@ model Shipment {
   
   // Type
   shipmentType      String        @default("direct") // direct, auction
-  auctionId         String?
   
   // Status
   status            String        @default("pending") // pending, assigned, in_transit, delivered, cancelled
@@ -225,6 +224,7 @@ model Shipment {
   carrier           User?         @relation("ShipmentsAsCarrier", fields: [carrierId], references: [id])
   driver            User?         @relation("ShipmentsAsDriver", fields: [driverId], references: [id])
   eCMR              ECMR?
+  auction           Auction?
   
   @@index([status])
   @@index([senderId])
@@ -914,4 +914,87 @@ model AdApplication {
   @@index([userId])
   @@index([status])
   @@map("ad_applications")
+}
+
+// Auction - Freight auction system
+model Auction {
+  id              String    @id @default(cuid())
+  auctionNumber   String    @unique // AUC-2025-001234
+  
+  // Shipment reference
+  shipmentId      String    @unique
+  shipment        Shipment  @relation(fields: [shipmentId], references: [id])
+  
+  // Creator (Shipper)
+  creatorId       String
+  creatorName     String
+  
+  // Auction details
+  title           String
+  description     String?
+  
+  // Pricing
+  startingPrice   Float
+  currentHighestBid Float  @default(0)
+  buyNowPrice     Float?
+  reservePrice    Float?    // Minimum price (hidden)
+  
+  // Bids
+  totalBids       Int       @default(0)
+  
+  // Winner
+  winnerId        String?
+  winnerName      String?
+  winningBid      Float?
+  
+  // Timing
+  startsAt        DateTime
+  endsAt          DateTime
+  durationHours   Int       @default(24)
+  
+  // Status
+  status          String    @default("pending") // pending, active, ended, cancelled, awarded
+  
+  // Visibility
+  visibility      String    @default("public") // public, invited, private
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  bids            AuctionBid[]
+  
+  @@index([status])
+  @@index([creatorId])
+  @@index([endsAt])
+  @@map("auctions")
+}
+
+// AuctionBid - Bids on freight auctions
+model AuctionBid {
+  id              String    @id @default(cuid())
+  auctionId       String
+  
+  // Bidder (Dispatcher)
+  bidderId        String
+  bidderName      String
+  companyName     String?
+  
+  // Bid details
+  amount          Float
+  message         String?   // Optional message from bidder
+  
+  // Status
+  status          String    @default("active") // active, outbid, winning, withdrawn
+  
+  // Timestamps
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  
+  auction         Auction   @relation(fields: [auctionId], references: [id], onDelete: Cascade)
+  
+  @@index([auctionId])
+  @@index([bidderId])
+  @@index([status])
+  @@map("auction_bids")
 }

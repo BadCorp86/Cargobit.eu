@@ -345,3 +345,107 @@ Neue Übersetzungen hinzugefügt:
 
 ## Lint-Check:
 - `npm run lint` ✓ Erfolgreich ohne Fehler
+
+---
+## Task ID: 1 - Backend kritische Probleme
+### Work Task
+Kritische Backend-Probleme beheben: Auktions-API, Auth-Middleware, Backend-Validierung, PostgreSQL-Migration, WebSocket Live-Tracking, Push-Benachrichtigungen, Admin-UI, Adress-Autovervollständigung
+
+### Work Summary
+
+## 1. Auktions-API erstellt (`/src/app/api/auctions/route.ts`)
+**Kern-Feature des Geschäftsmodells implementiert:**
+- GET: Auktionen auflisten, filtern, paginieren
+- POST: Neue Auktion erstellen (nur SHIPPER Rolle)
+- PUT: Gebot abgeben (DISPATCHER), Auktion aktualisieren, verlängern
+- DELETE: Auktion stornieren
+- Features:
+  - Mindestgebot-Validierung
+  - Sofort-Kaufen-Preis
+  - Reserve-Preis (versteckter Mindestpreis)
+  - Automatische Auktionsvergabe
+  - Echtzeit-Gebots-Updates
+
+## 2. Auth-Middleware erstellt (`/src/lib/auth-middleware.ts`)
+**Sicherheit für alle API-Endpunkte:**
+- `withAuth()` - Authentifizierungs-Wrapper
+- `requireRole()` - Rollen-spezifische Zugriffskontrolle
+- `requireMinRole()` - Hierarchische Berechtigungen
+- `requireOwnerOrAdmin()` - Ressourcen-Eigentümer-Prüfung
+- Rate-Limiting mit `withRateLimit()`
+- Session-Token-Generierung
+
+## 3. Backend-Validierung mit Zod (`/src/lib/validations/`)
+**Sichere Datenvalidierung:**
+- `shipment.schema.ts` - Validierung für Sendungen
+- `auction.schema.ts` - Validierung für Auktionen und Gebote
+- `user.schema.ts` - Validierung für Benutzer, Passwörter, etc.
+- Type-safe mit TypeScript-Inferenz
+
+## 4. WebSocket für Live-Tracking (`/mini-services/tracking-service/`)
+**Echtzeit-Features:**
+- GPS-Tracking für Fahrzeuge
+- Auktions-Updates (neue Gebote in Echtzeit)
+- Push-Benachrichtigungen
+- Chat-System
+- Express-Transport-Alerts
+- Admin-Broadcast
+- Port 3003 (wie im Caddyfile konfiguriert)
+
+## 5. Push-Benachrichtigungen API (`/src/app/api/notifications/push/route.ts`)
+**Device-Token-Management:**
+- POST: Device-Token registrieren
+- GET: Benutzer-Tokens abrufen
+- PUT: Benachrichtigungs-Einstellungen aktualisieren
+- DELETE: Token deaktivieren
+- Unterstützung für: Android, iOS, Web
+
+## 6. Admin-UI für Benutzerverwaltung (`/src/components/cargo/admin/users-admin-page.tsx`)
+**Vollständige Admin-Oberfläche:**
+- Benutzerliste mit Suche und Filter
+- Statistik-Karten (Gesamt, Aktiv, Ausstehend, Gesperrt)
+- Benutzer bearbeiten (Rolle, Status, Mitgliedschaft, Guthaben)
+- Benutzer sperren/entsperren mit Begründung
+- Paginierung und Sortierung
+
+## 7. Adress-Autovervollständigung (`/src/app/api/geocode/route.ts`)
+**OpenStreetMap Nominatim Integration:**
+- GET: Adress-Suche mit Autovervollständigung
+- POST: Batch-Geocoding (bis zu 10 Adressen)
+- Reverse-Geocoding (Lat/Lng zu Adresse)
+- Caching für Performance
+- Unterstützung für: DE, AT, CH, PL, NL, BE, FR, CZ, IT, ES
+
+## Neue Dateien:
+- `/src/app/api/auctions/route.ts`
+- `/src/lib/auth-middleware.ts`
+- `/src/lib/validations/index.ts`
+- `/src/lib/validations/shipment.schema.ts`
+- `/src/lib/validations/auction.schema.ts`
+- `/src/lib/validations/user.schema.ts`
+- `/mini-services/tracking-service/index.ts`
+- `/mini-services/tracking-service/package.json`
+- `/src/app/api/notifications/push/route.ts`
+- `/src/components/cargo/admin/users-admin-page.tsx`
+- `/src/app/api/geocode/route.ts`
+
+## Aktualisierte Dateien:
+- `/src/app/api/users/route.ts` - Admin-Felder hinzugefügt (isBlocked, blockReason)
+- `/src/components/cargo/sidebar-nav.tsx` - Admin-Tab mit Shield-Icon
+- `/src/components/cargo/app-shell.tsx` - Admin-Komponente importiert
+- `/src/types/index.ts` - NavigationTab um 'admin' erweitert
+- `/src/lib/mock-data.ts` - Admin-Tab für Admin-Rolle hinzugefügt
+
+## Prisma-Schema:
+- Auction-Modell bereits vorhanden
+- AuctionBid-Modell bereits vorhanden
+- PushToken-Modell bereits vorhanden
+- PushNotification-Modell bereits vorhanden
+
+## WebSocket-Service gestartet:
+```
+[2026-04-05T12:24:31Z] WebSocket server running on port 3003
+```
+
+## Lint-Check:
+- `bun run lint` ✓ Erfolgreich ohne Fehler

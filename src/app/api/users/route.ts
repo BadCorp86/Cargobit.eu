@@ -9,6 +9,7 @@ export async function GET(request: NextRequest) {
     const id = searchParams.get('id');
     const role = searchParams.get('role');
     const status = searchParams.get('status');
+    const isBlocked = searchParams.get('isBlocked');
     const search = searchParams.get('search');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
@@ -43,15 +44,19 @@ export async function GET(request: NextRequest) {
 
     // Build filter conditions
     const where: any = {};
-    
+
     if (role) {
       where.role = role as UserRole;
     }
-    
+
     if (status) {
       where.status = status as UserStatus;
     }
-    
+
+    if (isBlocked !== null && isBlocked !== undefined) {
+      where.isBlocked = isBlocked === 'true';
+    }
+
     if (search) {
       where.OR = [
         { name: { contains: search, mode: 'insensitive' } },
@@ -71,8 +76,12 @@ export async function GET(request: NextRequest) {
           role: true,
           status: true,
           companyName: true,
+          phone: true,
           membershipTier: true,
           walletBalance: true,
+          isBlocked: true,
+          blockReason: true,
+          blockedAt: true,
           createdAt: true,
           lastLoginAt: true,
           _count: {
@@ -235,11 +244,32 @@ export async function PUT(request: NextRequest) {
         'name', 'companyName', 'companyAddress', 'taxId', 'vatNumber',
         'registrationNumber', 'phone', 'driverLicenseNumber', 'driverLicenseClass'
       ];
-      
+
       for (const field of allowedFields) {
         if (updateData[field] !== undefined) {
           data[field] = updateData[field];
         }
+      }
+
+      // Admin-only fields
+      if (updateData.role !== undefined) {
+        data.role = updateData.role as UserRole;
+      }
+      if (updateData.status !== undefined) {
+        data.status = updateData.status as UserStatus;
+      }
+      if (updateData.membershipTier !== undefined) {
+        data.membershipTier = updateData.membershipTier as MembershipTier;
+      }
+      if (updateData.walletBalance !== undefined) {
+        data.walletBalance = parseFloat(updateData.walletBalance);
+      }
+
+      // Blocking
+      if (updateData.isBlocked !== undefined) {
+        data.isBlocked = updateData.isBlocked;
+        data.blockReason = updateData.blockReason || null;
+        data.blockedAt = updateData.isBlocked ? new Date() : null;
       }
 
       if (updateData.driverLicenseExpiry) {

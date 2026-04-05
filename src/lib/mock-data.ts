@@ -18,7 +18,7 @@ export const roleConfigs: RoleConfig[] = [
     label: 'Administrator',
     icon: 'Shield',
     description: 'Vollzugriff auf alle Plattformfunktionen – Nur vom Plattformbetreiber zuweisbar',
-    availableTabs: ['dashboard', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'analytics', 'blog', 'wallet', 'advertising', 'memberships', 'chat', 'settings'],
+    availableTabs: ['dashboard', 'admin', 'shipments', 'tracking', 'fleet', 'capacity', 'support', 'analytics', 'blog', 'wallet', 'advertising', 'memberships', 'chat', 'settings'],
     isPublic: false,
     ownerOnly: true,
   },

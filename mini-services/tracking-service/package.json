@@ -1,0 +1,12 @@
+{
+  "name": "cargobit-tracking-service",
+  "version": "1.0.0",
+  "description": "WebSocket service for real-time tracking and auction updates",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --hot index.ts"
+  },
+  "dependencies": {
+    "socket.io": "^4.7.2"
+  }
+}
