@@ -91,12 +91,12 @@ const campaignDurations = [
 ];
 
 const adPositions = [
-  { id: 'header', name: 'Header Banner', price: '€500/Monat' },
-  { id: 'sidebar', name: 'Sidebar Banner', price: '€300/Monat' },
-  { id: 'dashboard', name: 'Dashboard Widget', price: '€400/Monat' },
-  { id: 'newsletter', name: 'Email Newsletter', price: '€250/Monat' },
-  { id: 'popup', name: 'Popup Interstitial', price: '€350/Monat' },
-  { id: 'footer', name: 'Footer Banner', price: '€200/Monat' },
+  { id: 'header', name: 'Header-Banner', price: '€500/Monat' },
+  { id: 'sidebar', name: 'Sidebar-Banner', price: '€300/Monat' },
+  { id: 'dashboard', name: 'Dashboard-Widget', price: '€400/Monat' },
+  { id: 'newsletter', name: 'E-Mail-Newsletter', price: '€250/Monat' },
+  { id: 'popup', name: 'Popup-Interstitial', price: '€350/Monat' },
+  { id: 'footer', name: 'Footer-Banner', price: '€200/Monat' },
 ];
 
 interface AdApplicationFormProps {

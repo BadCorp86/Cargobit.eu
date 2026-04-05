@@ -449,3 +449,78 @@ Kritische Backend-Probleme beheben: Auktions-API, Auth-Middleware, Backend-Valid
 
 ## Lint-Check:
 - `bun run lint` ✓ Erfolgreich ohne Fehler
+
+---
+## Task ID: i18n-Advertising-Fix
+### Work Task
+Advertising-Seite im Admin-Bereich auf Deutsch übersetzen
+
+### Work Summary
+
+## 1. i18n-Übersetzungen ergänzt (`/src/lib/i18n.ts`)
+**Neue Advertising-Übersetzungen hinzugefügt:**
+
+**Deutsch:**
+- `advertising`: "Werbung"
+- `activeCampaigns`: "Aktive Kampagnen"
+- `totalImpressions`: "Gesamt-Impressionen"
+- `totalClicks`: "Gesamt-Klicks"
+- `adSpend`: "Werbeausgaben"
+- `createCampaign`: "Kampagne erstellen"
+- `campaign`: "Kampagne"
+- `budget`: "Budget"
+- `dailyBudget`: "Tagesbudget"
+- `targetUrl`: "Ziel-URL"
+- `bannerUpload`: "Banner hochladen"
+- `position`: "Position"
+- `startDate`: "Startdatum"
+- `endDate`: "Enddatum"
+- `myCampaigns`: "Meine Kampagnen"
+- `bannerPositions`: "Banner-Positionen"
+- `adApplications`: "Werbeanträge"
+- `pricing`: "Preise"
+- `impressions`: "Impressionen"
+- `clicks`: "Klicks"
+- `ctr`: "CTR"
+- `budgetUsed`: "Budget verbraucht"
+- `location`: "Position"
+- `pricePerMonth`: "Preis pro Monat"
+- `months`: "Monat"
+- `volumeDiscounts`: "Volumenrabatte"
+- `discount`: "Rabatt"
+- `applyForAdvertising`: "Für Werbung bewerben"
+- `occupied`: "Belegt"
+- `headerBanner`: "Header-Banner"
+- `sidebarBanner`: "Sidebar-Banner"
+- `dashboardWidget`: "Dashboard-Widget"
+- `emailNewsletter`: "E-Mail-Newsletter"
+- `popupInterstitial`: "Popup-Interstitial"
+- `footerBanner`: "Footer-Banner"
+
+**Englisch:** Alle entsprechenden Übersetzungen hinzugefügt
+
+## 2. Advertising-Page aktualisiert (`/src/components/cargo/advertising/advertising-page.tsx`)
+- `positionIcons` durch `getPositionIcon()` Funktion ersetzt
+- 'Belegt' durch `t('occupied', language)` ersetzt
+- Alle Position-Namen auf Deutsch umgestellt
+
+## 3. Mock-Daten aktualisiert (`/src/lib/mock-data-wallet.ts`)
+**Werbe-Positionen auf Deutsch umbenannt:**
+- "Header Banner" → "Header-Banner"
+- "Sidebar Banner" → "Sidebar-Banner"
+- "Dashboard Widget" → "Dashboard-Widget"
+- "Email Newsletter" → "E-Mail-Newsletter"
+- "Popup Interstitial" → "Popup-Interstitial"
+- "Footer Banner" → "Footer-Banner"
+
+## 4. Ad-Application-Form aktualisiert (`/src/components/cargo/advertising/ad-application-form.tsx`)
+- Werbeplatz-Namen auf Deutsch umgestellt
+
+## Dateien geändert:
+- `/src/lib/i18n.ts`
+- `/src/components/cargo/advertising/advertising-page.tsx`
+- `/src/lib/mock-data-wallet.ts`
+- `/src/components/cargo/advertising/ad-application-form.tsx`
+
+## Lint-Check:
+- `npm run lint` ✓ Erfolgreich ohne Fehler

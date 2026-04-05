@@ -63,13 +63,10 @@ const appStatusColors: Record<string, string> = {
   rejected: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400',
 };
 
-const positionIcons: Record<string, React.ElementType> = {
-  'Header Banner': LayoutDashboard,
-  'Sidebar Banner': LayoutDashboard,
-  'Dashboard Widget': LayoutDashboard,
-  'Email Newsletter': Mail,
-  'Popup Interstitial': LayoutDashboard,
-  'Footer Banner': LayoutDashboard,
+const getPositionIcon = (posName: string): React.ElementType => {
+  const name = posName.toLowerCase();
+  if (name.includes('newsletter') || name.includes('email')) return Mail;
+  return LayoutDashboard;
 };
 
 export function AdvertisingPage() {
@@ -204,7 +201,7 @@ export function AdvertisingPage() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {adCampaigns.map((campaign, idx) => {
               const StatusIcon = campaignStatusIcons[campaign.status] || Clock;
-              const PosIcon = positionIcons[campaign.position] || LayoutDashboard;
+              const PosIcon = getPositionIcon(campaign.position);
               return (
                 <motion.div
                   key={campaign.id}
@@ -281,7 +278,7 @@ export function AdvertisingPage() {
         <TabsContent value="positions" className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {adPositions.map((pos, idx) => {
-              const PosIcon = positionIcons[pos.name] || LayoutDashboard;
+              const PosIcon = getPositionIcon(pos.name);
               return (
                 <motion.div
                   key={pos.id}
@@ -296,7 +293,7 @@ export function AdvertisingPage() {
                           <PosIcon className="w-5 h-5 text-orange-500" />
                         </div>
                         <Badge className={cn('text-[10px]', pos.available ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400')}>
-                          {pos.available ? t('available', language) : 'Belegt'}
+                          {pos.available ? t('available', language) : t('occupied', language)}
                         </Badge>
                       </div>
                       <p className="text-sm font-semibold mb-1">{pos.name}</p>
@@ -405,7 +402,7 @@ export function AdvertisingPage() {
                         <td className="py-3 px-3 text-sm font-bold text-right text-orange-600 dark:text-orange-400">{formatCurrency(pos.pricePerMonth)}</td>
                         <td className="py-3 px-3 text-center">
                           <Badge className={cn('text-[10px]', pos.available ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400')}>
-                            {pos.available ? t('available', language) : 'Belegt'}
+                            {pos.available ? t('available', language) : t('occupied', language)}
                           </Badge>
                         </td>
                       </tr>
