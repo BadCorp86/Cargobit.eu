@@ -55,6 +55,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 const statusLabels: Record<ShipmentStatus, string> = {
   pending: 'pending',
@@ -368,17 +369,29 @@ function DetailItem({ icon: Icon, label, value }: { icon: React.ElementType; lab
 function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { language, currentRole } = useCargoBitStore();
   const [step, setStep] = useState(1);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Form state
+  // Form state - Step 1: Addresses
+  const [sender, setSender] = useState<string>('');
+  const [senderAddress, setSenderAddress] = useState<string>('');
+  const [receiver, setReceiver] = useState<string>('');
+  const [receiverAddress, setReceiverAddress] = useState<string>('');
+  
+  // Form state - Step 2: Cargo details
   const [weight, setWeight] = useState<string>('');
   const [length, setLength] = useState<string>('');
   const [width, setWidth] = useState<string>('');
   const [height, setHeight] = useState<string>('');
   const [cargoType, setCargoType] = useState<'palette' | 'vehicle' | 'bulk' | 'container' | 'hazardous' | 'refrigerated'>('palette');
   const [priority, setPriority] = useState<'standard' | 'express' | 'overnight'>('standard');
+  const [insurance, setInsurance] = useState<boolean>(false);
+  
+  // Form state - Step 3: Pricing
   const [shipmentType, setShipmentType] = useState<'direct' | 'auction'>('direct');
   const [price, setPrice] = useState<string>('');
   const [auctionDuration, setAuctionDuration] = useState<string>('48');
+  const [pickupDate, setPickupDate] = useState<string>('');
+  const [description, setDescription] = useState<string>('');
   const [hasUserEditedPrice, setHasUserEditedPrice] = useState(false);
 
   // Calculate AI recommendation using useMemo (derived state)
@@ -410,17 +423,87 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
 
   const resetForm = useCallback(() => {
     setStep(1);
+    setSender('');
+    setSenderAddress('');
+    setReceiver('');
+    setReceiverAddress('');
     setWeight('');
     setLength('');
     setWidth('');
     setHeight('');
     setCargoType('palette');
     setPriority('standard');
+    setInsurance(false);
     setShipmentType('direct');
     setPrice('');
     setAuctionDuration('48');
+    setPickupDate('');
+    setDescription('');
     setHasUserEditedPrice(false);
+    setIsSubmitting(false);
   }, []);
+
+  // Submit handler
+  const handleSubmit = async () => {
+    if (!sender || !receiver || !weight || !price) {
+      toast.error(language === 'de' ? 'Fehlende Angaben' : 'Missing information', {
+        description: language === 'de' ? 'Bitte füllen Sie alle Pflichtfelder aus' : 'Please fill in all required fields',
+      });
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const response = await fetch('/api/shipments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          senderId: 'demo-user', // In production: get from auth
+          senderName: sender,
+          senderAddress,
+          receiverName: receiver,
+          receiverAddress,
+          pickupPlace: senderAddress || sender,
+          deliveryPlace: receiverAddress || receiver,
+          pickupDate: pickupDate || new Date().toISOString(),
+          goodsDescription: description,
+          weight: parseFloat(weight) || 0,
+          volume: length && width && height ? (parseFloat(length) * parseFloat(width) * parseFloat(height)) / 1000000 : 0,
+          price: parseFloat(price) || 0,
+          shipmentType,
+          priority,
+          cargoType,
+          insurance,
+          auctionDuration: shipmentType === 'auction' ? parseInt(auctionDuration) : null,
+          aiRecommendedPrice: aiRecommendation?.recommendedPrice,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to create shipment');
+      }
+
+      const result = await response.json();
+      
+      toast.success(language === 'de' ? 'Sendung erstellt!' : 'Shipment created!', {
+        description: language === 'de' 
+          ? `Ihre Sendung wurde erfolgreich angelegt (${result.shipmentNumber || 'CB-DE-2024-XXXXXX'})`
+          : `Your shipment has been created successfully (${result.shipmentNumber || 'CB-DE-2024-XXXXXX'})`,
+      });
+
+      resetForm();
+      onOpenChange(false);
+    } catch (error) {
+      console.error('Shipment creation error:', error);
+      toast.error(language === 'de' ? 'Fehler beim Erstellen' : 'Creation failed', {
+        description: language === 'de' 
+          ? 'Die Sendung konnte nicht erstellt werden. Bitte versuchen Sie es erneut.'
+          : 'Could not create shipment. Please try again.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) resetForm(); onOpenChange(v); }}>
@@ -450,20 +533,36 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
         {step === 1 && (
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>{t('sender', language)}</Label>
-              <Input placeholder={t('sender', language)} />
+              <Label>{t('sender', language)} *</Label>
+              <Input 
+                placeholder={t('sender', language)} 
+                value={sender}
+                onChange={(e) => setSender(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>{t('senderAddress', language)}</Label>
-              <Input placeholder={t('senderAddress', language)} />
+              <Input 
+                placeholder={t('senderAddress', language)} 
+                value={senderAddress}
+                onChange={(e) => setSenderAddress(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
-              <Label>{t('receiver', language)}</Label>
-              <Input placeholder={t('receiver', language)} />
+              <Label>{t('receiver', language)} *</Label>
+              <Input 
+                placeholder={t('receiver', language)} 
+                value={receiver}
+                onChange={(e) => setReceiver(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>{t('receiverAddress', language)}</Label>
-              <Input placeholder={t('receiverAddress', language)} />
+              <Input 
+                placeholder={t('receiverAddress', language)} 
+                value={receiverAddress}
+                onChange={(e) => setReceiverAddress(e.target.value)}
+              />
             </div>
             <Button className="w-full bg-orange-500 hover:bg-orange-600 text-white" onClick={() => setStep(2)}>
               {t('continue', language)}
@@ -576,7 +675,13 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               </Select>
             </div>
             <div className="flex items-center gap-2">
-              <input type="checkbox" id="insurance" className="rounded" />
+              <input 
+                type="checkbox" 
+                id="insurance" 
+                className="rounded" 
+                checked={insurance}
+                onChange={(e) => setInsurance(e.target.checked)}
+              />
               <Label htmlFor="insurance">{t('insurance', language)}</Label>
             </div>
 
@@ -791,12 +896,21 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
             )}
 
             <div className="space-y-2">
-              <Label>{t('pickupDate', language)}</Label>
-              <Input type="date" />
+              <Label>{t('pickupDate', language)} *</Label>
+              <Input 
+                type="date" 
+                value={pickupDate}
+                onChange={(e) => setPickupDate(e.target.value)}
+              />
             </div>
             <div className="space-y-2">
               <Label>{t('description', language)}</Label>
-              <Textarea rows={3} placeholder={t('description', language)} />
+              <Textarea 
+                rows={3} 
+                placeholder={t('description', language)} 
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+              />
             </div>
             <div className="flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setStep(2)}>
@@ -804,9 +918,13 @@ function CreateShipmentDialog({ open, onOpenChange }: { open: boolean; onOpenCha
               </Button>
               <Button
                 className="flex-1 bg-gradient-to-r from-orange-500 to-orange-600 hover:from-orange-600 hover:to-orange-700 text-white shadow-lg shadow-orange-500/25"
-                onClick={() => onOpenChange(false)}
+                onClick={handleSubmit}
+                disabled={isSubmitting}
               >
-                {t('createShipment', language)}
+                {isSubmitting 
+                  ? (language === 'de' ? 'Wird erstellt...' : 'Creating...')
+                  : t('createShipment', language)
+                }
               </Button>
             </div>
           </div>
