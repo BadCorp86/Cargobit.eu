@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { FilterCandidatesRequest, FilterCandidatesResponse, Candidate, ApiErrorResponse } from '@/types/matching';
 
 // POST /api/matching/filter - Hard filter candidates based on requirements
@@ -15,9 +15,14 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get transport
-    const transport = await prisma.transport.findUnique({
-      where: { id: body.transportId }
+    // Get transport with addresses
+    const transport = await db.transport.findUnique({
+      where: { id: body.transportId },
+      include: {
+        transportDetail: true,
+        pickupAddress: true,
+        deliveryAddress: true
+      }
     });
 
     if (!transport) {
@@ -30,31 +35,27 @@ export async function POST(request: NextRequest) {
 
     // Merge requirements from body and transport
     const vehicleReqs = body.requirements.vehicle || 
-      (transport.vehicleRequirements ? JSON.parse(transport.vehicleRequirements) : {});
+      (transport.transportDetail?.vehicleRequirements ? JSON.parse(transport.transportDetail.vehicleRequirements) : {});
     const driverReqs = body.requirements.driver || 
-      (transport.driverRequirements ? JSON.parse(transport.driverRequirements) : {});
+      (transport.transportDetail?.driverRequirements ? JSON.parse(transport.transportDetail.driverRequirements) : {});
     const intlReqs = body.requirements.international || 
-      (transport.internationalRequirements ? JSON.parse(transport.internationalRequirements) : {});
+      (transport.transportDetail?.internationalRequirements ? JSON.parse(transport.transportDetail.internationalRequirements) : {});
 
-    const isInternational = transport.pickupCountry !== transport.deliveryCountry;
+    const isInternational = transport.pickupAddress.country !== transport.deliveryAddress.country;
 
-    // ========== BUILD QUERY ==========
+    // ========== FIND ALL DRIVERS ==========
 
-    const driverWhere: Record<string, unknown> = {
-      role: { in: ['DRIVER_SELF_EMPLOYED', 'DISPATCHER'] },
-      status: 'ACTIVE'
-    };
-
-    // Apply availability filter
-    if (!body.timeWindow) {
-      driverWhere.isAvailable = true;
-    }
-
-    // Find all potential drivers
-    const allDrivers = await prisma.user.findMany({
-      where: driverWhere,
+    const drivers = await db.driver.findMany({
+      where: {
+        user: { status: 'ACTIVE' }
+      },
       include: {
-        vehicles: { where: { isActive: true } },
+        user: true,
+        driverVehicles: {
+          include: {
+            vehicle: { where: { status: 'ACTIVE' } }
+          }
+        },
         driverPermissions: { where: { isAllowed: true } }
       }
     });
@@ -67,35 +68,17 @@ export async function POST(request: NextRequest) {
     let requirementMatch = 0;
     let internationalMatch = 0;
 
-    for (const driver of allDrivers) {
+    for (const driver of drivers) {
       // Check each vehicle
-      for (const vehicle of driver.vehicles) {
+      for (const dv of driver.driverVehicles) {
+        const vehicle = dv.vehicle;
         let passed = true;
         const warnings: string[] = [];
         const matchReasons: string[] = [];
 
         // ===== VEHICLE TYPE FILTER =====
         if (vehicleReqs.vehicleTypes?.length) {
-          const vehicleTypeMap: Record<string, string> = {
-            'sprinter': 'SPRINTER',
-            'koffer': 'KOEFFER',
-            'curtainsider': 'CURTAINSIDER',
-            'plane': 'PLANE',
-            'kipper': 'KIPPER',
-            'silo': 'SILO',
-            'mulde': 'MULDE',
-            'tankauflieger': 'TANKAUFLIEGER',
-            'autotransporter': 'AUTOTRANSPORTER',
-            'tieflader': 'TIEFLADER',
-            'containerchassis': 'CONTAINERCHASSIS',
-            'reefer': 'KUEHLFAHRZEUG'
-          };
-
-          const requiredTypes = vehicleReqs.vehicleTypes.map(
-            (t: string) => vehicleTypeMap[t] || t.toUpperCase()
-          );
-
-          if (!requiredTypes.includes(vehicle.vehicleType)) {
+          if (!vehicleReqs.vehicleTypes.includes(vehicle.type)) {
             passed = false;
             continue;
           }
@@ -105,7 +88,7 @@ export async function POST(request: NextRequest) {
 
         // ===== PAYLOAD FILTER =====
         if (vehicleReqs.minPayload_kg) {
-          if ((vehicle.maxWeightKg || 0) < vehicleReqs.minPayload_kg) {
+          if ((vehicle.maxPayloadKg || 0) < vehicleReqs.minPayload_kg) {
             passed = false;
             continue;
           }
@@ -122,15 +105,15 @@ export async function POST(request: NextRequest) {
         }
 
         // ===== DIMENSIONS FILTER =====
-        if (vehicleReqs.minLength_m && vehicle.lengthCm) {
-          if (vehicle.lengthCm / 100 < vehicleReqs.minLength_m) {
+        if (vehicleReqs.minLength_m && vehicle.lengthM) {
+          if (vehicle.lengthM < vehicleReqs.minLength_m) {
             passed = false;
             continue;
           }
         }
 
-        if (vehicleReqs.minHeight_m && vehicle.heightCm) {
-          if (vehicle.heightCm / 100 < vehicleReqs.minHeight_m) {
+        if (vehicleReqs.minHeight_m && vehicle.heightM) {
+          if (vehicle.heightM < vehicleReqs.minHeight_m) {
             passed = false;
             continue;
           }
@@ -138,7 +121,7 @@ export async function POST(request: NextRequest) {
 
         // ===== ADR FILTER =====
         if (vehicleReqs.adrRequired) {
-          if (!vehicle.adrCertified) {
+          if (!vehicle.adrApproved) {
             passed = false;
             continue;
           }
@@ -159,14 +142,13 @@ export async function POST(request: NextRequest) {
 
         // ===== COOLING FILTER =====
         if (vehicleReqs.coolingRequired) {
-          if (!vehicle.hasCooling) {
+          if (!vehicle.coolingAvailable) {
             passed = false;
             continue;
           }
           
           // Check temperature range
           if (vehicleReqs.temperatureRange) {
-            // Would check actual vehicle temperature capabilities
             matchReasons.push(`Temperatur: ${vehicleReqs.temperatureRange.min}°C bis ${vehicleReqs.temperatureRange.max}°C`);
           } else {
             matchReasons.push('Kühlung: ✓');
@@ -188,13 +170,13 @@ export async function POST(request: NextRequest) {
         requirementMatch++;
 
         // ADR License
-        if (driverReqs.adrLicenseRequired && !driver.adrCertified) {
+        if (driverReqs.adrLicenseRequired && !driver.adrLicense) {
           passed = false;
           continue;
         }
 
         // Rating
-        if (driverReqs.minRating && driver.rating < driverReqs.minRating) {
+        if (driverReqs.minRating && driver.ratingAvg < driverReqs.minRating) {
           passed = false;
           continue;
         }
@@ -218,7 +200,7 @@ export async function POST(request: NextRequest) {
           internationalMatch++;
 
           // Check driver international permission
-          if (!driver.internationalAllowed) {
+          if (!driver.internationalExperience) {
             passed = false;
             continue;
           }
@@ -229,7 +211,7 @@ export async function POST(request: NextRequest) {
             .map(p => p.countryCode);
 
           // Target country
-          if (!allowedCountries.includes(transport.deliveryCountry)) {
+          if (!allowedCountries.includes(transport.deliveryAddress.country)) {
             passed = false;
             continue;
           }
@@ -247,10 +229,6 @@ export async function POST(request: NextRequest) {
 
           // Tunnel codes
           if (vehicleReqs.tunnelCodesAllowed?.length && vehicle.tunnelCodes) {
-            const vehicleTunnelCodes = JSON.parse(vehicle.tunnelCodes);
-            // Check if vehicle's tunnel codes are compatible
-            // A is most restrictive, E is least
-            // Vehicle must have equal or better tunnel code
             matchReasons.push('Tunnelcode: ✓');
           }
 
@@ -259,6 +237,11 @@ export async function POST(request: NextRequest) {
 
         // ===== LOCATION FILTER =====
         locationMatch++;
+
+        // ===== AVAILABILITY CHECK =====
+        if (!body.timeWindow && !driver.isAvailable) {
+          passed = false;
+        }
 
         // If all filters passed, add to candidates
         if (passed) {

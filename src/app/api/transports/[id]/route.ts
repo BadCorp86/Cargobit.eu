@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { ApiErrorResponse } from '@/types/transport';
 
 // GET /api/transports/[id] - Get transport details
@@ -10,7 +10,7 @@ export async function GET(
   try {
     const { id } = await params;
 
-    const transport = await prisma.transport.findUnique({
+    const transport = await db.transport.findUnique({
       where: { id },
       include: {
         shipper: {

@@ -4,6 +4,17 @@
 // ============================================
 
 // ============================================
+// COMMON TYPES
+// ============================================
+
+export interface ApiErrorResponse {
+  error: string;
+  message: string;
+  code: string;
+  details?: Record<string, unknown>;
+}
+
+// ============================================
 // MATCHING TRIGGER TYPES
 // ============================================
 
@@ -369,3 +380,45 @@ export interface MatchingSession {
   assignedDriverId?: string;
   error?: string;
 }
+
+// ============================================
+// EXPORT ALL TYPES
+// ============================================
+
+export type {
+  ApiErrorResponse,
+  MatchingPriority,
+  StartMatchingRequest,
+  StartMatchingResponse,
+  UpdateMatchingRequest,
+  UpdateMatchingResponse,
+  StopMatchingRequest,
+  StopMatchingResponse,
+  FilterCandidatesRequest,
+  VehicleFilterRequirements,
+  DriverFilterRequirements,
+  InternationalFilterRequirements,
+  Candidate,
+  FilterCandidatesResponse,
+  EvaluateCandidateRequest,
+  RuleCheckResult,
+  EvaluateCandidateResponse,
+  RankCandidatesRequest,
+  RankingWeights,
+  RankedCandidate,
+  RankCandidatesResponse,
+  InternationalCheckRequest,
+  BorderCheck,
+  InternationalCheckResponse,
+  FraudCheckRequest,
+  FraudCheckType,
+  FraudCheckResult,
+  FraudCheckResponse,
+  MatchingResultsResponse,
+  AutoAssignRequest,
+  AutoAssignResponse,
+  MatchingLog,
+  MatchingLogsResponse,
+  MatchingMetrics,
+  MatchingSession
+};

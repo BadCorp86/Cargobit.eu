@@ -1,113 +1,140 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { MatchingLogsResponse, MatchingLog, ApiErrorResponse } from '@/types/matching';
 
-// GET /api/matching/logs/[transportId] - Get matching logs for debugging
+// GET /api/matching/logs/[transportId] - Get matching logs for a transport
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ transportId: string }> }
 ) {
   try {
     const { transportId } = await params;
-    const { searchParams } = new URL(request.url);
-    const limit = parseInt(searchParams.get('limit') || '100');
 
-    // Get audit logs for this transport
-    const auditLogs = await prisma.auditLog.findMany({
-      where: {
-        OR: [
-          { entityId: transportId },
-          { newValue: { contains: transportId } }
-        ],
-        action: { contains: 'MATCH' }
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit
-    });
-
-    // Get matching results for this transport
-    const matchingResults = await prisma.matchingResult.findMany({
+    // Get matching sessions
+    const sessions = await db.matchingSession.findMany({
       where: { transportId },
       orderBy: { createdAt: 'desc' },
       include: {
-        driver: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true
-          }
+        candidates: {
+          orderBy: { createdAt: 'asc' }
         }
       }
     });
 
-    // Transform to matching logs
-    const logs: MatchingLog[] = [];
-
-    // Add audit logs
-    for (const log of auditLogs) {
-      let metadata = {};
-      try {
-        metadata = log.newValue ? JSON.parse(log.newValue) : {};
-      } catch { /* ignore */ }
-      
-      logs.push({
-        id: log.id,
-        matchingId: `match_${transportId}`,
+    if (sessions.length === 0) {
+      return NextResponse.json<MatchingLogsResponse>({
         transportId,
-        event: log.action,
-        timestamp: log.createdAt.toISOString(),
-        metadata
-      });
+        logs: [],
+        total: 0
+      }, { status: 200 });
     }
 
-    // Add matching result events
-    for (const result of matchingResults) {
+    // Build logs from sessions
+    const logs: MatchingLog[] = [];
+
+    for (const session of sessions) {
+      // Session start
       logs.push({
-        id: result.id,
-        matchingId: `match_${transportId}`,
+        id: `log_${session.id}_start`,
+        matchingId: session.id,
         transportId,
-        event: `MATCH_FOUND_${result.status}`,
-        timestamp: result.createdAt.toISOString(),
-        score: result.matchScore,
-        candidatesFound: 1,
+        event: 'MATCHING_STARTED',
+        timestamp: session.createdAt.toISOString(),
         metadata: {
-          driverId: result.driverId,
-          driverName: `${result.driver.firstName || ''} ${result.driver.lastName || ''}`.trim(),
-          matchType: result.matchType,
-          score: result.matchScore
+          autoAssign: session.autoAssign
         }
       });
 
-      if (result.status === 'ACCEPTED') {
+      // Candidate events
+      let candidatesFound = 0;
+      let bestScore = 0;
+
+      for (const candidate of session.candidates) {
+        candidatesFound++;
+        if (candidate.score > bestScore) bestScore = candidate.score;
+
         logs.push({
-          id: `${result.id}_accepted`,
-          matchingId: `match_${transportId}`,
+          id: `log_${candidate.id}_found`,
+          matchingId: session.id,
           transportId,
-          event: 'DRIVER_ACCEPTED',
-          timestamp: result.updatedAt.toISOString(),
-          score: result.matchScore,
-          metadata: { driverId: result.driverId }
+          event: 'CANDIDATE_FOUND',
+          timestamp: candidate.createdAt.toISOString(),
+          score: candidate.score,
+          metadata: {
+            driverId: candidate.driverId,
+            vehicleId: candidate.vehicleId,
+            hardFilterPassed: candidate.hardFilterPassed,
+            fraudSafe: candidate.fraudSafe
+          }
+        });
+
+        // Status changes
+        if (candidate.status === 'NOTIFIED') {
+          logs.push({
+            id: `log_${candidate.id}_notified`,
+            matchingId: session.id,
+            transportId,
+            event: 'CANDIDATE_NOTIFIED',
+            timestamp: candidate.notifiedAt?.toISOString() || candidate.createdAt.toISOString(),
+            metadata: { driverId: candidate.driverId }
+          });
+        }
+
+        if (candidate.status === 'ACCEPTED') {
+          logs.push({
+            id: `log_${candidate.id}_accepted`,
+            matchingId: session.id,
+            transportId,
+            event: 'CANDIDATE_ACCEPTED',
+            timestamp: candidate.updatedAt.toISOString(),
+            score: candidate.score
+          });
+        }
+
+        if (candidate.status === 'REJECTED') {
+          logs.push({
+            id: `log_${candidate.id}_rejected`,
+            matchingId: session.id,
+            transportId,
+            event: 'CANDIDATE_REJECTED',
+            timestamp: candidate.updatedAt.toISOString()
+          });
+        }
+      }
+
+      // Session completion
+      if (session.completedAt || session.status === 'COMPLETED') {
+        logs.push({
+          id: `log_${session.id}_complete`,
+          matchingId: session.id,
+          transportId,
+          event: 'MATCHING_COMPLETED',
+          timestamp: session.completedAt?.toISOString() || session.updatedAt.toISOString(),
+          duration: session.completedAt 
+            ? session.completedAt.getTime() - session.createdAt.getTime() 
+            : undefined,
+          candidatesFound,
+          score: bestScore
         });
       }
 
-      if (result.status === 'REJECTED') {
+      if (session.status === 'STOPPED') {
         logs.push({
-          id: `${result.id}_rejected`,
-          matchingId: `match_${transportId}`,
+          id: `log_${session.id}_stopped`,
+          matchingId: session.id,
           transportId,
-          event: 'DRIVER_REJECTED',
-          timestamp: result.updatedAt.toISOString(),
-          metadata: { driverId: result.driverId }
+          event: 'MATCHING_STOPPED',
+          timestamp: session.updatedAt.toISOString()
         });
       }
     }
 
-    // Sort by timestamp (most recent first)
+    // Sort by timestamp
     logs.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
 
     return NextResponse.json<MatchingLogsResponse>({
       transportId,
-      logs: logs.slice(0, limit),
+      logs: logs.slice(0, 100),
       total: logs.length
     }, { status: 200 });
 

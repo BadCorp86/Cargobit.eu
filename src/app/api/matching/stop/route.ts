@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { StopMatchingRequest, StopMatchingResponse, ApiErrorResponse } from '@/types/matching';
 
-// POST /api/matching/stop - Stop matching for a transport
+// POST /api/matching/stop - Stop matching session
 export async function POST(request: NextRequest) {
   try {
     const body: StopMatchingRequest = await request.json();
@@ -15,35 +15,42 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Update all pending matching results
-    const result = await prisma.matchingResult.updateMany({
+    // Get active matching session
+    const session = await db.matchingSession.findFirst({
       where: {
         transportId: body.transportId,
-        status: 'PENDING'
-      },
-      data: {
-        status: 'REJECTED'
+        status: { in: ['STARTED', 'RUNNING'] }
       }
     });
 
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        action: 'MATCHING_STOPPED',
-        entityType: 'Transport',
-        entityId: body.transportId,
-        newValue: JSON.stringify({
-          reason: body.reason,
-          affectedResults: result.count,
-          stoppedAt: new Date().toISOString()
-        })
-      }
-    }).catch(() => {});
+    if (!session) {
+      return NextResponse.json<ApiErrorResponse>({
+        error: 'NotFoundError',
+        message: 'No active matching session found',
+        code: 'NO_ACTIVE_SESSION'
+      }, { status: 404 });
+    }
 
-    const matchingId = `match_${body.transportId}_${Date.now()}`;
+    // Update session status
+    await db.matchingSession.update({
+      where: { id: session.id },
+      data: {
+        status: 'STOPPED',
+        updatedAt: new Date()
+      }
+    });
+
+    // Mark pending candidates as expired
+    await db.matchingCandidate.updateMany({
+      where: {
+        matchingSessionId: session.id,
+        status: 'PENDING'
+      },
+      data: { status: 'EXPIRED' }
+    });
 
     return NextResponse.json<StopMatchingResponse>({
-      matchingId,
+      matchingId: session.id,
       status: 'stopped',
       stoppedAt: new Date().toISOString()
     }, { status: 200 });

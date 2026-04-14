@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { UpdateTransportStatusRequest, UpdateTransportStatusResponse, ApiErrorResponse, TransportStatusUpdate } from '@/types/transport';
 
 // POST /api/transports/[id]/status - Update transport status
@@ -21,7 +21,7 @@ export async function POST(
     }
 
     // Get transport
-    const transport = await prisma.transport.findUnique({
+    const transport = await db.transport.findUnique({
       where: { id: transportId }
     });
 
@@ -92,13 +92,13 @@ export async function POST(
     }
 
     // Update transport
-    await prisma.transport.update({
+    await db.transport.update({
       where: { id: transportId },
       data: updateData
     });
 
     // Create tracking event
-    await prisma.trackingEvent.create({
+    await db.trackingEvent.create({
       data: {
         transportId,
         status: newStatus,
@@ -131,7 +131,7 @@ export async function POST(
 
 // Helper: Process transport completion (release escrow)
 async function processCompletion(transportId: string) {
-  const transport = await prisma.transport.findUnique({
+  const transport = await db.transport.findUnique({
     where: { id: transportId },
     include: {
       driver: { include: { wallet: true } },
@@ -147,23 +147,23 @@ async function processCompletion(transportId: string) {
   const driverPayout = price - platformCommission;
 
   // Release escrow and pay driver
-  await prisma.$transaction([
+  await db.$transaction([
     // Update shipper's wallet (remove from pending)
-    prisma.wallet.update({
+    db.wallet.update({
       where: { userId: transport.shipperId },
       data: {
         pendingBalance: { decrement: price }
       }
     }),
     // Update driver's wallet
-    prisma.wallet.update({
+    db.wallet.update({
       where: { userId: transport.driverId! },
       data: {
         availableBalance: { increment: driverPayout }
       }
     }),
     // Create payout transaction
-    prisma.transaction.create({
+    db.transaction.create({
       data: {
         walletId: transport.driver.wallet.id,
         type: 'PAYMENT_IN',
@@ -179,7 +179,7 @@ async function processCompletion(transportId: string) {
   ]);
 
   // Update user stats
-  await prisma.user.update({
+  await db.user.update({
     where: { id: transport.driverId! },
     data: {
       totalTransports: { increment: 1 },

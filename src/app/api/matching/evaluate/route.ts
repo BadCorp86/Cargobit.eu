@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { EvaluateCandidateRequest, EvaluateCandidateResponse, RuleCheckResult, ApiErrorResponse } from '@/types/matching';
 
 // Transport type rules configuration
@@ -29,8 +29,13 @@ export async function POST(request: NextRequest) {
     }
 
     // Get transport
-    const transport = await prisma.transport.findUnique({
-      where: { id: body.transportId }
+    const transport = await db.transport.findUnique({
+      where: { id: body.transportId },
+      include: {
+        transportDetail: true,
+        pickupAddress: true,
+        deliveryAddress: true
+      }
     });
 
     if (!transport) {
@@ -42,14 +47,17 @@ export async function POST(request: NextRequest) {
     }
 
     // Get driver with vehicle
-    const driver = await prisma.user.findUnique({
+    const driver = await db.driver.findUnique({
       where: { id: body.candidateId },
       include: {
-        vehicles: body.vehicleId ? { where: { id: body.vehicleId } } : { where: { isActive: true }, take: 1 }
+        user: true,
+        driverVehicles: body.vehicleId 
+          ? { where: { vehicleId: body.vehicleId }, include: { vehicle: true } }
+          : { include: { vehicle: true }, take: 1 }
       }
     });
 
-    if (!driver || !driver.vehicles.length) {
+    if (!driver || !driver.driverVehicles.length) {
       return NextResponse.json<ApiErrorResponse>({
         error: 'NotFoundError',
         message: 'Driver or vehicle not found',
@@ -57,7 +65,7 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    const vehicle = driver.vehicles[0];
+    const vehicle = driver.driverVehicles[0].vehicle;
     const ruleResults: RuleCheckResult[] = [];
     const failedRules: string[] = [];
     const warnings: string[] = [];
@@ -68,11 +76,11 @@ export async function POST(request: NextRequest) {
     const applicableRules = TRANSPORT_TYPE_RULES[transportType] || [];
 
     // Parse requirements
-    const vehicleReqs = transport.vehicleRequirements 
-      ? JSON.parse(transport.vehicleRequirements) 
+    const vehicleReqs = transport.transportDetail?.vehicleRequirements 
+      ? JSON.parse(transport.transportDetail.vehicleRequirements) 
       : {};
-    const driverReqs = transport.driverRequirements 
-      ? JSON.parse(transport.driverRequirements) 
+    const driverReqs = transport.transportDetail?.driverRequirements 
+      ? JSON.parse(transport.transportDetail.driverRequirements) 
       : {};
 
     // ========== APPLY TRANSPORT TYPE RULES ==========
@@ -169,7 +177,7 @@ export async function POST(request: NextRequest) {
 
     // ========== INTERNATIONAL CHECKS ==========
 
-    const isInternational = transport.pickupCountry !== transport.deliveryCountry;
+    const isInternational = transport.pickupAddress.country !== transport.deliveryAddress.country;
     if (isInternational) {
       const result = await checkInternationalRule(driver, transport);
       ruleResults.push(result);
@@ -216,18 +224,20 @@ export async function POST(request: NextRequest) {
 // ========== RULE CHECK FUNCTIONS ==========
 
 function checkDimensionsRule(transport: any, vehicle: any, reqs: any): RuleCheckResult {
-  const cargoDetails = transport.cargoDetails ? JSON.parse(transport.cargoDetails) : {};
+  const cargoDetails = transport.transportDetail?.detailsJson 
+    ? JSON.parse(transport.transportDetail.detailsJson) 
+    : {};
   
   // Check length
-  if (cargoDetails.length_m && vehicle.lengthCm) {
-    if (vehicle.lengthCm / 100 < cargoDetails.length_m) {
+  if (cargoDetails.length_m && vehicle.lengthM) {
+    if (vehicle.lengthM < cargoDetails.length_m) {
       return { ruleName: 'dimensions_check', passed: false, score: 0, message: 'Fahrzeug zu kurz' };
     }
   }
 
   // Check height
-  if (cargoDetails.height_m && vehicle.heightCm) {
-    if (vehicle.heightCm / 100 < cargoDetails.height_m) {
+  if (cargoDetails.height_m && vehicle.heightM) {
+    if (vehicle.heightM < cargoDetails.height_m) {
       return { ruleName: 'dimensions_check', passed: false, score: 0, message: 'Fahrzeug zu niedrig' };
     }
   }
@@ -254,7 +264,7 @@ function checkLiftRule(vehicle: any, reqs: any): RuleCheckResult {
 
 function checkBulkVehicleRule(vehicle: any): RuleCheckResult {
   const bulkTypes = ['KIPPER', 'SILO', 'MULDE'];
-  if (!bulkTypes.includes(vehicle.vehicleType)) {
+  if (!bulkTypes.includes(vehicle.type)) {
     return { ruleName: 'vehicle_type_kipper_silo', passed: false, score: 0, message: 'Kipper oder Silo erforderlich' };
   }
   return { ruleName: 'vehicle_type_kipper_silo', passed: true, score: 100, message: 'Passendes Schüttgut-Fahrzeug' };
@@ -273,7 +283,7 @@ function checkTankRule(vehicle: any, reqs: any): RuleCheckResult {
 }
 
 function checkTemperatureRule(vehicle: any, reqs: any): RuleCheckResult {
-  if (!vehicle.hasCooling) {
+  if (!vehicle.coolingAvailable) {
     return { ruleName: 'temperature_range', passed: false, score: 0, message: 'Kühlung erforderlich' };
   }
   if (reqs.temperatureRange) {
@@ -284,12 +294,12 @@ function checkTemperatureRule(vehicle: any, reqs: any): RuleCheckResult {
 
 function checkADRRule(driver: any, vehicle: any, vReqs: any, dReqs: any): RuleCheckResult {
   // Vehicle ADR
-  if (vReqs.adrRequired && !vehicle.adrCertified) {
+  if (vReqs.adrRequired && !vehicle.adrApproved) {
     return { ruleName: 'adr_certification', passed: false, score: 0, message: 'Fahrzeug nicht ADR-zertifiziert' };
   }
 
   // Driver ADR
-  if (dReqs.adrLicenseRequired && !driver.adrCertified) {
+  if (dReqs.adrLicenseRequired && !driver.adrLicense) {
     return { ruleName: 'adr_certification', passed: false, score: 0, message: 'Fahrer ohne ADR-Bescheinigung' };
   }
 
@@ -315,14 +325,10 @@ function checkTunnelCodesRule(vehicle: any, reqs: any): RuleCheckResult {
     return { ruleName: 'tunnel_codes', passed: true, score: 50, message: 'Keine Tunnel-Informationen' };
   }
 
-  const vehicleCodes = JSON.parse(vehicle.tunnelCodes);
-  // Check if vehicle has compatible tunnel codes
-  // A is most restrictive, E is least
   return { ruleName: 'tunnel_codes', passed: true, score: 100, message: 'Tunnel-Codes kompatibel' };
 }
 
 function checkOversizeRule(vehicle: any, reqs: any): RuleCheckResult {
-  // Check for special permits
   if (reqs.escortVehicleRequired) {
     return { ruleName: 'escort_check', passed: true, score: 100, message: 'Begleitfahrzeug erforderlich - bitte prüfen' };
   }
@@ -330,17 +336,17 @@ function checkOversizeRule(vehicle: any, reqs: any): RuleCheckResult {
 }
 
 function checkLicenseRule(driver: any, reqs: any): RuleCheckResult {
-  if (!driver.driverLicenseClass) {
+  if (!driver.licenseClass) {
     return { ruleName: 'license_check', passed: false, score: 0, message: 'Keine Führerschein-Informationen' };
   }
 
   const requiredClasses = reqs.driverLicenseClass;
-  if (!requiredClasses.includes(driver.driverLicenseClass)) {
+  if (!requiredClasses.includes(driver.licenseClass)) {
     return { ruleName: 'license_check', passed: false, score: 0, message: 'Führerscheinklasse nicht passend' };
   }
 
   // Check expiry
-  if (driver.driverLicenseExpiry && new Date(driver.driverLicenseExpiry) < new Date()) {
+  if (driver.licenseExpiry && new Date(driver.licenseExpiry) < new Date()) {
     return { ruleName: 'license_check', passed: false, score: 0, message: 'Führerschein abgelaufen' };
   }
 
@@ -348,36 +354,36 @@ function checkLicenseRule(driver: any, reqs: any): RuleCheckResult {
 }
 
 function checkRatingRule(driver: any, reqs: any): RuleCheckResult {
-  if (driver.rating < reqs.minRating) {
-    return { ruleName: 'rating_check', passed: false, score: 0, message: `Bewertung zu niedrig (${driver.rating} < ${reqs.minRating})` };
+  if (driver.ratingAvg < reqs.minRating) {
+    return { ruleName: 'rating_check', passed: false, score: 0, message: `Bewertung zu niedrig (${driver.ratingAvg} < ${reqs.minRating})` };
   }
-  return { ruleName: 'rating_check', passed: true, score: 100, message: `Bewertung: ${driver.rating} Sterne` };
+  return { ruleName: 'rating_check', passed: true, score: 100, message: `Bewertung: ${driver.ratingAvg} Sterne` };
 }
 
 function checkExperienceRule(driver: any, reqs: any): RuleCheckResult {
   if (reqs.minCompletedTransports && driver.completedTransports < reqs.minCompletedTransports) {
     return { ruleName: 'experience_check', passed: false, score: 0, message: 'Zu wenig Erfahrung' };
   }
-  if (reqs.internationalExperience && !driver.internationalAllowed) {
+  if (reqs.internationalExperience && !driver.internationalExperience) {
     return { ruleName: 'experience_check', passed: false, score: 0, message: 'Keine internationale Erfahrung' };
   }
   return { ruleName: 'experience_check', passed: true, score: 100, message: `Erfahrung: ${driver.completedTransports} Transporte` };
 }
 
 async function checkInternationalRule(driver: any, transport: any): Promise<RuleCheckResult> {
-  if (!driver.internationalAllowed) {
+  if (!driver.internationalExperience) {
     return { ruleName: 'international_check', passed: false, score: 0, message: 'Keine internationale Genehmigung' };
   }
 
   // Check country permissions
-  const permissions = await prisma.driverPermission.findMany({
-    where: { userId: driver.id, isAllowed: true }
+  const permissions = await db.driverPermission.findMany({
+    where: { driverId: driver.id, isAllowed: true }
   });
 
   const allowedCountries = permissions.map(p => p.countryCode);
 
-  if (!allowedCountries.includes(transport.deliveryCountry)) {
-    return { ruleName: 'international_check', passed: false, score: 0, message: `Keine Genehmigung für ${transport.deliveryCountry}` };
+  if (!allowedCountries.includes(transport.deliveryAddress.country)) {
+    return { ruleName: 'international_check', passed: false, score: 0, message: `Keine Genehmigung für ${transport.deliveryAddress.country}` };
   }
 
   return { ruleName: 'international_check', passed: true, score: 100, message: 'International erlaubt' };
@@ -405,7 +411,7 @@ function checkDocumentsRule(driver: any): RuleCheckResult {
   }
 
   // Check ADR expiry
-  if (driver.adrCertified && driver.adrExpiry) {
+  if (driver.adrLicense && driver.adrExpiry) {
     const adrExpiryDate = new Date(driver.adrExpiry);
     if (adrExpiryDate < new Date()) {
       return { ruleName: 'documents_check', passed: false, score: 50, message: 'ADR-Bescheinigung abgelaufen' };

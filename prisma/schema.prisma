@@ -1,5 +1,6 @@
 // CargoBit Platform - Prisma Schema
-// European Logistics Marketplace
+// European Logistics Marketplace - Full Relational Model
+// Version: 2.0
 
 generator client {
   provider = "prisma-client-js"
@@ -17,25 +18,84 @@ datasource db {
 enum UserRole {
   ADMIN
   SUPPORT
-  SHIPPER_PRIVATE
   SHIPPER_COMPANY
-  DRIVER_SELF_EMPLOYED
+  SHIPPER_PRIVATE
   DISPATCHER
+  DRIVER_SELF_EMPLOYED
   MARKETER
 }
 
 enum UserStatus {
-  PENDING
   ACTIVE
+  PENDING
+  BLOCKED
   SUSPENDED
-  BANNED
+}
+
+enum CompanyType {
+  SHIPPER
+  CARRIER
+  BOTH
+}
+
+enum CompanyStatus {
+  ACTIVE
+  PENDING
+  SUSPENDED
+  INACTIVE
+}
+
+enum VerificationType {
+  KYC
+  KYB
+  DRIVER_LICENSE
+  ADR
+  VEHICLE
 }
 
 enum VerificationStatus {
-  UNVERIFIED
   PENDING
-  VERIFIED
+  APPROVED
   REJECTED
+}
+
+enum SecurityFlagType {
+  FRAUD_SUSPECTED
+  PAYMENT_ISSUE
+  DOCUMENT_ISSUE
+  SUSPICIOUS_ACTIVITY
+}
+
+enum SecurityFlagSeverity {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+enum VehicleType {
+  SPRINTER
+  KOEFFER
+  PLANE
+  CURTAINSIDER
+  KIPPER
+  SILO
+  MULDE
+  TANKAUFLIEGER
+  AUTOTRANSPORTER
+  TIEFLADER
+  TIEFBETT
+  CONTAINERCHASSIS
+  REEFER
+  IBC_TRANSPORTER
+  LANGAUFLIEGER
+  JUMBO
+}
+
+enum VehicleStatus {
+  ACTIVE
+  MAINTENANCE
+  INACTIVE
 }
 
 enum TransportType {
@@ -51,16 +111,29 @@ enum TransportType {
 }
 
 enum TransportStatus {
-  DRAFT
-  PENDING
+  CREATED
   PUBLISHED
-  OFFERS_RECEIVED
-  CONFIRMED
+  ASSIGNED
   IN_TRANSIT
-  DELIVERED
+  PICKUP_DONE
+  DELIVERY_DONE
   COMPLETED
   CANCELLED
-  DISPUTED
+}
+
+enum MatchingSessionStatus {
+  STARTED
+  RUNNING
+  STOPPED
+  COMPLETED
+}
+
+enum MatchingCandidateStatus {
+  PENDING
+  NOTIFIED
+  ACCEPTED
+  REJECTED
+  EXPIRED
 }
 
 enum OfferStatus {
@@ -68,899 +141,1040 @@ enum OfferStatus {
   ACCEPTED
   REJECTED
   WITHDRAWN
-  EXPIRED
 }
 
-enum VehicleType {
-  PLANE
-  KOEFFER
-  CURTAINSIDER
-  SPRINTER
-  KIPPER
-  SILO
-  MULDE
-  TANKAUFLIEGER
-  IBC_TRANSPORTER
-  LANGAUFLIEGER
-  JUMBO
-  TIEFLADER
-  AUTOTRANSPORTER
-  CONTAINERCHASSIS
-  KUEHLFAHRZEUG
+enum WalletStatus {
+  ACTIVE
+  FROZEN
+  INACTIVE
 }
 
 enum TransactionType {
   DEPOSIT
-  WITHDRAWAL
+  PAYOUT
+  FEE
+  COMMISSION
   PAYMENT_IN
   PAYMENT_OUT
-  COMMISSION
-  FEE
   REFUND
 }
 
-enum TransactionStatus {
-  PENDING
-  PROCESSING
-  COMPLETED
-  FAILED
-  CANCELLED
-}
-
-enum PayoutSchedule {
-  WEEKLY
-  BIWEEKLY
-  MONTHLY
-}
-
-enum DocumentType {
-  CMR
-  DELIVERY_NOTE
-  INVOICE
-  POD
-  CUSTOMS
-  INSURANCE
-  PERMIT
-  OTHER
-}
-
-enum SubscriptionPlan {
+enum PlanName {
   FREE
   STARTER
   PROFESSIONAL
   ENTERPRISE
 }
 
+enum CampaignStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+enum TicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  STATUS_CHANGE
+  LOGIN
+  LOGOUT
+  PAYOUT
+  FRAUD_ALERT
+}
+
 // ============================================
-// USER MANAGEMENT
+// 1. KERNOBJEKTE: USERS, ROLES, COMPANIES
 // ============================================
+
+model Role {
+  id          String      @id @default(cuid())
+  name        UserRole    @unique
+  description String?
+  createdAt   DateTime    @default(now())
+  
+  userRoles   UserRoleRelation[]
+  
+  @@index([name])
+}
+
+model UserRoleRelation {
+  userId    String
+  roleId    String
+  createdAt DateTime @default(now())
+  
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role      @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  
+  @@id([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
 
 model User {
-  id                    String              @id @default(cuid())
-  email                 String              @unique
-  passwordHash          String
-  role                  UserRole            @default(SHIPPER_PRIVATE)
-  status                UserStatus          @default(PENDING)
-  
-  // Profile
-  firstName             String?
-  lastName              String?
-  phone                 String?
-  avatar                String?
-  language              String              @default("de")
-  timezone              String              @default("Europe/Berlin")
-  
-  // Company fields (for SHIPPER_COMPANY, DISPATCHER)
-  companyName           String?
-  companyVatId         String?
-  companyRegistrationNumber String?
-  companyAddress        String?
-  companyCity           String?
-  companyPostalCode     String?
-  companyCountry        String?
-  
-  // Verification
-  emailVerified         Boolean             @default(false)
-  emailVerifiedAt       DateTime?
-  identityVerified      VerificationStatus  @default(UNVERIFIED)
-  identityVerifiedAt    DateTime?
-  businessVerified      VerificationStatus  @default(UNVERIFIED)
-  businessVerifiedAt    DateTime?
-  
-  // Subscription
-  subscriptionPlan      SubscriptionPlan    @default(FREE)
-  subscriptionStart     DateTime?
-  subscriptionEnd       DateTime?
-  
-  // Stats
-  rating                Float               @default(0)
-  totalTransports       Int                 @default(0)
-  completedTransports   Int                 @default(0)
-  cancelledTransports   Int                 @default(0)
-  
-  // === INTERNATIONAL FIELDS ===
-  // Driver License
-  driverLicenseClass    String?             // C, CE, C1, C1E, etc.
-  driverLicenseExpiry   DateTime?
-  driverCardNumber      String?
-  driverCardExpiry      DateTime?
-  
-  // ADR Certification
-  adrCertified          Boolean             @default(false)
-  adrClasses            String?             // JSON array: ["1", "3", "8"]
-  adrExpiry             DateTime?
-  
-  // International Permissions
-  internationalAllowed  Boolean             @default(false)
-  allowedCountries      String?             // JSON array: ["DE", "AT", "PL", "CZ"]
-  visaCountries         String?             // JSON array of countries requiring visa
-  
-  // Languages
-  spokenLanguages       String?             // JSON array: ["de", "en", "pl"]
-  
-  // Experience
-  yearsExperience       Int?
-  vehicleExperience     String?             // JSON array of vehicle types
-  countryExperience     String?             // JSON array of countries with experience
-  
-  // Damage History
-  damageCount           Int                 @default(0)
-  lastDamageAt          DateTime?
-  
-  // Current Status (for drivers)
-  isAvailable           Boolean             @default(true)
-  currentLocation       String?             // JSON: {lat, lng, timestamp, country}
-  currentRoute          String?             // Current route ID if on a job
+  id              String    @id @default(cuid())
+  email           String    @unique
+  passwordHash    String
+  firstName       String?
+  lastName        String?
+  phone           String?
+  language        String    @default("de")
+  status          UserStatus @default(PENDING)
   
   // Timestamps
-  lastLoginAt           DateTime?
-  createdAt             DateTime            @default(now())
-  updatedAt             DateTime            @updatedAt
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
   
   // Relations
-  wallet                Wallet?
-  vehicles              Vehicle[]
+  roles           UserRoleRelation[]
+  companyUsers    CompanyUser[]
+  driver          Driver?
+  verifications   Verification[]
+  securityFlags   SecurityFlag[]
+  addresses       Address[]
+  wallet          Wallet?
+  
+  // Shipper relations
   transportsAsShipper   Transport[]         @relation("ShipperTransports")
-  transportsAsDriver    Transport[]         @relation("DriverTransports")
-  offers                Offer[]
-  documents             Document[]
-  verifications         Verification[]
-  notifications         Notification[]
-  addresses             Address[]
-  reviews               Review[]            @relation("ReviewAuthor")
-  receivedReviews       Review[]            @relation("ReviewReceiver")
-  supportTickets        SupportTicket[]
-  marketingCampaigns    MarketingCampaign[]
-  auditLogs             AuditLog[]
-  driverPermissions     DriverPermission[]
-  matchingResults       MatchingResult[]
+  
+  // Notifications & Support
+  notifications   Notification[]
+  supportTickets SupportTicket[]
+  auditLogs       AuditLog[]
+  
+  // Marketing (for MARKETER role)
+  campaigns       Campaign[]
   
   @@index([email])
-  @@index([role])
   @@index([status])
-  @@index([isAvailable])
 }
+
+model Company {
+  id                  String        @id @default(cuid())
+  name                String
+  type                CompanyType   @default(SHIPPER)
+  vatNumber           String?       @unique
+  registrationNumber  String?
+  country             String
+  status              CompanyStatus @default(PENDING)
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  // Relations
+  companyUsers        CompanyUser[]
+  vehicles            Vehicle[]
+  drivers             Driver[]
+  addresses           Address[]
+  plans               CompanyPlan[]
+  campaigns           Campaign[]
+  wallets             Wallet[]
+  
+  @@index([name])
+  @@index([country])
+}
+
+model CompanyUser {
+  companyId     String
+  userId        String
+  roleInCompany String    @default("member") // owner, admin, member
+  createdAt     DateTime  @default(now())
+  
+  company       Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@id([companyId, userId])
+  @@index([companyId])
+  @@index([userId])
+}
+
+// ============================================
+// 2. VERIFIKATION, KYC/KYB, SICHERHEIT
+// ============================================
 
 model Verification {
-  id                String              @id @default(cuid())
-  userId            String
-  type              String              // IDENTITY, BUSINESS, DRIVER_LICENSE, ADR, etc.
-  status            VerificationStatus  @default(PENDING)
-  documentUrl       String?
-  documentType      String?
-  rejectionReason   String?
-  reviewedAt        DateTime?
-  reviewedBy        String?
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt()
-  
-  user              User                @relation(fields: [userId], references: [id])
-  
-  @@index([userId])
-  @@index([type])
-}
-
-model Address {
-  id              String    @id @default(cuid())
+  id              String            @id @default(cuid())
   userId          String
-  label           String?   // "Home", "Office", "Warehouse"
-  contactName     String?
-  contactPhone    String?
-  street          String
-  streetNumber    String?
-  postalCode      String
-  city            String
-  state           String?
-  country         String
-  latitude        Float?
-  longitude       Float?
-  isDefault       Boolean   @default(false)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
+  type            VerificationType
+  status          VerificationStatus @default(PENDING)
+  documentUrl     String?
+  documentType    String?
+  rejectionReason String?
   
-  user            User      @relation(fields: [userId], references: [id])
+  reviewedAt      DateTime?
+  reviewedBy      String?
+  
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   
   @@index([userId])
-}
-
-// ============================================
-// WALLET SYSTEM
-// ============================================
-
-model Wallet {
-  id                String            @id @default(cuid())
-  userId            String            @unique
-  balance           Float             @default(0)
-  availableBalance  Float             @default(0)
-  pendingBalance    Float             @default(0)
-  currency          String            @default("EUR")
-  
-  // Payout settings
-  payoutIban        String?
-  payoutBic         String?
-  payoutAccountName String?
-  payoutVerified    Boolean           @default(false)
-  payoutSchedule    PayoutSchedule    @default(WEEKLY)
-  lastPayoutAt      DateTime?
-  
-  // Security
-  totalDeposited    Float             @default(0)
-  totalWithdrawn    Float             @default(0)
-  
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt()
-  
-  user              User              @relation(fields: [userId], references: [id])
-  transactions      Transaction[]
-  
-  @@index([userId])
-}
-
-model Transaction {
-  id              String              @id @default(cuid())
-  walletId        String
-  type            TransactionType
-  status          TransactionStatus   @default(PENDING)
-  
-  amount          Float
-  fee             Float               @default(0)
-  netAmount       Float
-  
-  description     String?
-  reference       String?             // External payment reference
-  transportId     String?             // Related transport
-  
-  // Payment details
-  paymentMethod   String?
-  iban            String?
-  bic             String?
-  
-  processedAt     DateTime?
-  failedAt        DateTime?
-  failureReason   String?
-  
-  createdAt       DateTime            @default(now())
-  updatedAt       DateTime            @updatedAt()
-  
-  wallet          Wallet              @relation(fields: [walletId], references: [id])
-  
-  @@index([walletId])
   @@index([type])
   @@index([status])
 }
 
+model SecurityFlag {
+  id          String                @id @default(cuid())
+  userId      String
+  type        SecurityFlagType
+  severity    SecurityFlagSeverity  @default(MEDIUM)
+  active      Boolean               @default(true)
+  notes       String?
+  
+  createdAt   DateTime              @default(now())
+  resolvedAt  DateTime?
+  
+  user        User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([type])
+  @@index([active])
+}
+
 // ============================================
-// VEHICLE MANAGEMENT
+// 3. FAHRZEUGE, FAHRER, FLOTTEN
 // ============================================
 
 model Vehicle {
-  id                String        @id @default(cuid())
-  userId            String
+  id              String        @id @default(cuid())
+  companyId       String
   
   // Vehicle details
-  registrationNumber String       @unique
-  vehicleType        VehicleType
-  brand              String?
-  model              String?
-  year               Int?
+  type            VehicleType
+  plateNumber     String        @unique
+  brand           String?
+  model           String?
+  year            Int?
   
   // Dimensions & Capacity
-  lengthCm           Float?
-  widthCm            Float?
-  heightCm           Float?
-  maxWeightKg        Float?
-  volumeM3           Float?
-  palletSpaces       Int?
+  lengthM         Float?
+  widthM          Float?
+  heightM         Float?
+  maxPayloadKg    Float?
+  volumeM3        Float?
+  palletSpaces    Int?
   
   // Features
-  hasCooling         Boolean       @default(false)
-  hasLift            Boolean       @default(false)
-  hasCrane           Boolean       @default(false)
-  hasTank            Boolean       @default(false)
-  tankCapacityL      Float?
+  adrApproved     Boolean       @default(false)
+  adrClasses      String?       // JSON array of ADR classes
+  coolingAvailable Boolean      @default(false)
+  coolingMinTemp  Float?        // Minimum temperature (°C)
+  coolingMaxTemp  Float?        // Maximum temperature (°C)
+  hasLift         Boolean       @default(false)
+  hasCrane        Boolean       @default(false)
+  hasTank         Boolean       @default(false)
+  tankCapacityL   Float?
   
-  // Certifications
-  adrCertified       Boolean       @default(false)
-  adrClasses         String?       // JSON array of ADR classes
-  tunnelCodes        String?       // JSON array
-  
-  // Status
-  isActive           Boolean       @default(true)
-  currentLocation    String?       // JSON: {lat, lng}
-  
-  createdAt          DateTime      @default(now())
-  updatedAt          DateTime      @updatedAt()
-  
-  user               User          @relation(fields: [userId], references: [id])
-  
-  @@index([userId])
-  @@index([vehicleType])
-}
-
-// ============================================
-// TRANSPORT MANAGEMENT
-// ============================================
-
-model Transport {
-  id                String            @id @default(cuid())
-  
-  // Participants
-  shipperId         String
-  driverId          String?
-  
-  // Transport Type
-  transportType     TransportType
+  // Tunnel codes for ADR
+  tunnelCodes     String?       // JSON array
   
   // Status
-  status            TransportStatus   @default(DRAFT)
+  status          VehicleStatus @default(ACTIVE)
+  currentLocation String?       // JSON: {lat, lng, timestamp, country}
   
-  // Pickup
-  pickupAddress     String
-  pickupCity        String
-  pickupPostalCode  String
-  pickupCountry     String
-  pickupDate        DateTime
-  pickupTimeFrom    String?
-  pickupTimeTo      String?
-  pickupContact     String?
-  pickupPhone       String?
-  pickupLatitude    Float?
-  pickupLongitude   Float?
-  
-  // Delivery
-  deliveryAddress   String
-  deliveryCity      String
-  deliveryPostalCode String
-  deliveryCountry   String
-  deliveryDate      DateTime?
-  deliveryTimeFrom  String?
-  deliveryTimeTo    String?
-  deliveryContact   String?
-  deliveryPhone     String?
-  deliveryLatitude  Float?
-  deliveryLongitude Float?
-  
-  // Distance & Duration
-  distanceKm        Float?
-  estimatedDuration String?
-  
-  // Cargo Details (JSON based on transport type)
-  cargoDetails      String            // JSON with type-specific fields
-  
-  // General Cargo Info
-  description       String?
-  weightKg          Float?
-  volumeM3          Float?
-  isHazmat          Boolean           @default(false)
-  isFragile         Boolean           @default(false)
-  
-  // Pricing
-  shipperBudget     Float?
-  agreedPrice       Float?
-  currency          String            @default("EUR")
-  
-  // Requirements
-  vehicleRequirements String?         // JSON with vehicle requirements
-  driverRequirements  String?         // JSON with driver requirements
-  internationalRequirements String?   // JSON with international requirements
-  specialRequirements String?
-  
-  // International Transport
-  isInternational     Boolean           @default(false)
-  transitCountries    String?           // JSON array of transit countries
-  customsRequired     Boolean           @default(false)
-  customsDocuments    String?           // JSON array of required customs docs
-  
-  // Route Information
-  calculatedRoute     String?           // JSON: route details
-  tollCosts          Float?            // Calculated toll costs
-  tunnelRestrictions  String?           // JSON: tunnel code restrictions
-  
-  // Tracking
-  currentStatus     String?
-  currentLocation   String?           // JSON: {lat, lng, timestamp}
-  
-  // Timestamps
-  publishedAt       DateTime?
-  acceptedAt        DateTime?
-  pickedUpAt        DateTime?
-  deliveredAt       DateTime?
-  completedAt       DateTime?
-  cancelledAt       DateTime?
-  cancellationReason String?
-  
-  createdAt         DateTime          @default(now())
-  updatedAt         DateTime          @updatedAt()
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   
   // Relations
-  shipper           User              @relation("ShipperTransports", fields: [shipperId], references: [id])
-  driver            User?             @relation("DriverTransports", fields: [driverId], references: [id])
-  offers            Offer[]
-  documents         Document[]
-  trackingEvents    TrackingEvent[]
+  company         Company       @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  driverVehicles  DriverVehicle[]
+  offers          Offer[]
+  assignments     Assignment[]
+  matchingCandidates MatchingCandidate[]
   
-  @@index([shipperId])
-  @@index([driverId])
+  @@index([companyId])
+  @@index([type])
   @@index([status])
-  @@index([transportType])
-  @@index([pickupDate])
 }
 
-model TrackingEvent {
-  id              String    @id @default(cuid())
-  transportId     String
-  status          String
-  location        String?   // JSON: {lat, lng}
-  note            String?
-  photoUrl        String?
-  createdBy       String?   // User ID
-  createdAt       DateTime  @default(now())
+model Driver {
+  id                      String    @id @default(cuid())
+  userId                  String    @unique
+  companyId               String?
   
-  transport       Transport @relation(fields: [transportId], references: [id])
+  // License info
+  licenseNumber           String?
+  licenseClass            String?   // C, CE, C1, C1E, etc.
+  licenseExpiry           DateTime?
+  
+  // Driver card
+  driverCardNumber        String?
+  driverCardExpiry        DateTime?
+  
+  // ADR
+  adrLicense              Boolean   @default(false)
+  adrClasses              String?   // JSON array
+  adrExpiry               DateTime?
+  
+  // International
+  internationalExperience Boolean   @default(false)
+  
+  // Stats
+  ratingAvg               Float     @default(0)
+  ratingCount             Int       @default(0)
+  completedTransports     Int       @default(0)
+  cancelledTransports     Int       @default(0)
+  damageCount             Int       @default(0)
+  lastDamageAt            DateTime?
+  
+  // Availability
+  isAvailable             Boolean   @default(true)
+  currentLocation         String?   // JSON: {lat, lng, timestamp, country}
+  
+  // Languages
+  spokenLanguages         String?   // JSON array: ["de", "en", "pl"]
+  
+  // Experience
+  yearsExperience         Int?
+  vehicleExperience       String?   // JSON array of vehicle types
+  countryExperience       String?   // JSON array of countries
+  
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+  
+  // Relations
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company                 Company?  @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  driverVehicles          DriverVehicle[]
+  driverPermissions       DriverPermission[]
+  offers                  Offer[]
+  assignments             Assignment[]
+  matchingCandidates      MatchingCandidate[]
+  trackingPoints          TrackingPoint[]
+  
+  @@index([userId])
+  @@index([companyId])
+  @@index([isAvailable])
+}
+
+model DriverVehicle {
+  driverId    String
+  vehicleId   String
+  isPrimary   Boolean   @default(false)
+  assignedAt  DateTime  @default(now())
+  
+  driver      Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  vehicle     Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  
+  @@id([driverId, vehicleId])
+  @@index([driverId])
+  @@index([vehicleId])
+}
+
+// ============================================
+// 4. TRANSPORTE & TRANSPORTDETAILS
+// ============================================
+
+model Address {
+  id          String    @id @default(cuid())
+  userId      String?
+  companyId   String?
+  
+  label       String?   // "Home", "Office", "Warehouse"
+  contactName String?
+  contactPhone String?
+  street      String
+  streetNumber String?
+  postalCode  String
+  city        String
+  state       String?
+  country     String
+  latitude    Float?
+  longitude   Float?
+  isDefault   Boolean   @default(false)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  // Relations
+  user        User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  company     Company?  @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  
+  // Transport relations
+  pickupForTransports   Transport[]  @relation("PickupAddress")
+  deliveryForTransports Transport[]  @relation("DeliveryAddress")
+  
+  @@index([userId])
+  @@index([companyId])
+  @@index([country])
+}
+
+model Transport {
+  id                    String          @id @default(cuid())
+  
+  // Participants
+  shipperUserId         String
+  shipperCompanyId      String?
+  
+  // Type & Status
+  transportType         TransportType
+  status                TransportStatus @default(CREATED)
+  
+  // Addresses
+  pickupAddressId       String
+  deliveryAddressId     String
+  
+  // Schedule
+  pickupDatetime        DateTime
+  pickupTimeFrom        String?
+  pickupTimeTo          String?
+  deliveryDatetime      DateTime?
+  deliveryTimeFrom      String?
+  deliveryTimeTo        String?
+  
+  // Description
+  description           String?
+  
+  // Distance & Duration
+  distanceKm            Float?
+  estimatedDuration     Int?      // minutes
+  
+  // Pricing
+  shipperBudget         Float?
+  agreedPrice           Float?
+  currency              String          @default("EUR")
+  
+  // International
+  isInternational       Boolean         @default(false)
+  transitCountries      String?         // JSON array
+  customsRequired       Boolean         @default(false)
+  customsDocuments      String?         // JSON array
+  
+  // Route
+  calculatedRoute       String?         // JSON: route details
+  tollCosts             Float?
+  
+  // Timestamps
+  publishedAt           DateTime?
+  assignedAt            DateTime?
+  pickedUpAt            DateTime?
+  deliveredAt           DateTime?
+  completedAt           DateTime?
+  cancelledAt           DateTime?
+  cancellationReason    String?
+  
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
+  
+  // Relations
+  shipperUser           User            @relation("ShipperTransports", fields: [shipperUserId], references: [id])
+  pickupAddress         Address         @relation("PickupAddress", fields: [pickupAddressId], references: [id])
+  deliveryAddress       Address         @relation("DeliveryAddress", fields: [deliveryAddressId], references: [id])
+  
+  transportDetail       TransportDetail?
+  matchingSessions      MatchingSession[]
+  offers                Offer[]
+  assignment            Assignment?
+  statusHistory         TransportStatusHistory[]
+  trackingPoints        TrackingPoint[]
+  documents             Document[]
+  commissions           Commission[]
+  
+  @@index([shipperUserId])
+  @@index([status])
+  @@index([transportType])
+  @@index([pickupDatetime])
+}
+
+model TransportDetail {
+  id            String    @id @default(cuid())
+  transportId   String    @unique
+  
+  // JSON details based on transport type
+  detailsJson   String    // JSON with type-specific fields
+  
+  // Requirements
+  vehicleRequirements    String?   // JSON
+  driverRequirements     String?   // JSON
+  internationalRequirements String? // JSON
+  specialRequirements    String?
+  
+  // Cargo info
+  weightKg      Float?
+  volumeM3      Float?
+  isHazmat      Boolean   @default(false)
+  isFragile     Boolean   @default(false)
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  transport     Transport @relation(fields: [transportId], references: [id], onDelete: Cascade)
   
   @@index([transportId])
 }
 
+// ============================================
+// 5. MATCHING, ANGEBOTE, ZUWEISUNG
+// ============================================
+
+model MatchingSession {
+  id            String              @id @default(cuid())
+  transportId   String
+  status        MatchingSessionStatus @default(STARTED)
+  autoAssign    Boolean             @default(false)
+  
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
+  completedAt   DateTime?
+  
+  transport     Transport           @relation(fields: [transportId], references: [id], onDelete: Cascade)
+  candidates    MatchingCandidate[]
+  
+  @@index([transportId])
+  @@index([status])
+}
+
+model MatchingCandidate {
+  id                    String                @id @default(cuid())
+  matchingSessionId     String
+  driverId              String
+  vehicleId             String
+  
+  // Filter results
+  hardFilterPassed      Boolean               @default(false)
+  softRulesPassed       Boolean               @default(false)
+  fraudSafe             Boolean               @default(true)
+  internationalAllowed  Boolean               @default(true)
+  
+  // Score
+  score                 Float                 @default(0)
+  scoreBreakdown        String?               // JSON with detailed scores
+  
+  // Status
+  status                MatchingCandidateStatus @default(PENDING)
+  notifiedAt            DateTime?
+  expiresAt             DateTime?
+  
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  
+  matchingSession       MatchingSession       @relation(fields: [matchingSessionId], references: [id], onDelete: Cascade)
+  driver                Driver                @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  vehicle               Vehicle               @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  
+  @@unique([matchingSessionId, driverId, vehicleId])
+  @@index([matchingSessionId])
+  @@index([driverId])
+  @@index([score])
+  @@index([status])
+}
+
 model Offer {
-  id              String        @id @default(cuid())
+  id              String      @id @default(cuid())
   transportId     String
   driverId        String
+  vehicleId       String
   
   price           Float
-  currency        String        @default("EUR")
+  currency        String      @default("EUR")
   message         String?
-  estimatedDuration String?
+  estimatedDuration Int?
   
-  status          OfferStatus   @default(PENDING)
+  status          OfferStatus @default(PENDING)
   
   validUntil      DateTime?
   acceptedAt      DateTime?
   rejectedAt      DateTime?
   rejectionReason String?
   
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt()
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
   
-  transport       Transport     @relation(fields: [transportId], references: [id])
-  driver          User          @relation(fields: [driverId], references: [id])
+  transport       Transport   @relation(fields: [transportId], references: [id], onDelete: Cascade)
+  driver          Driver      @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  vehicle         Vehicle     @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   
+  @@unique([transportId, driverId])
   @@index([transportId])
   @@index([driverId])
   @@index([status])
 }
 
-model Document {
-  id              String        @id @default(cuid())
-  transportId     String?
-  userId          String
+model Assignment {
+  id            String    @id @default(cuid())
+  transportId   String    @unique
+  driverId      String
+  vehicleId     String
+  assignedBy    String
   
-  type            DocumentType
-  name            String
-  description     String?
-  fileUrl         String
-  fileSize        Int?
-  mimeType        String?
+  assignedAt    DateTime  @default(now())
   
-  isGenerated     Boolean       @default(false)
-  isSigned        Boolean       @default(false)
-  signedAt        DateTime?
-  signedByUrl     String?
-  
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt()
-  
-  transport       Transport?    @relation(fields: [transportId], references: [id])
-  user            User          @relation(fields: [userId], references: [id])
+  transport     Transport @relation(fields: [transportId], references: [id], onDelete: Cascade)
+  driver        Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  vehicle       Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
   
   @@index([transportId])
-  @@index([userId])
+  @@index([driverId])
+}
+
+// ============================================
+// 6. STATUS, TRACKING, DOKUMENTE
+// ============================================
+
+model TransportStatusHistory {
+  id            String    @id @default(cuid())
+  transportId   String
+  status        TransportStatus
+  changedBy     String?
+  note          String?
+  
+  changedAt     DateTime  @default(now())
+  
+  transport     Transport @relation(fields: [transportId], references: [id], onDelete: Cascade)
+  
+  @@index([transportId])
+  @@index([changedAt])
+}
+
+model TrackingPoint {
+  id            String    @id @default(cuid())
+  transportId   String
+  driverId      String
+  
+  latitude      Float
+  longitude     Float
+  timestamp     DateTime  @default(now())
+  
+  speed         Float?    // km/h
+  heading       Float?    // degrees
+  
+  transport     Transport @relation(fields: [transportId], references: [id], onDelete: Cascade)
+  driver        Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  
+  @@index([transportId])
+  @@index([driverId])
+  @@index([timestamp])
+}
+
+model Document {
+  id            String    @id @default(cuid())
+  transportId   String?
+  
+  type          String    // cmr, lieferschein, rechnung, foto_pickup, foto_delivery, pod
+  name          String
+  description   String?
+  fileUrl       String
+  fileSize      Int?
+  mimeType      String?
+  
+  isGenerated   Boolean   @default(false)
+  isSigned      Boolean   @default(false)
+  signedAt      DateTime?
+  signedByUrl   String?
+  
+  createdBy     String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  transport     Transport? @relation(fields: [transportId], references: [id], onDelete: SetNull)
+  
+  @@index([transportId])
   @@index([type])
 }
 
 // ============================================
-// REVIEWS & RATINGS
+// 7. WALLET, ZAHLUNGEN, GEBÜHREN
 // ============================================
 
-model Review {
-  id              String    @id @default(cuid())
-  transportId     String
-  authorId        String
-  receiverId      String
+model Wallet {
+  id              String        @id @default(cuid())
+  ownerUserId     String?       @unique
+  ownerCompanyId  String?       @unique
   
-  rating          Int       // 1-5
-  comment         String?
+  balance         Float         @default(0)
+  currency        String        @default("EUR")
+  status          WalletStatus  @default(ACTIVE)
   
-  response        String?
-  respondedAt     DateTime?
+  // Stats
+  totalDeposited  Float         @default(0)
+  totalWithdrawn  Float         @default(0)
   
-  isVisible       Boolean   @default(true)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
   
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
+  // Relations
+  user            User?         @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  company         Company?      @relation(fields: [ownerCompanyId], references: [id], onDelete: Cascade)
+  transactions    WalletTransaction[]
+  payoutMethods   PayoutMethod[]
   
-  author          User      @relation("ReviewAuthor", fields: [authorId], references: [id])
-  receiver        User      @relation("ReviewReceiver", fields: [receiverId], references: [id])
+  @@index([ownerUserId])
+  @@index([ownerCompanyId])
+  @@index([status])
+}
+
+model WalletTransaction {
+  id                  String          @id @default(cuid())
+  walletId            String
+  type                TransactionType
+  amount              Float
+  currency            String          @default("EUR")
+  
+  relatedTransportId  String?
+  description         String?
+  reference           String?         // External reference
+  
+  processedAt         DateTime?
+  failedAt            DateTime?
+  failureReason       String?
+  
+  createdAt           DateTime        @default(now())
+  
+  wallet              Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  
+  @@index([walletId])
+  @@index([type])
+  @@index([relatedTransportId])
+}
+
+model PayoutMethod {
+  id          String    @id @default(cuid())
+  walletId    String
+  
+  iban        String
+  holderName  String
+  bic         String?
+  verified    Boolean   @default(false)
+  
+  isDefault   Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  wallet      Wallet    @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  
+  @@index([walletId])
+}
+
+model Commission {
+  id                  String    @id @default(cuid())
+  transportId         String
+  
+  plan                PlanName  @default(FREE)
+  commissionPercent   Float
+  commissionAmount    Float
+  walletFeePercent    Float
+  walletFeeAmount     Float
+  
+  createdAt           DateTime  @default(now())
+  
+  transport           Transport @relation(fields: [transportId], references: [id], onDelete: Cascade)
   
   @@index([transportId])
-  @@index([authorId])
-  @@index([receiverId])
 }
 
 // ============================================
-// NOTIFICATIONS
+// 8. PRICING, PLÄNE, MARKETING
 // ============================================
 
-model Notification {
-  id              String    @id @default(cuid())
+model Plan {
+  id                  String    @id @default(cuid())
+  name                PlanName  @unique
+  
+  monthlyFee          Float     @default(0)
+  yearlyFee           Float?
+  currency            String    @default("EUR")
+  
+  // Commission rates
+  commissionPercent   Float     @default(14)
+  walletFeePercent    Float     @default(3.5)
+  
+  // Features (JSON)
+  featuresJson        String?
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  
+  companyPlans        CompanyPlan[]
+  
+  @@index([name])
+}
+
+model CompanyPlan {
+  id          String    @id @default(cuid())
+  companyId   String
+  planId      String
+  
+  validFrom   DateTime  @default(now())
+  validTo     DateTime?
+  
+  createdAt   DateTime  @default(now())
+  
+  company     Company   @relation(fields: [companyId], references: [id], onDelete: Cascade)
+  plan        Plan      @relation(fields: [planId], references: [id], onDelete: Cascade)
+  
+  @@index([companyId])
+  @@index([planId])
+}
+
+model Campaign {
+  id              String          @id @default(cuid())
+  companyId       String?
   userId          String
   
-  type            String    // NEW_OFFER, TRANSPORT_UPDATE, PAYMENT, etc.
-  title           String
-  message         String
-  data            String?   // JSON with additional data
+  name            String
+  description     String?
   
-  isRead          Boolean   @default(false)
-  readAt          DateTime?
+  position        String?         // banner_top, sidebar, listing_highlight
+  bannerUrl       String?
+  targetUrl       String?
   
-  emailSent       Boolean   @default(false)
-  emailSentAt     DateTime?
+  budget          Float           @default(0)
+  spentAmount     Float           @default(0)
+  currency        String          @default("EUR")
   
-  createdAt       DateTime  @default(now())
+  status          CampaignStatus  @default(DRAFT)
   
-  user            User      @relation(fields: [userId], references: [id])
+  startDate       DateTime?
+  endDate         DateTime?
   
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  
+  company         Company?        @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  stats           CampaignStats[]
+  
+  @@index([companyId])
   @@index([userId])
-  @@index([isRead])
+  @@index([status])
+}
+
+model CampaignStats {
+  id          String    @id @default(cuid())
+  campaignId  String
+  
+  date        DateTime  @default(now())
+  impressions Int       @default(0)
+  clicks      Int       @default(0)
+  conversions Int       @default(0)
+  
+  campaign    Campaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  
+  @@unique([campaignId, date])
+  @@index([campaignId])
 }
 
 // ============================================
-// SUPPORT
+// 9. SUPPORT, TICKETS, LOGS
 // ============================================
 
 model SupportTicket {
-  id              String    @id @default(cuid())
-  userId          String
+  id          String      @id @default(cuid())
+  userId      String
+  transportId String?
   
-  subject         String
-  description     String
-  priority        String    @default("NORMAL") // LOW, NORMAL, HIGH, URGENT
-  status          String    @default("OPEN")   // OPEN, IN_PROGRESS, RESOLVED, CLOSED
-  category        String?
+  subject     String
+  description String
+  priority    String      @default("NORMAL")  // LOW, NORMAL, HIGH, URGENT
+  status      TicketStatus @default(OPEN)
+  category    String?
   
-  assignedTo      String?   // Support agent ID
+  assignedTo  String?
   
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
-  resolvedAt      DateTime?
-  closedAt        DateTime?
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  resolvedAt  DateTime?
+  closedAt    DateTime?
   
-  user            User      @relation(fields: [userId], references: [id])
-  messages        SupportMessage[]
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages    SupportMessage[]
   
   @@index([userId])
   @@index([status])
 }
 
 model SupportMessage {
-  id              String          @id @default(cuid())
-  ticketId        String
-  authorId        String
-  authorRole      String          // USER, SUPPORT, ADMIN
-  message         String
-  attachments     String?         // JSON array of file URLs
+  id          String    @id @default(cuid())
+  ticketId    String
+  senderId    String
+  senderRole  String    // USER, SUPPORT, ADMIN
   
-  isInternal      Boolean         @default(false)
+  message     String
+  attachments String?   // JSON array of file URLs
   
-  createdAt       DateTime        @default(now())
+  isInternal  Boolean   @default(false)
   
-  ticket          SupportTicket   @relation(fields: [ticketId], references: [id])
+  createdAt   DateTime  @default(now())
+  
+  ticket      SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
   
   @@index([ticketId])
 }
 
-// ============================================
-// MARKETING
-// ============================================
-
-model MarketingCampaign {
-  id              String    @id @default(cuid())
-  userId          String
-  
-  name            String
-  description     String?
-  
-  bannerUrl       String?
-  targetUrl       String?
-  position        String?   // HOME_BANNER, SIDEBAR, etc.
-  
-  budget          Float
-  spentAmount     Float     @default(0)
-  currency        String    @default("EUR")
-  
-  impressions     Int       @default(0)
-  clicks          Int       @default(0)
-  conversions     Int       @default(0)
-  
-  status          String    @default("DRAFT") // DRAFT, PENDING, ACTIVE, PAUSED, COMPLETED
-  
-  startDate       DateTime?
-  endDate         DateTime?
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
-  
-  user            User      @relation(fields: [userId], references: [id])
-  
-  @@index([userId])
-  @@index([status])
-}
-
-// ============================================
-// AUDIT LOG
-// ============================================
-
 model AuditLog {
-  id              String    @id @default(cuid())
-  userId          String?
+  id            String      @id @default(cuid())
+  userId        String?
   
-  action          String    // LOGIN, LOGOUT, CREATE_TRANSPORT, etc.
-  entityType      String
-  entityId        String?
+  action        AuditAction
+  entityType    String      // user, transport, wallet, vehicle, etc.
+  entityId      String?
   
-  oldValue        String?   // JSON
-  newValue        String?   // JSON
+  dataBefore    String?     // JSON
+  dataAfter     String?     // JSON
   
-  ipAddress       String?
-  userAgent       String?
+  ipAddress     String?
+  userAgent     String?
   
-  createdAt       DateTime  @default(now())
+  createdAt     DateTime    @default(now())
   
-  user            User?     @relation(fields: [userId], references: [id])
+  user          User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
   
   @@index([userId])
   @@index([action])
   @@index([entityType, entityId])
+  @@index([createdAt])
 }
 
 // ============================================
-// SYSTEM SETTINGS
+// 10. NOTIFICATIONS
 // ============================================
 
-model SystemSetting {
-  id              String    @id @default(cuid())
-  key             String    @unique
-  value           String    // JSON
-  description     String?
+model Notification {
+  id          String    @id @default(cuid())
+  userId      String
   
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
+  type        String    // NEW_OFFER, TRANSPORT_UPDATE, PAYMENT, etc.
+  title       String
+  message     String
+  data        String?   // JSON with additional data
   
-  @@index([key])
+  isRead      Boolean   @default(false)
+  readAt      DateTime?
+  
+  emailSent   Boolean   @default(false)
+  emailSentAt DateTime?
+  
+  createdAt   DateTime  @default(now())
+  
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([isRead])
 }
 
 // ============================================
-// PRICING CONFIGURATION
+// 11. DRIVER PERMISSIONS (International)
 // ============================================
 
-model PricingTier {
-  id                  String            @id @default(cuid())
-  plan                SubscriptionPlan  @unique
-  
-  monthlyPrice        Float
-  yearlyPrice         Float?
-  currency            String            @default("EUR")
-  
-  // Commission rates (percentage)
-  commissionRate      Float             @default(5.0)
-  minCommission       Float             @default(5.0)
-  maxCommission       Float?
-  
-  // Wallet fees
-  depositFee          Float             @default(0)
-  depositFeePercent   Float             @default(0)
-  withdrawalFee       Float             @default(1.5)
-  withdrawalFeePercent Float            @default(0.5)
-  
-  // Features
-  maxActiveTransports Int?
-  maxVehicles         Int?
-  apiAccess           Boolean           @default(false)
-  prioritySupport     Boolean           @default(false)
-  customBranding      Boolean           @default(false)
-  
-  description         String?
-  
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt()
-  
-  @@index([plan])
-}
-
-// ============================================
-// INTERNATIONAL MATCHING
-// ============================================
-
-/// Driver permissions for specific countries
 model DriverPermission {
   id              String    @id @default(cuid())
-  userId          String
+  driverId        String
   
-  // Country Permission
-  countryCode     String    // ISO 2-letter code: DE, AT, PL, CZ, etc.
-  countryName     String    // Display name: Deutschland, Österreich, etc.
+  countryCode     String    // ISO 2-letter code
+  countryName     String
   
-  // Permission Status
   isAllowed       Boolean   @default(true)
   allowedAt       DateTime?
   expiresAt       DateTime?
   
-  // Requirements
   visaRequired    Boolean   @default(false)
   visaValid       Boolean   @default(false)
   visaExpiry      DateTime?
   
-  // Experience
   tripsCompleted  Int       @default(0)
   lastTripAt      DateTime?
   
-  // Documents
-  documentUrl     String?   // Permit/visa document
+  documentUrl     String?
   
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
+  updatedAt       DateTime  @updatedAt
   
-  user            User      @relation(fields: [userId], references: [id])
+  driver          Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
   
-  @@unique([userId, countryCode])
-  @@index([userId])
+  @@unique([driverId, countryCode])
+  @@index([driverId])
   @@index([countryCode])
   @@index([isAllowed])
 }
 
-/// Matching results for transport-driver pairing
-model MatchingResult {
-  id              String    @id @default(cuid())
-  transportId     String
-  driverId        String
-  
-  // Match Score
-  matchScore      Float     // 0-100 score
-  matchReasons    String    // JSON array of matching reasons
-  
-  // Match Type
-  matchType       String    // EXACT, REGIONAL, RETURN_LOAD, INTERNATIONAL
-  
-  // Requirements Check
-  vehicleMatch    Boolean   @default(false)
-  driverMatch     Boolean   @default(false)
-  routeMatch      Boolean   @default(false)
-  internationalMatch Boolean @default(false)
-  
-  // International Checks
-  countryPermissionsOk Boolean @default(true)
-  documentsOk     Boolean   @default(true)
-  tunnelCodesOk   Boolean   @default(true)
-  
-  // Distance & Route
-  distanceToPickup Float?   // km to pickup location
-  estimatedArrival DateTime?
-  
-  // Bonus Factors
-  languageMatch   Boolean   @default(false)
-  experienceBonus Float     @default(0)
-  ratingBonus     Float     @default(0)
-  returnLoadBonus Float     @default(0)
-  
-  // Status
-  status          String    @default("PENDING") // PENDING, NOTIFIED, ACCEPTED, REJECTED, EXPIRED
-  notifiedAt      DateTime?
-  expiresAt       DateTime?
-  
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
-  
-  driver          User      @relation(fields: [driverId], references: [id])
-  
-  @@unique([transportId, driverId])
-  @@index([transportId])
-  @@index([driverId])
-  @@index([matchScore])
-  @@index([status])
-}
-
 // ============================================
-// TOLL & ROUTING
+// 12. TOLL SYSTEMS & BORDER CROSSINGS
 // ============================================
 
-/// Toll system configurations
 model TollSystem {
   id              String    @id @default(cuid())
-  countryCode     String    // ISO code
+  countryCode     String
   countryName     String
   
   systemName      String    // Toll Collect, eToll, myto, etc.
   systemType      String    // DISTANCE, VIGNETTE, HYBRID
   
-  // Rates
-  euro5Rate       Float?    // Rate per km for EURO 5
-  euro6Rate       Float?    // Rate per km for EURO 6
-  euro6eevRate    Float?    // Rate per km for EURO 6 EEV
+  euro5Rate       Float?    // Rate per km
+  euro6Rate       Float?
+  euro6eevRate    Float?
   
-  // Vignette
   vignetteDaily   Float?
   vignetteWeekly  Float?
   vignetteMonthly Float?
   vignetteYearly  Float?
   
-  // Currency
   currency        String    @default("EUR")
-  
-  // Information
   websiteUrl      String?
   description     String?
   
   isActive        Boolean   @default(true)
   
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
+  updatedAt       DateTime  @updatedAt
   
   @@unique([countryCode, systemName])
   @@index([countryCode])
 }
 
-/// Border crossing information
 model BorderCrossing {
   id              String    @id @default(cuid())
   
-  fromCountry     String    // ISO code
-  toCountry       String    // ISO code
-  crossingName    String    // Name of border crossing
+  fromCountry     String
+  toCountry       String
+  crossingName    String
   
-  // Location
   latitude        Float?
   longitude       Float?
   
-  // Restrictions
   adrAllowed      Boolean   @default(true)
-  tunnelCode      String?   // ADR tunnel code if applicable
+  tunnelCode      String?
   
-  // Timing
   open24h         Boolean   @default(true)
-  openingHours    String?   // JSON with opening hours
+  openingHours    String?   // JSON
   
-  // Wait Times
   avgWaitMinutes  Int?
   
-  // Customs
   customsRequired Boolean   @default(true)
   customsType     String?   // EU_INTERNAL, EU_EXTERNAL
   
   isActive        Boolean   @default(true)
   
   createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt()
+  updatedAt       DateTime  @updatedAt
   
   @@unique([fromCountry, toCountry, crossingName])
   @@index([fromCountry])
   @@index([toCountry])
+}
+
+// ============================================
+// 13. SYSTEM SETTINGS
+// ============================================
+
+model SystemSetting {
+  id          String    @id @default(cuid())
+  key         String    @unique
+  value       String    // JSON
+  description String?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  
+  @@index([key])
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { StartMatchingRequest, StartMatchingResponse, ApiErrorResponse } from '@/types/matching';
 
 // POST /api/matching/start - Start matching for a transport
@@ -16,11 +16,13 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get transport
-    const transport = await prisma.transport.findUnique({
+    // Get transport with details
+    const transport = await db.transport.findUnique({
       where: { id: body.transportId },
       include: {
-        shipper: { select: { id: true, subscriptionPlan: true } }
+        transportDetail: true,
+        pickupAddress: true,
+        deliveryAddress: true
       }
     });
 
@@ -32,151 +34,206 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    // Check if matching already running
-    const existingMatching = await prisma.matchingResult.findFirst({
+    // Check if matching session already exists
+    const existingSession = await db.matchingSession.findFirst({
       where: {
         transportId: body.transportId,
-        status: 'PENDING'
+        status: { in: ['STARTED', 'RUNNING'] }
       }
     });
 
-    if (existingMatching) {
+    if (existingSession) {
+      const candidates = await db.matchingCandidate.count({
+        where: { matchingSessionId: existingSession.id }
+      });
+      
       return NextResponse.json<StartMatchingResponse>({
-        matchingId: existingMatching.id,
+        matchingId: existingSession.id,
         status: 'started',
-        estimatedCandidates: 0
+        estimatedCandidates: candidates
       });
     }
 
-    // Create matching ID
-    const matchingId = `match_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Create matching session
+    const matchingSession = await db.matchingSession.create({
+      data: {
+        transportId: body.transportId,
+        status: 'STARTED',
+        autoAssign: body.autoAssign || false
+      }
+    });
 
     // Check if international
-    const isInternational = transport.pickupCountry !== transport.deliveryCountry;
+    const isInternational = transport.pickupAddress.country !== transport.deliveryAddress.country;
 
     // Parse requirements
-    const vehicleRequirements = transport.vehicleRequirements 
-      ? JSON.parse(transport.vehicleRequirements) 
+    const vehicleRequirements = transport.transportDetail?.vehicleRequirements 
+      ? JSON.parse(transport.transportDetail.vehicleRequirements) 
       : null;
-    const driverRequirements = transport.driverRequirements 
-      ? JSON.parse(transport.driverRequirements) 
+    const driverRequirements = transport.transportDetail?.driverRequirements 
+      ? JSON.parse(transport.transportDetail.driverRequirements) 
       : null;
-    const internationalRequirements = transport.internationalRequirements 
-      ? JSON.parse(transport.internationalRequirements) 
+    const internationalRequirements = transport.transportDetail?.internationalRequirements 
+      ? JSON.parse(transport.transportDetail.internationalRequirements) 
       : null;
 
-    // ========== PHASE 1: HARD FILTER ==========
+    // ========== PHASE 1: FIND DRIVERS ==========
     
-    // Build driver query
-    const driverWhere: Record<string, unknown> = {
-      role: { in: ['DRIVER_SELF_EMPLOYED', 'DISPATCHER'] },
-      status: 'ACTIVE',
-      isAvailable: true
-    };
-
-    // International filter
-    if (isInternational) {
-      driverWhere.internationalAllowed = true;
-    }
-
-    // Find candidates
-    const candidates = await prisma.user.findMany({
-      where: driverWhere,
+    // Find all active drivers with their vehicles
+    const drivers = await db.driver.findMany({
+      where: {
+        isAvailable: true,
+        user: {
+          status: 'ACTIVE'
+        }
+      },
       include: {
-        vehicles: { where: { isActive: true } },
-        driverPermissions: { where: { isAllowed: true } }
+        user: true,
+        driverVehicles: {
+          include: {
+            vehicle: {
+              where: { status: 'ACTIVE' }
+            }
+          }
+        },
+        driverPermissions: {
+          where: { isAllowed: true }
+        }
       },
       take: body.maxCandidates || 100
     });
 
-    // ========== PHASE 2: VEHICLE MATCHING ==========
+    // ========== PHASE 2: MATCH & SCORE ==========
     
     const matchedCandidates: Array<{
       driverId: string;
       vehicleId: string;
       score: number;
       reasons: string[];
+      hardFilterPassed: boolean;
+      softRulesPassed: boolean;
+      fraudSafe: boolean;
+      internationalAllowed: boolean;
     }> = [];
 
-    for (const driver of candidates) {
-      for (const vehicle of driver.vehicles) {
+    for (const driver of drivers) {
+      for (const dv of driver.driverVehicles) {
+        const vehicle = dv.vehicle;
         let score = 0;
         const reasons: string[] = [];
+        let hardFilterPassed = true;
+        const softRulesPassed = true;
+        let fraudSafe = true;
+        let internationalAllowed = true;
 
-        // Check vehicle type
-        if (vehicleRequirements?.vehicleType?.length) {
-          const vehicleTypeMap: Record<string, string> = {
-            'sprinter': 'SPRINTER',
-            'koffer': 'KOEFFER',
-            'curtainsider': 'CURTAINSIDER',
-            'plane': 'PLANE'
-          };
-          const requiredTypes = vehicleRequirements.vehicleType.map(
-            (t: string) => vehicleTypeMap[t] || t.toUpperCase()
-          );
-          if (!requiredTypes.includes(vehicle.vehicleType)) continue;
+        // ===== HARD FILTER: VEHICLE TYPE =====
+        if (vehicleRequirements?.vehicleTypes?.length) {
+          if (!vehicleRequirements.vehicleTypes.includes(vehicle.type)) {
+            hardFilterPassed = false;
+            continue;
+          }
           score += 25;
           reasons.push('Fahrzeugtyp passt');
         }
 
-        // Check payload
+        // ===== HARD FILTER: PAYLOAD =====
         if (vehicleRequirements?.minPayload_kg) {
-          if ((vehicle.maxWeightKg || 0) < vehicleRequirements.minPayload_kg) continue;
+          if ((vehicle.maxPayloadKg || 0) < vehicleRequirements.minPayload_kg) {
+            hardFilterPassed = false;
+            continue;
+          }
           score += 10;
         }
 
-        // Check volume
+        // ===== HARD FILTER: VOLUME =====
         if (vehicleRequirements?.minVolume_m3) {
-          if ((vehicle.volumeM3 || 0) < vehicleRequirements.minVolume_m3) continue;
+          if ((vehicle.volumeM3 || 0) < vehicleRequirements.minVolume_m3) {
+            hardFilterPassed = false;
+            continue;
+          }
           score += 10;
         }
 
-        // Check ADR
+        // ===== HARD FILTER: ADR =====
         if (vehicleRequirements?.adrRequired) {
-          if (!vehicle.adrCertified) continue;
+          if (!vehicle.adrApproved) {
+            hardFilterPassed = false;
+            continue;
+          }
+          // Check specific ADR classes
+          if (vehicleRequirements.adrClasses?.length && vehicle.adrClasses) {
+            const vehicleAdrClasses = JSON.parse(vehicle.adrClasses);
+            const hasAllClasses = vehicleRequirements.adrClasses.every(
+              (c: string) => vehicleAdrClasses.includes(c)
+            );
+            if (!hasAllClasses) {
+              hardFilterPassed = false;
+              continue;
+            }
+          }
           score += 15;
           reasons.push('ADR-zertifiziert');
         }
 
-        // Check cooling
+        // ===== HARD FILTER: COOLING =====
         if (vehicleRequirements?.coolingRequired) {
-          if (!vehicle.hasCooling) continue;
+          if (!vehicle.coolingAvailable) {
+            hardFilterPassed = false;
+            continue;
+          }
           score += 15;
           reasons.push('Kühlung verfügbar');
         }
 
-        // Check international
+        // ===== HARD FILTER: INTERNATIONAL =====
         if (isInternational) {
+          // Check driver international permission
+          if (!driver.internationalExperience) {
+            internationalAllowed = false;
+            hardFilterPassed = false;
+            continue;
+          }
+
           // Check country permissions
           const allowedCountries = driver.driverPermissions
             .filter(p => p.isAllowed)
             .map(p => p.countryCode);
           
-          if (!allowedCountries.includes(transport.deliveryCountry)) continue;
+          if (!allowedCountries.includes(transport.deliveryAddress.country)) {
+            internationalAllowed = false;
+            hardFilterPassed = false;
+            continue;
+          }
           
           // Check transit countries
           if (internationalRequirements?.transitCountries) {
             const transitOk = internationalRequirements.transitCountries.every(
               (c: string) => allowedCountries.includes(c)
             );
-            if (!transitOk) continue;
+            if (!transitOk) {
+              internationalAllowed = false;
+              hardFilterPassed = false;
+              continue;
+            }
           }
+          
           score += 20;
           reasons.push('Internationale Genehmigung');
         }
 
-        // Add driver score bonuses
-        if (driver.rating >= 4.5) {
+        // ===== SOFT FILTER: DRIVER RATING =====
+        if (driver.ratingAvg >= 4.5) {
           score += 10;
           reasons.push('Top Bewertung');
         }
 
+        // ===== SOFT FILTER: EXPERIENCE =====
         if (driver.completedTransports >= 50) {
           score += 5;
           reasons.push('Erfahrener Fahrer');
         }
 
-        // Language match
+        // ===== SOFT FILTER: LANGUAGE =====
         const spokenLanguages = driver.spokenLanguages ? JSON.parse(driver.spokenLanguages) : [];
         if (driverRequirements?.languages?.length) {
           const hasLang = driverRequirements.languages.some((l: string) => spokenLanguages.includes(l));
@@ -186,12 +243,31 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        matchedCandidates.push({
-          driverId: driver.id,
-          vehicleId: vehicle.id,
-          score: Math.min(100, score),
-          reasons
+        // ===== FRAUD CHECK =====
+        const securityFlags = await db.securityFlag.findFirst({
+          where: {
+            userId: driver.userId,
+            active: true,
+            severity: { in: ['HIGH', 'CRITICAL'] }
+          }
         });
+        if (securityFlags) {
+          fraudSafe = false;
+          score = 0;
+        }
+
+        if (hardFilterPassed) {
+          matchedCandidates.push({
+            driverId: driver.id,
+            vehicleId: vehicle.id,
+            score: Math.min(100, score),
+            reasons,
+            hardFilterPassed,
+            softRulesPassed,
+            fraudSafe,
+            internationalAllowed
+          });
+        }
       }
     }
 
@@ -200,60 +276,82 @@ export async function POST(request: NextRequest) {
 
     // ========== PHASE 3: STORE RESULTS ==========
 
-    const matchingResults = matchedCandidates.slice(0, 50);
+    const topCandidates = matchedCandidates.slice(0, 50);
 
-    for (const candidate of matchingResults) {
-      await prisma.matchingResult.create({
+    for (const candidate of topCandidates) {
+      await db.matchingCandidate.create({
         data: {
-          id: `mr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-          transportId: body.transportId,
+          matchingSessionId: matchingSession.id,
           driverId: candidate.driverId,
-          matchScore: candidate.score,
-          matchReasons: JSON.stringify(candidate.reasons),
-          matchType: isInternational ? 'INTERNATIONAL' : 'REGIONAL',
-          vehicleMatch: true,
-          driverMatch: true,
-          routeMatch: true,
-          internationalMatch: isInternational,
-          countryPermissionsOk: isInternational,
-          documentsOk: true,
-          tunnelCodesOk: true,
-          languageMatch: candidate.reasons.includes('Sprachkenntnisse'),
-          experienceBonus: candidate.reasons.includes('Erfahrener Fahrer') ? 5 : 0,
-          ratingBonus: candidate.reasons.includes('Top Bewertung') ? 10 : 0,
-          returnLoadBonus: 0,
+          vehicleId: candidate.vehicleId,
+          hardFilterPassed: candidate.hardFilterPassed,
+          softRulesPassed: candidate.softRulesPassed,
+          fraudSafe: candidate.fraudSafe,
+          internationalAllowed: candidate.internationalAllowed,
+          score: candidate.score,
+          scoreBreakdown: JSON.stringify({ reasons: candidate.reasons }),
           status: 'PENDING',
           expiresAt: new Date(Date.now() + (body.expireInMinutes || 60) * 60 * 1000)
         }
       }).catch(() => {});
     }
 
+    // Update matching session status
+    await db.matchingSession.update({
+      where: { id: matchingSession.id },
+      data: { status: 'RUNNING' }
+    });
+
     // Update transport status
-    await prisma.transport.update({
+    await db.transport.update({
       where: { id: body.transportId },
       data: { status: 'PUBLISHED' }
+    });
+
+    // Create status history
+    await db.transportStatusHistory.create({
+      data: {
+        transportId: body.transportId,
+        status: 'PUBLISHED',
+        note: 'Matching gestartet'
+      }
     });
 
     // ========== PHASE 4: AUTO-ASSIGN IF ENABLED ==========
     
     let assigned = false;
-    if (body.autoAssign && matchingResults.length > 0 && matchingResults[0].score >= 80) {
-      const bestMatch = matchingResults[0];
+    if (body.autoAssign && topCandidates.length > 0 && topCandidates[0].score >= 80 && topCandidates[0].fraudSafe) {
+      const bestMatch = topCandidates[0];
       
-      // Assign driver
-      await prisma.transport.update({
-        where: { id: body.transportId },
+      // Create assignment
+      await db.assignment.create({
         data: {
+          transportId: body.transportId,
           driverId: bestMatch.driverId,
-          status: 'CONFIRMED',
-          acceptedAt: new Date()
+          vehicleId: bestMatch.vehicleId,
+          assignedBy: transport.shipperUserId
         }
       });
 
-      // Update matching result
-      await prisma.matchingResult.updateMany({
+      // Update transport
+      await db.transport.update({
+        where: { id: body.transportId },
+        data: {
+          status: 'ASSIGNED',
+          assignedAt: new Date()
+        }
+      });
+
+      // Update matching session
+      await db.matchingSession.update({
+        where: { id: matchingSession.id },
+        data: { status: 'COMPLETED', completedAt: new Date() }
+      });
+
+      // Update candidate status
+      await db.matchingCandidate.updateMany({
         where: {
-          transportId: body.transportId,
+          matchingSessionId: matchingSession.id,
           driverId: bestMatch.driverId
         },
         data: { status: 'ACCEPTED' }
@@ -263,7 +361,7 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json<StartMatchingResponse>({
-      matchingId,
+      matchingId: matchingSession.id,
       status: matchedCandidates.length > 0 ? 'started' : 'no_candidates',
       estimatedCandidates: matchedCandidates.length,
       estimatedCompletion: new Date(Date.now() + 30000).toISOString()

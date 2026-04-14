@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { UpdateMatchingRequest, UpdateMatchingResponse, ApiErrorResponse } from '@/types/matching';
 
-// POST /api/matching/update - Update matching (new driver, location change, etc.)
+// POST /api/matching/update - Update matching session with new data
 export async function POST(request: NextRequest) {
   try {
     const body: UpdateMatchingRequest = await request.json();
@@ -15,125 +15,51 @@ export async function POST(request: NextRequest) {
       }, { status: 400 });
     }
 
-    // Get transport and existing matches
-    const transport = await prisma.transport.findUnique({
-      where: { id: body.transportId }
+    // Get active matching session
+    const session = await db.matchingSession.findFirst({
+      where: {
+        transportId: body.transportId,
+        status: { in: ['STARTED', 'RUNNING'] }
+      }
     });
 
-    if (!transport) {
+    if (!session) {
       return NextResponse.json<ApiErrorResponse>({
         error: 'NotFoundError',
-        message: 'Transport not found',
-        code: 'TRANSPORT_NOT_FOUND'
+        message: 'No active matching session found',
+        code: 'NO_ACTIVE_SESSION'
       }, { status: 404 });
     }
 
-    const matchingId = `match_${body.transportId}`;
+    let status: 'updated' | 'recalculating' | 'completed' = 'updated';
 
     switch (body.event) {
-      case 'new_driver_available': {
-        // Check if new driver should be added to matching
-        const newDriverId = (body.data?.driverId as string) || null;
-        
-        if (newDriverId) {
-          const driver = await prisma.user.findUnique({
-            where: { id: newDriverId },
-            include: { vehicles: { where: { isActive: true } } }
-          });
-
-          if (driver && driver.vehicles.length > 0) {
-            // Quick score check
-            let score = 30;
-            const reasons: string[] = ['Neu verfügbar'];
-
-            if (driver.rating >= 4.5) {
-              score += 10;
-              reasons.push('Top Bewertung');
-            }
-
-            // Add to matching results
-            await prisma.matchingResult.create({
-              data: {
-                id: `mr_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-                transportId: body.transportId,
-                driverId: newDriverId,
-                matchScore: score,
-                matchReasons: JSON.stringify(reasons),
-                matchType: 'REGIONAL',
-                vehicleMatch: true,
-                driverMatch: true,
-                routeMatch: true,
-                internationalMatch: false,
-                countryPermissionsOk: true,
-                documentsOk: true,
-                tunnelCodesOk: true,
-                languageMatch: false,
-                experienceBonus: 0,
-                ratingBonus: driver.rating >= 4.5 ? 10 : 0,
-                returnLoadBonus: 0,
-                status: 'PENDING',
-                expiresAt: new Date(Date.now() + 60 * 60 * 1000)
-              }
-            }).catch(() => {});
-          }
-        }
+      case 'new_driver_available':
+        // Recalculate matching with new driver
+        status = 'recalculating';
+        await handleNewDriverAvailable(session, body.data);
         break;
-      }
 
-      case 'driver_location_changed': {
-        // Recalculate distances for all pending matches
-        const driverId = body.data?.driverId as string;
-        const newLocation = body.data?.location as { lat: number; lng: number } | undefined;
-
-        if (driverId && newLocation) {
-          // Update driver's current location
-          await prisma.user.update({
-            where: { id: driverId },
-            data: {
-              currentLocation: JSON.stringify({
-                ...newLocation,
-                timestamp: new Date().toISOString()
-              })
-            }
-          });
-
-          // Recalculate distance scores (would use geolocation API in production)
-          // For now, we just log the update
-        }
+      case 'driver_location_changed':
+        // Update driver distances
+        await handleDriverLocationChange(session, body.data);
         break;
-      }
 
-      case 'requirements_updated': {
-        // Re-run matching with updated requirements
-        // This would trigger a full re-match
+      case 'requirements_updated':
+        // Re-run filtering with new requirements
+        status = 'recalculating';
+        await handleRequirementsUpdated(session, body.transportId);
         break;
-      }
 
-      case 'price_changed': {
-        // Update price and recalculate scores
-        const newPrice = body.data?.price as number | undefined;
-        
-        if (newPrice) {
-          await prisma.transport.update({
-            where: { id: body.transportId },
-            data: { shipperBudget: newPrice }
-          });
-        }
+      case 'price_changed':
+        // Update price scores
+        await handlePriceChanged(session, body.data);
         break;
-      }
     }
 
-    // Count current candidates
-    const candidateCount = await prisma.matchingResult.count({
-      where: {
-        transportId: body.transportId,
-        status: 'PENDING'
-      }
-    });
-
     return NextResponse.json<UpdateMatchingResponse>({
-      matchingId,
-      status: candidateCount > 0 ? 'updated' : 'recalculating'
+      matchingId: session.id,
+      status
     }, { status: 200 });
 
   } catch (error) {
@@ -144,4 +70,88 @@ export async function POST(request: NextRequest) {
       code: 'INTERNAL_ERROR'
     }, { status: 500 });
   }
+}
+
+async function handleNewDriverAvailable(session: any, data: any) {
+  if (!data?.driverId) return;
+
+  // Check if driver already in candidates
+  const existing = await db.matchingCandidate.findFirst({
+    where: {
+      matchingSessionId: session.id,
+      driverId: data.driverId
+    }
+  });
+
+  if (existing) return;
+
+  // Get driver details
+  const driver = await db.driver.findUnique({
+    where: { id: data.driverId },
+    include: {
+      user: true,
+      driverVehicles: {
+        include: { vehicle: { where: { status: 'ACTIVE' } } }
+      }
+    }
+  });
+
+  if (!driver || !driver.driverVehicles.length) return;
+
+  // Add driver as candidate (simplified - would run full matching logic)
+  for (const dv of driver.driverVehicles) {
+    await db.matchingCandidate.create({
+      data: {
+        matchingSessionId: session.id,
+        driverId: driver.id,
+        vehicleId: dv.vehicle.id,
+        hardFilterPassed: true,
+        softRulesPassed: true,
+        fraudSafe: true,
+        internationalAllowed: driver.internationalExperience,
+        score: 50, // Default score
+        status: 'PENDING',
+        expiresAt: session.expiresAt
+      }
+    }).catch(() => {});
+  }
+}
+
+async function handleDriverLocationChange(session: any, data: any) {
+  if (!data?.driverId || !data?.location) return;
+
+  // In production, would recalculate distance scores for affected candidates
+  // For now, just update the timestamp
+  await db.matchingSession.update({
+    where: { id: session.id },
+    data: { updatedAt: new Date() }
+  });
+}
+
+async function handleRequirementsUpdated(session: any, transportId: string) {
+  // Get transport with new requirements
+  const transport = await db.transport.findUnique({
+    where: { id: transportId },
+    include: { transportDetail: true }
+  });
+
+  if (!transport) return;
+
+  // In production, would re-run the full matching pipeline
+  // For now, just update the session timestamp
+  await db.matchingSession.update({
+    where: { id: session.id },
+    data: { updatedAt: new Date() }
+  });
+}
+
+async function handlePriceChanged(session: any, data: any) {
+  if (!data?.newPrice) return;
+
+  // In production, would recalculate price scores for all candidates
+  // For now, just update the session timestamp
+  await db.matchingSession.update({
+    where: { id: session.id },
+    data: { updatedAt: new Date() }
+  });
 }

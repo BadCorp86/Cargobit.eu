@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { CreateOfferRequest, OfferResponse, ApiErrorResponse } from '@/types/transport';
 
 // POST /api/transports/[id]/offers - Create an offer for a transport
@@ -21,7 +21,7 @@ export async function POST(
     }
 
     // Check if transport exists and is available
-    const transport = await prisma.transport.findUnique({
+    const transport = await db.transport.findUnique({
       where: { id: transportId }
     });
 
@@ -42,7 +42,7 @@ export async function POST(
     }
 
     // Check if driver already made an offer
-    const existingOffer = await prisma.offer.findFirst({
+    const existingOffer = await db.offer.findFirst({
       where: {
         transportId,
         driverId: body.driverId,
@@ -59,7 +59,7 @@ export async function POST(
     }
 
     // Create offer
-    const offer = await prisma.offer.create({
+    const offer = await db.offer.create({
       data: {
         transportId,
         driverId: body.driverId,
@@ -72,12 +72,12 @@ export async function POST(
     });
 
     // Update transport status if this is the first offer
-    const offerCount = await prisma.offer.count({
+    const offerCount = await db.offer.count({
       where: { transportId }
     });
 
     if (offerCount === 1) {
-      await prisma.transport.update({
+      await db.transport.update({
         where: { id: transportId },
         data: { status: 'OFFERS_RECEIVED' }
       });
@@ -107,7 +107,7 @@ export async function GET(
   try {
     const { id: transportId } = await params;
 
-    const offers = await prisma.offer.findMany({
+    const offers = await db.offer.findMany({
       where: { transportId },
       include: {
         driver: {

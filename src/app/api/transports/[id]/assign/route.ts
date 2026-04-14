@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { AssignTransportRequest, AssignTransportResponse, ApiErrorResponse } from '@/types/transport';
 
 // POST /api/transports/[id]/assign - Assign a driver to a transport
@@ -21,7 +21,7 @@ export async function POST(
     }
 
     // Get transport
-    const transport = await prisma.transport.findUnique({
+    const transport = await db.transport.findUnique({
       where: { id: transportId },
       include: {
         shipper: {
@@ -49,7 +49,7 @@ export async function POST(
     // Get the offer if provided
     let agreedPrice = transport.shipperBudget;
     if (body.offerId) {
-      const offer = await prisma.offer.findFirst({
+      const offer = await db.offer.findFirst({
         where: {
           id: body.offerId,
           transportId,
@@ -61,7 +61,7 @@ export async function POST(
       if (offer) {
         agreedPrice = offer.price;
         // Accept the offer
-        await prisma.offer.update({
+        await db.offer.update({
           where: { id: offer.id },
           data: {
             status: 'ACCEPTED',
@@ -69,7 +69,7 @@ export async function POST(
           }
         });
         // Reject other offers
-        await prisma.offer.updateMany({
+        await db.offer.updateMany({
           where: {
             transportId,
             id: { not: offer.id },
@@ -91,9 +91,9 @@ export async function POST(
     let escrowCreated = false;
     if (transport.shipper?.wallet && transport.shipper.wallet.availableBalance >= escrowAmount) {
       // Create escrow transaction
-      await prisma.$transaction([
+      await db.$transaction([
         // Deduct from wallet
-        prisma.wallet.update({
+        db.wallet.update({
           where: { userId: transport.shipperId },
           data: {
             availableBalance: { decrement: escrowAmount },
@@ -101,7 +101,7 @@ export async function POST(
           }
         }),
         // Create transaction record
-        prisma.transaction.create({
+        db.transaction.create({
           data: {
             walletId: transport.shipper.wallet.id,
             type: 'PAYMENT_OUT',
@@ -118,7 +118,7 @@ export async function POST(
     }
 
     // Update transport
-    const updatedTransport = await prisma.transport.update({
+    const updatedTransport = await db.transport.update({
       where: { id: transportId },
       data: {
         driverId: body.driverId,

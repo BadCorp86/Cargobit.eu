@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { CreateTransportRequest, CreateTransportResponse, ApiErrorResponse } from '@/types/transport';
 
 // POST /api/transports - Create a new transport
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create transport
-    const transport = await prisma.transport.create({
+    const transport = await db.transport.create({
       data: {
         shipperId: body.shipperId,
         transportType: mapTransportType(body.transportType),
@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     if (driverId) where.driverId = driverId;
 
     const [transports, total] = await Promise.all([
-      prisma.transport.findMany({
+      db.transport.findMany({
         where,
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -155,7 +155,7 @@ export async function GET(request: NextRequest) {
           }
         }
       }),
-      prisma.transport.count({ where })
+      db.transport.count({ where })
     ]);
 
     return NextResponse.json({

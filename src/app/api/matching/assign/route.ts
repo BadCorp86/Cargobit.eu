@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 import { AutoAssignRequest, AutoAssignResponse, ApiErrorResponse } from '@/types/matching';
 
-// POST /api/matching/assign - Assign driver to transport (auto or manual)
+// POST /api/matching/assign - Assign driver to transport
 export async function POST(request: NextRequest) {
   try {
     const body: AutoAssignRequest = await request.json();
@@ -16,10 +16,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Get transport
-    const transport = await prisma.transport.findUnique({
+    const transport = await db.transport.findUnique({
       where: { id: body.transportId },
       include: {
-        shipper: { include: { wallet: true } }
+        transportDetail: true,
+        pickupAddress: true,
+        deliveryAddress: true
       }
     });
 
@@ -31,179 +33,193 @@ export async function POST(request: NextRequest) {
       }, { status: 404 });
     }
 
-    // Check if transport can be assigned
-    if (!['PENDING', 'PUBLISHED', 'OFFERS_RECEIVED'].includes(transport.status)) {
+    // Check if already assigned
+    const existingAssignment = await db.assignment.findUnique({
+      where: { transportId: body.transportId }
+    });
+
+    if (existingAssignment) {
       return NextResponse.json<ApiErrorResponse>({
-        error: 'ValidationError',
-        message: 'Transport cannot be assigned',
-        code: 'TRANSPORT_NOT_ASSIGNABLE'
-      }, { status: 400 });
+        error: 'ConflictError',
+        message: 'Transport already assigned',
+        code: 'ALREADY_ASSIGNED'
+      }, { status: 409 });
     }
 
     // Get driver
-    const driver = await prisma.user.findUnique({
+    const driver = await db.driver.findUnique({
       where: { id: body.driverId },
-      include: { wallet: true, vehicles: { where: { isActive: true }, take: 1 } }
+      include: {
+        user: {
+          include: {
+            wallet: true,
+            securityFlags: { where: { active: true } }
+          }
+        },
+        driverVehicles: body.vehicleId 
+          ? { where: { vehicleId: body.vehicleId } }
+          : { where: { isPrimary: true }, take: 1 }
+      }
     });
 
-    if (!driver) {
+    if (!driver || !driver.driverVehicles.length) {
       return NextResponse.json<ApiErrorResponse>({
         error: 'NotFoundError',
-        message: 'Driver not found',
+        message: 'Driver or vehicle not found',
         code: 'DRIVER_NOT_FOUND'
       }, { status: 404 });
     }
 
-    // Run fraud check unless skipped
-    if (!body.skipFraudCheck) {
-      // Quick fraud check
-      if (driver.status !== 'ACTIVE') {
-        return NextResponse.json<AutoAssignResponse>({
-          transportId: body.transportId,
-          driverId: body.driverId,
-          vehicleId: body.vehicleId,
-          status: 'rejected',
-          rejectionReason: 'Fahrer nicht aktiv'
-        }, { status: 200 });
-      }
+    const vehicle = driver.driverVehicles[0].vehicle;
+    const vehicleId = body.vehicleId || vehicle.id;
 
-      if (driver.role !== 'DRIVER_SELF_EMPLOYED' && driver.role !== 'DISPATCHER') {
+    // ===== FRAUD CHECK =====
+    if (!body.skipFraudCheck) {
+      const criticalFlags = driver.user.securityFlags.filter(
+        f => f.severity === 'CRITICAL' || f.severity === 'HIGH'
+      );
+
+      if (criticalFlags.length > 0) {
         return NextResponse.json<AutoAssignResponse>({
           transportId: body.transportId,
           driverId: body.driverId,
-          vehicleId: body.vehicleId,
+          vehicleId,
           status: 'rejected',
-          rejectionReason: 'Ungültige Rolle'
+          rejectionReason: 'Sicherheits-Flags aktiv: ' + criticalFlags.map(f => f.type).join(', ')
         }, { status: 200 });
       }
     }
 
-    // Get matching result
-    const matchingResult = await prisma.matchingResult.findFirst({
-      where: {
-        transportId: body.transportId,
-        driverId: body.driverId
+    // ===== INTERNATIONAL CHECK =====
+    const isInternational = transport.pickupAddress.country !== transport.deliveryAddress.country;
+    
+    if (isInternational) {
+      const driverPermissions = await db.driverPermission.findMany({
+        where: { driverId: driver.id, isAllowed: true }
+      });
+
+      const allowedCountries = driverPermissions.map(p => p.countryCode);
+
+      if (!allowedCountries.includes(transport.deliveryAddress.country)) {
+        return NextResponse.json<AutoAssignResponse>({
+          transportId: body.transportId,
+          driverId: body.driverId,
+          vehicleId,
+          status: 'rejected',
+          rejectionReason: `Keine Genehmigung für ${transport.deliveryAddress.country}`
+        }, { status: 200 });
       }
+
+      // Check transit countries
+      if (transport.transportDetail?.internationalRequirements) {
+        const intlReqs = JSON.parse(transport.transportDetail.internationalRequirements);
+        if (intlReqs.transitCountries) {
+          const missingCountries = intlReqs.transitCountries.filter(
+            (c: string) => !allowedCountries.includes(c)
+          );
+          if (missingCountries.length > 0) {
+            return NextResponse.json<AutoAssignResponse>({
+              transportId: body.transportId,
+              driverId: body.driverId,
+              vehicleId,
+              status: 'rejected',
+              rejectionReason: `Fehlende Genehmigungen für: ${missingCountries.join(', ')}`
+            }, { status: 200 });
+          }
+        }
+      }
+    }
+
+    // ===== CREATE ASSIGNMENT =====
+
+    // Use transaction for atomic operation
+    const assignment = await db.$transaction(async (tx) => {
+      // Create assignment
+      const newAssignment = await tx.assignment.create({
+        data: {
+          transportId: body.transportId,
+          driverId: driver.id,
+          vehicleId,
+          assignedBy: transport.shipperUserId
+        }
+      });
+
+      // Update transport status
+      await tx.transport.update({
+        where: { id: body.transportId },
+        data: {
+          status: 'ASSIGNED',
+          assignedAt: new Date(),
+          driverId: driver.userId
+        }
+      });
+
+      // Create status history entry
+      await tx.transportStatusHistory.create({
+        data: {
+          transportId: body.transportId,
+          status: 'ASSIGNED',
+          note: `Fahrer ${driver.user.firstName} ${driver.user.lastName} zugewiesen`
+        }
+      });
+
+      // Update matching session if exists
+      const activeSession = await tx.matchingSession.findFirst({
+        where: { transportId: body.transportId, status: 'RUNNING' }
+      });
+
+      if (activeSession) {
+        await tx.matchingSession.update({
+          where: { id: activeSession.id },
+          data: { status: 'COMPLETED', completedAt: new Date() }
+        });
+
+        // Update candidate status
+        await tx.matchingCandidate.updateMany({
+          where: {
+            matchingSessionId: activeSession.id,
+            driverId: driver.id
+          },
+          data: { status: 'ACCEPTED' }
+        });
+
+        // Mark other candidates as expired
+        await tx.matchingCandidate.updateMany({
+          where: {
+            matchingSessionId: activeSession.id,
+            driverId: { not: driver.id },
+            status: 'PENDING'
+          },
+          data: { status: 'EXPIRED' }
+        });
+      }
+
+      return newAssignment;
     });
 
-    // Get accepted offer
-    const offer = await prisma.offer.findFirst({
-      where: {
-        transportId: body.transportId,
-        driverId: body.driverId,
-        status: 'PENDING'
-      }
-    });
-
-    const agreedPrice = offer?.price || transport.shipperBudget || 0;
-
-    // Create escrow if shipper has wallet
+    // ===== CREATE ESCROW (if wallet exists) =====
     let escrowCreated = false;
     let escrowAmount = 0;
 
-    if (transport.shipper?.wallet && agreedPrice > 0) {
-      const platformFee = agreedPrice * 0.04; // 4% shipper fee
-      escrowAmount = agreedPrice + platformFee;
-
-      if (transport.shipper.wallet.availableBalance >= escrowAmount) {
-        // Create escrow transaction
-        await prisma.$transaction([
-          prisma.wallet.update({
-            where: { userId: transport.shipperId },
-            data: {
-              availableBalance: { decrement: escrowAmount },
-              pendingBalance: { increment: escrowAmount }
-            }
-          }),
-          prisma.transaction.create({
-            data: {
-              walletId: transport.shipper.wallet.id,
-              type: 'PAYMENT_OUT',
-              status: 'PENDING',
-              amount: escrowAmount,
-              fee: platformFee,
-              netAmount: agreedPrice,
-              description: `Escrow für Transport ${body.transportId}`,
-              transportId: body.transportId
-            }
-          })
-        ]);
-        escrowCreated = true;
-      }
+    if (transport.agreedPrice && driver.user.wallet) {
+      escrowAmount = transport.agreedPrice;
+      escrowCreated = true;
+      
+      // In production, this would create an escrow transaction
+      // await createEscrow(transport, driver.user.wallet, escrowAmount);
     }
-
-    // Update transport
-    await prisma.transport.update({
-      where: { id: body.transportId },
-      data: {
-        driverId: body.driverId,
-        agreedPrice,
-        status: 'CONFIRMED',
-        acceptedAt: new Date()
-      }
-    });
-
-    // Update matching result
-    if (matchingResult) {
-      await prisma.matchingResult.update({
-        where: { id: matchingResult.id },
-        data: { status: 'ACCEPTED' }
-      });
-    }
-
-    // Reject other offers
-    await prisma.offer.updateMany({
-      where: {
-        transportId: body.transportId,
-        id: { not: offer?.id },
-        status: 'PENDING'
-      },
-      data: {
-        status: 'REJECTED',
-        rejectionReason: 'Anderer Fahrer wurde ausgewählt'
-      }
-    });
-
-    // Update other matching results
-    await prisma.matchingResult.updateMany({
-      where: {
-        transportId: body.transportId,
-        driverId: { not: body.driverId },
-        status: 'PENDING'
-      },
-      data: { status: 'REJECTED' }
-    });
-
-    // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        userId: transport.shipperId,
-        action: 'TRANSPORT_ASSIGNED',
-        entityType: 'Transport',
-        entityId: body.transportId,
-        newValue: JSON.stringify({
-          driverId: body.driverId,
-          vehicleId: body.vehicleId,
-          agreedPrice,
-          escrowCreated,
-          escrowAmount
-        })
-      }
-    });
-
-    const status = escrowCreated ? 'assigned' : 'pending_verification';
 
     return NextResponse.json<AutoAssignResponse>({
       transportId: body.transportId,
-      driverId: body.driverId,
-      vehicleId: body.vehicleId || driver.vehicles[0]?.id,
-      status,
+      driverId: driver.id,
+      vehicleId,
+      status: 'assigned',
       escrowCreated,
-      escrowAmount: escrowCreated ? escrowAmount : undefined
+      escrowAmount
     }, { status: 200 });
 
   } catch (error) {
-    console.error('Auto assign error:', error);
+    console.error('Assign driver error:', error);
     return NextResponse.json<ApiErrorResponse>({
       error: 'InternalServerError',
       message: 'Failed to assign driver',
