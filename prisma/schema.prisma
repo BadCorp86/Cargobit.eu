@@ -1178,3 +1178,165 @@ model SystemSetting {
   
   @@index([key])
 }
+
+// ============================================
+// 14. RISK SCORING SYSTEM
+// ============================================
+
+enum RiskEntityType {
+  USER
+  COMPANY
+  TRANSACTION
+}
+
+enum RiskLevel {
+  GREEN
+  YELLOW
+  RED
+}
+
+model RiskScore {
+  id            String          @id @default(cuid())
+  entityType    RiskEntityType
+  entityId      String
+  
+  score         Int             @default(0)    // 0-100
+  riskLevel     RiskLevel       @default(GREEN)
+  
+  // Sub-scores (for combined scoring)
+  userScore     Int?
+  companyScore  Int?
+  transactionScore Int?
+  
+  // Metadata
+  factorsCount  Int             @default(0)
+  lastEventAt   DateTime?
+  
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  // Relations
+  events        RiskEvent[]
+  history       RiskHistory[]
+  
+  @@unique([entityType, entityId])
+  @@index([entityType])
+  @@index([entityId])
+  @@index([riskLevel])
+  @@index([score])
+}
+
+model RiskEvent {
+  id            String          @id @default(cuid())
+  entityType    RiskEntityType
+  entityId      String
+  
+  ruleId        String?         // Reference to RiskRule
+  ruleName      String          // Rule identifier (e.g., "user_kyc_missing")
+  ruleCategory  String          // USER, COMPANY, TRANSACTION
+  
+  weight        Int             // Score change (+ or -)
+  metadata      String?         // JSON with details (IP, amount, GPS, etc.)
+  
+  // Context
+  triggeredBy   String?         // User ID or system process
+  relatedEntity String?         // Related transport/offer/wallet ID
+  ipAddress     String?
+  userAgent     String?
+  
+  createdAt     DateTime        @default(now())
+  
+  // Relations
+  riskScore     RiskScore?      @relation(fields: [riskScoreId], references: [id], onDelete: SetNull)
+  riskScoreId   String?
+  
+  @@index([entityType])
+  @@index([entityId])
+  @@index([ruleName])
+  @@index([createdAt])
+}
+
+model RiskRule {
+  id            String          @id @default(cuid())
+  name          String          @unique  // e.g., "user_kyc_missing"
+  description   String?
+  
+  entityType    RiskEntityType
+  category      String          // USER, COMPANY, TRANSACTION, BEHAVIOR, DOCUMENT
+  
+  // Condition as JSON
+  condition     String          // JSON: { "field": "kyc_status", "equals": "missing" }
+  
+  weight        Int             // Score change (+ increases risk, - decreases risk)
+  active        Boolean         @default(true)
+  
+  // Configuration
+  priority      Int             @default(0)  // Higher priority = evaluated first
+  maxTriggers   Int?            // Max times this rule can trigger per day/week
+  
+  // Metadata
+  createdBy     String?
+  lastModifiedBy String?
+  
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  @@index([entityType])
+  @@index([category])
+  @@index([active])
+}
+
+model RiskHistory {
+  id            String          @id @default(cuid())
+  entityType    RiskEntityType
+  entityId      String
+  
+  oldScore      Int
+  newScore      Int
+  scoreChange   Int             // newScore - oldScore
+  
+  oldLevel      RiskLevel
+  newLevel      RiskLevel
+  
+  reason        String?         // Human-readable reason
+  eventId       String?         // Reference to triggering RiskEvent
+  
+  createdAt     DateTime        @default(now())
+  
+  // Relations
+  riskScore     RiskScore?      @relation(fields: [riskScoreId], references: [id], onDelete: SetNull)
+  riskScoreId   String?
+  
+  @@index([entityType])
+  @@index([entityId])
+  @@index([createdAt])
+}
+
+// ============================================
+// 15. RISK THRESHOLDS CONFIGURATION
+// ============================================
+
+model RiskThreshold {
+  id            String          @id @default(cuid())
+  name          String          @unique  // "green", "yellow", "red"
+  
+  minValue      Int             // Inclusive
+  maxValue      Int             // Inclusive
+  
+  // Actions
+  allowAction   Boolean         @default(true)
+  requireDelay  Boolean         @default(false)
+  delayHours    Int?
+  require2FA    Boolean         @default(false)
+  requireGPS    Boolean         @default(false)
+  createTicket  Boolean         @default(false)
+  notifySupport Boolean         @default(false)
+  
+  // Mitigations as JSON
+  mitigations   String?         // JSON array of mitigation actions
+  
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  
+  @@index([name])
+}

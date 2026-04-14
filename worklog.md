@@ -241,3 +241,113 @@ if not PermissionMatrix.allows(user.role, action):
 ```
 
 ### Status: ✅ DOKUMENTIERT & IMPLEMENTIERT
+
+---
+Task ID: risk-score-database-model
+Agent: Main Agent
+Task: Risk-Score-Tabellen als Datenbankmodell und Risk-Engine als JSON-Regelwerk
+
+## Work Log:
+
+### 1. Prisma Schema Erweiterung
+- Datei: `/prisma/schema.prisma` - Erweitert mit Risk-Scoring-Tabellen
+- Neue Enums:
+  - `RiskEntityType`: USER, COMPANY, TRANSACTION
+  - `RiskLevel`: GREEN, YELLOW, RED
+- Neue Models:
+  - `RiskScore`: Speichert aktuellen Score pro Entity
+  - `RiskEvent`: Einzelne Risikoereignisse
+  - `RiskRule`: Regeldefinitionen
+  - `RiskHistory`: Historie der Score-Berechnungen
+  - `RiskThreshold`: Schwellenwerte-Konfiguration
+
+### 2. JSON Regelwerk
+- Datei: `/schemas/risk-rules.json` - NEU
+- Vollständiges Regelwerk mit:
+  - 17 User-Risk-Rules (KYC, IBAN, Stornos, Rating, etc.)
+  - 9 Company-Risk-Rules (KYB, Fraud-Flags, Damage-Rate, etc.)
+  - 14 Transaction-Risk-Rules (Amount, Hazmat, International, etc.)
+  - Schwellenwerte (GREEN 0-30, YELLOW 31-60, RED 61-100)
+  - Score-Gewichtung (40% User, 30% Company, 30% Transaction)
+  - Mitigation-Actions Definition
+
+### 3. Risk Engine Service
+- Datei: `/src/services/risk-engine.service.ts` - NEU
+- Klasse `RiskEngine` implementiert:
+  - `evaluateUserRisk()`: User-spezifische Risikobewertung
+  - `evaluateCompanyRisk()`: Unternehmens-Risikobewertung
+  - `evaluateTransactionRisk()`: Transaktions-Risikobewertung
+  - `evaluateCombinedRisk()`: Kombinierte Bewertung mit Gewichtung
+  - Regel-Evaluierung mit AND/OR/Field Conditions
+  - Datenbank-Persistenz für Scores, Events, History
+
+### 4. API Routes
+- Datei: `/src/app/api/risk/calculate/route.ts` - NEU
+  - POST: Berechne Risk Score
+  - GET: Hole aktuellen Risk Score
+- Datei: `/src/app/api/risk/history/route.ts` - NEU
+  - GET: Hole Risk-Historie
+- Datei: `/src/app/api/risk/rules/route.ts` - NEU
+  - GET: Hole alle aktiven Regeln
+  - POST: Erstelle neue Regel
+  - PUT: Aktualisiere Regel
+  - DELETE: Deaktiviere Regel
+
+## Stage Summary:
+
+### Datenbankmodell:
+
+```
+┌─────────────────┐     ┌─────────────────┐
+│   RiskScore     │────<│   RiskEvent     │
+├─────────────────┤     ├─────────────────┤
+│ id              │     │ id              │
+│ entityType      │     │ entityType      │
+│ entityId        │     │ entityId        │
+│ score (0-100)   │     │ ruleName        │
+│ riskLevel       │     │ weight (+/-)    │
+│ userScore       │     │ metadata (JSON) │
+│ companyScore    │     └─────────────────┘
+│ transactionScore│
+│ factorsCount    │     ┌─────────────────┐
+│ lastEventAt     │────<│   RiskHistory   │
+└─────────────────┘     ├─────────────────┤
+                        │ oldScore        │
+┌─────────────────┐     │ newScore        │
+│   RiskRule      │     │ scoreChange     │
+├─────────────────┤     │ oldLevel        │
+│ id              │     │ newLevel        │
+│ name            │     │ reason          │
+│ entityType      │     └─────────────────┘
+│ category        │
+│ condition (JSON)│
+│ weight (+/-)    │
+│ active          │
+│ priority        │
+└─────────────────┘
+```
+
+### Risk Score Berechnung:
+```pseudo
+// Beispiel: User mit KYC fehlt + Neue IBAN + Hohes Rating
+UserScore = 20 (KYC) + 15 (Neue IBAN) - 10 (Rating) = 25
+
+// Beispiel: International + Gefahrgut
+TransactionScore = 20 (High Amount) + 20 (International+Hazmat) - 5 (Escrow) = 35
+
+// Combined Score
+CombinedScore = UserScore × 0.4 + CompanyScore × 0.3 + TransactionScore × 0.3
+```
+
+### Risk Levels:
+- 🟢 GREEN (0-30): Allow
+- 🟡 YELLOW (31-60): Allow + Mitigations (Delay, 2FA, GPS-Check)
+- 🔴 RED (61-100): Block + Support Ticket
+
+### API Endpoints:
+- `POST /api/risk/calculate` - Berechne Risk Score
+- `GET /api/risk/calculate?entityType=USER&entityId=xxx` - Hole Score
+- `GET /api/risk/history?entityType=USER&entityId=xxx` - Hole Historie
+- `GET/POST/PUT/DELETE /api/risk/rules` - Regelverwaltung
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT

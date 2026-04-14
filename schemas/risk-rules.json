@@ -1,0 +1,769 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "CargoBit Risk Engine Rules",
+  "description": "Vollstaendiges Regelwerk fuer die Risk-Scoring-Engine",
+  "version": "2.0.0",
+  "lastUpdated": "2026-04-15",
+
+  "riskThresholds": {
+    "green": {
+      "min": 0,
+      "max": 30,
+      "label": "GREEN",
+      "description": "Niedriges Risiko - Aktion normal erlaubt",
+      "recommendation": "ALLOW",
+      "mitigations": []
+    },
+    "yellow": {
+      "min": 31,
+      "max": 60,
+      "label": "YELLOW",
+      "description": "Erhoehtes Risiko - Aktion mit Einschraenkungen",
+      "recommendation": "ALLOW_WITH_MITIGATIONS",
+      "mitigations": [
+        "DELAY_24H",
+        "EXTRA_LOGGING",
+        "SUPPORT_NOTIFICATION"
+      ]
+    },
+    "red": {
+      "min": 61,
+      "max": 100,
+      "label": "RED",
+      "description": "Hohes Risiko - Aktion blockiert",
+      "recommendation": "BLOCK",
+      "mitigations": [
+        "MANUAL_REVIEW_REQUIRED",
+        "SUPPORT_NOTIFICATION",
+        "CREATE_TICKET"
+      ]
+    }
+  },
+
+  "scoreWeights": {
+    "user": 0.40,
+    "company": 0.30,
+    "transaction": 0.30
+  },
+
+  "userRiskRules": [
+    {
+      "id": "user_kyc_missing",
+      "name": "KYC_UNVOLLSTAENDIG",
+      "description": "KYC-Verifizierung nicht abgeschlossen",
+      "entityType": "USER",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "kyc_status",
+        "equals": "missing"
+      },
+      "weight": 20,
+      "priority": 10,
+      "active": true
+    },
+    {
+      "id": "user_kyc_pending",
+      "name": "KYC_AUSSTEHEND",
+      "description": "KYC-Verifizierung laeuft noch",
+      "entityType": "USER",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "kyc_status",
+        "equals": "pending"
+      },
+      "weight": 10,
+      "priority": 9,
+      "active": true
+    },
+    {
+      "id": "user_new_iban",
+      "name": "NEUE_IBAN_UNTER_48H",
+      "description": "Neue IBAN in den letzten 48h hinzugefuegt",
+      "entityType": "USER",
+      "category": "USER",
+      "condition": {
+        "field": "iban_age_hours",
+        "less_than": 48
+      },
+      "weight": 15,
+      "priority": 8,
+      "active": true
+    },
+    {
+      "id": "user_many_cancellations",
+      "name": "VIELE_STORNOS",
+      "description": "Hohe Stornorate in kurzer Zeit",
+      "entityType": "USER",
+      "category": "BEHAVIOR",
+      "condition": {
+        "field": "cancellation_rate",
+        "greater_than": 0.3
+      },
+      "weight": 10,
+      "priority": 7,
+      "active": true
+    },
+    {
+      "id": "user_moderate_cancellations",
+      "name": "ERHOEHITE_STORNOS",
+      "description": "Moderate Stornorate",
+      "entityType": "USER",
+      "category": "BEHAVIOR",
+      "condition": {
+        "and": [
+          { "field": "cancellation_rate", "greater_than": 0.15 },
+          { "field": "cancellation_rate", "less_than_or_equal": 0.3 }
+        ]
+      },
+      "weight": 5,
+      "priority": 6,
+      "active": true
+    },
+    {
+      "id": "user_new_account",
+      "name": "NEUES_KONTO",
+      "description": "Konto juenger als 7 Tage",
+      "entityType": "USER",
+      "category": "USER",
+      "condition": {
+        "field": "account_age_days",
+        "less_than": 7
+      },
+      "weight": 5,
+      "priority": 5,
+      "active": true
+    },
+    {
+      "id": "user_very_new_account",
+      "name": "SEHR_NEUES_KONTO",
+      "description": "Konto juenger als 24 Stunden",
+      "entityType": "USER",
+      "category": "USER",
+      "condition": {
+        "field": "account_age_days",
+        "less_than": 1
+      },
+      "weight": 10,
+      "priority": 6,
+      "active": true
+    },
+    {
+      "id": "user_active_security_flag",
+      "name": "AKTIVE_SICHERHEITS_FLAG",
+      "description": "Aktive Sicherheits-Flags vorhanden",
+      "entityType": "USER",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "active_security_flags",
+        "greater_than": 0
+      },
+      "weight": 25,
+      "priority": 15,
+      "active": true
+    },
+    {
+      "id": "user_critical_security_flag",
+      "name": "KRITISCHE_SICHERHEITS_FLAG",
+      "description": "Kritische Sicherheits-Flags",
+      "entityType": "USER",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "critical_security_flags",
+        "greater_than": 0
+      },
+      "weight": 35,
+      "priority": 20,
+      "active": true
+    },
+    {
+      "id": "user_recent_fraud_flag",
+      "name": "KUERZLICHER_BETRUGSVERDACHT",
+      "description": "Betrugsverdacht in den letzten 90 Tagen",
+      "entityType": "USER",
+      "category": "BEHAVIOR",
+      "condition": {
+        "field": "fraud_flag_days",
+        "less_than": 90
+      },
+      "weight": 30,
+      "priority": 18,
+      "active": true
+    },
+    {
+      "id": "user_multiple_failed_logins",
+      "name": "MEHRERE_FEHLGESCHLAGENE_LOGINS",
+      "description": "Mehrere fehlgeschlagene Login-Versuche",
+      "entityType": "USER",
+      "category": "BEHAVIOR",
+      "condition": {
+        "field": "failed_logins_7d",
+        "greater_than": 5
+      },
+      "weight": 8,
+      "priority": 4,
+      "active": true
+    },
+    {
+      "id": "user_many_country_changes",
+      "name": "VIELE_LAENDERWECHSEL",
+      "description": "Ungewoehnlich viele Laenderwechsel",
+      "entityType": "USER",
+      "category": "BEHAVIOR",
+      "condition": {
+        "field": "distinct_countries_30d",
+        "greater_than": 10
+      },
+      "weight": 12,
+      "priority": 4,
+      "active": true
+    },
+    {
+      "id": "user_low_rating",
+      "name": "NIEDRIGE_BEWERTUNG",
+      "description": "Bewertung unter 3.0 bei min. 5 Bewertungen",
+      "entityType": "USER",
+      "category": "BEHAVIOR",
+      "condition": {
+        "and": [
+          { "field": "rating_avg", "less_than": 3.0 },
+          { "field": "rating_count", "greater_than_or_equal": 5 }
+        ]
+      },
+      "weight": 10,
+      "priority": 5,
+      "active": true
+    },
+    {
+      "id": "user_high_rating",
+      "name": "HOHE_BEWERTUNG",
+      "description": "Exzellente Bewertung ueber 4.7",
+      "entityType": "USER",
+      "category": "BEHAVIOR",
+      "condition": {
+        "and": [
+          { "field": "rating_avg", "greater_than": 4.7 },
+          { "field": "rating_count", "greater_than_or_equal": 10 }
+        ]
+      },
+      "weight": -10,
+      "priority": 3,
+      "active": true
+    },
+    {
+      "id": "user_long_history",
+      "name": "LANGE_HISTORIE",
+      "description": "Konto laenger als 1 Jahr aktiv",
+      "entityType": "USER",
+      "category": "USER",
+      "condition": {
+        "field": "account_age_days",
+        "greater_than": 365
+      },
+      "weight": -10,
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "user_many_completed_transports",
+      "name": "VIELE_ABGESCHLOSSENE_TRANSPORTE",
+      "description": "Ueber 50 erfolgreiche Transporte",
+      "entityType": "USER",
+      "category": "USER",
+      "condition": {
+        "field": "completed_transports",
+        "greater_than_or_equal": 50
+      },
+      "weight": -5,
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "user_enhanced_kyc",
+      "name": "ERWEITERTES_KYC",
+      "description": "Erweitertes KYC Level erreicht",
+      "entityType": "USER",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "kyc_level",
+        "equals": "enhanced"
+      },
+      "weight": -8,
+      "priority": 3,
+      "active": true
+    }
+  ],
+
+  "companyRiskRules": [
+    {
+      "id": "company_kyb_missing",
+      "name": "KYB_FEHLT",
+      "description": "KYB-Verifizierung nicht abgeschlossen",
+      "entityType": "COMPANY",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "kyb_status",
+        "equals": "missing"
+      },
+      "weight": 20,
+      "priority": 10,
+      "active": true
+    },
+    {
+      "id": "company_kyb_pending",
+      "name": "KYB_AUSSTEHEND",
+      "description": "KYB-Verifizierung laeuft noch",
+      "entityType": "COMPANY",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "kyb_status",
+        "equals": "pending"
+      },
+      "weight": 10,
+      "priority": 9,
+      "active": true
+    },
+    {
+      "id": "company_fraud_flags",
+      "name": "AKTIVE_FRAUD_FLAGS",
+      "description": "Aktive Fraud-Flags",
+      "entityType": "COMPANY",
+      "category": "COMPANY",
+      "condition": {
+        "field": "fraud_flags",
+        "greater_than": 0
+      },
+      "weight": 25,
+      "priority": 15,
+      "active": true
+    },
+    {
+      "id": "company_high_damage_rate",
+      "name": "VIELE_SCHADENSMELDUNGEN",
+      "description": "Hohe Schadensrate",
+      "entityType": "COMPANY",
+      "category": "COMPANY",
+      "condition": {
+        "field": "damage_rate",
+        "greater_than": 0.05
+      },
+      "weight": 10,
+      "priority": 7,
+      "active": true
+    },
+    {
+      "id": "company_new_company",
+      "name": "NEUES_UNTERNEHMEN",
+      "description": "Unternehmen juenger als 30 Tage",
+      "entityType": "COMPANY",
+      "category": "COMPANY",
+      "condition": {
+        "field": "company_age_days",
+        "less_than": 30
+      },
+      "weight": 8,
+      "priority": 5,
+      "active": true
+    },
+    {
+      "id": "company_open_fraud_tickets",
+      "name": "OFFENE_BETRUGS_TICKETS",
+      "description": "Offene Betrugs-Tickets",
+      "entityType": "COMPANY",
+      "category": "COMPANY",
+      "condition": {
+        "field": "open_fraud_tickets",
+        "greater_than": 0
+      },
+      "weight": 15,
+      "priority": 12,
+      "active": true
+    },
+    {
+      "id": "company_good_history",
+      "name": "LANGJAHRIGE_HISTORIE",
+      "description": "Unternehmen laenger als 3 Jahre aktiv",
+      "entityType": "COMPANY",
+      "category": "COMPANY",
+      "condition": {
+        "field": "company_age_years",
+        "greater_than": 3
+      },
+      "weight": -10,
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "company_high_volume_no_issues",
+      "name": "HOHE_VOLUMINA_OHNE_AUFFAELLIGKEITEN",
+      "description": "Ueber 100 Transporte ohne Schaeden",
+      "entityType": "COMPANY",
+      "category": "COMPANY",
+      "condition": {
+        "and": [
+          { "field": "total_transports", "greater_than": 100 },
+          { "field": "damage_count", "equals": 0 }
+        ]
+      },
+      "weight": -10,
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "company_verified_vat",
+      "name": "VALIDATED_VAT",
+      "description": "USt-IdNr. verifiziert",
+      "entityType": "COMPANY",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "vat_verified",
+        "equals": true
+      },
+      "weight": -5,
+      "priority": 2,
+      "active": true
+    }
+  ],
+
+  "transactionRiskRules": [
+    {
+      "id": "tx_high_amount",
+      "name": "HOHER_BETRAG",
+      "description": "Betrag ueber 50.000 EUR",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "field": "amount",
+        "greater_than": 50000
+      },
+      "weight": 20,
+      "priority": 10,
+      "active": true
+    },
+    {
+      "id": "tx_very_high_amount",
+      "name": "SEHR_HOHER_BETRAG",
+      "description": "Betrag ueber 100.000 EUR",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "field": "amount",
+        "greater_than": 100000
+      },
+      "weight": 25,
+      "priority": 12,
+      "active": true
+    },
+    {
+      "id": "tx_new_iban_high_amount",
+      "name": "NEUE_IBAN_HOHER_BETRAG",
+      "description": "Neue IBAN mit Betrag ueber 25.000 EUR",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "and": [
+          { "field": "iban_age_hours", "less_than": 48 },
+          { "field": "amount", "greater_than": 25000 }
+        ]
+      },
+      "weight": 15,
+      "priority": 11,
+      "active": true
+    },
+    {
+      "id": "tx_international_hazardous",
+      "name": "INTERNATIONAL_GEFAHRGUT",
+      "description": "Internationaler Gefahrgut-Transport",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "and": [
+          { "field": "international", "equals": true },
+          { "field": "hazmat", "equals": true }
+        ]
+      },
+      "weight": 20,
+      "priority": 10,
+      "active": true
+    },
+    {
+      "id": "tx_critical_tunnel_code",
+      "name": "KRITISCHER_TUNNELCODE",
+      "description": "Kritische Tunnelcodes (C/D, D, E)",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "field": "tunnel_codes",
+        "contains_any": ["C/D", "D", "E"]
+      },
+      "weight": 15,
+      "priority": 8,
+      "active": true
+    },
+    {
+      "id": "tx_adr_expired",
+      "name": "ADR_ABGELAUFEN",
+      "description": "ADR-Zertifizierung abgelaufen",
+      "entityType": "TRANSACTION",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "adr_expired",
+        "equals": true
+      },
+      "weight": 20,
+      "priority": 15,
+      "active": true
+    },
+    {
+      "id": "tx_license_expired",
+      "name": "FUEHRERSCHEIN_ABGELAUFEN",
+      "description": "Fuehrerschein abgelaufen",
+      "entityType": "TRANSACTION",
+      "category": "DOCUMENT",
+      "condition": {
+        "field": "license_expired",
+        "equals": true
+      },
+      "weight": 25,
+      "priority": 20,
+      "active": true
+    },
+    {
+      "id": "tx_no_escrow_high_value",
+      "name": "KEIN_ESCROW_HOHER_BETRAG",
+      "description": "Kein Escrow bei Betrag ueber 10.000 EUR",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "and": [
+          { "field": "has_escrow", "equals": false },
+          { "field": "amount", "greater_than": 10000 }
+        ]
+      },
+      "weight": 5,
+      "priority": 5,
+      "active": true
+    },
+    {
+      "id": "tx_no_insurance_high_value",
+      "name": "KEINE_VERSICHERUNG_HOHER_BETRAG",
+      "description": "Keine Versicherung bei Betrag ueber 25.000 EUR",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "and": [
+          { "field": "has_insurance", "equals": false },
+          { "field": "amount", "greater_than": 25000 }
+        ]
+      },
+      "weight": 5,
+      "priority": 5,
+      "active": true
+    },
+    {
+      "id": "tx_international_new_driver",
+      "name": "INTERNATIONAL_NEUER_FAHRER",
+      "description": "Internationaler Transport mit neuem Fahrer",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "and": [
+          { "field": "international", "equals": true },
+          { "field": "driver_experience_years", "less_than": 1 }
+        ]
+      },
+      "weight": 10,
+      "priority": 7,
+      "active": true
+    },
+    {
+      "id": "tx_repeated_customer",
+      "name": "WIEDERKEHRENDER_KUNDE",
+      "description": "Wiederkehrender Kunde",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "field": "repeat_customer",
+        "equals": true
+      },
+      "weight": -10,
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "tx_has_escrow",
+      "name": "ESCROW_AKTIV",
+      "description": "Escrow-Zahlung aktiv",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "field": "has_escrow",
+        "equals": true
+      },
+      "weight": -5,
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "tx_has_insurance",
+      "name": "VERSICHERUNG_AKTIV",
+      "description": "Transportversicherung aktiv",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "field": "has_insurance",
+        "equals": true
+      },
+      "weight": -5,
+      "priority": 2,
+      "active": true
+    },
+    {
+      "id": "tx_verified_partner",
+      "name": "VERIFIZIERTER_PARTNER",
+      "description": "Transaktion mit verifiziertem Partner",
+      "entityType": "TRANSACTION",
+      "category": "TRANSACTION",
+      "condition": {
+        "field": "partner_verified",
+        "equals": true
+      },
+      "weight": -8,
+      "priority": 2,
+      "active": true
+    }
+  ],
+
+  "mitigationActions": {
+    "DELAY_24H": {
+      "name": "24H_DELAY",
+      "description": "24-stuendige Wartezeit",
+      "applicableActions": ["INITIATE_PAYOUT", "HIGH_VALUE_TRANSPORT"],
+      "requiresUserConfirmation": false
+    },
+    "EXTRA_LOGGING": {
+      "name": "ERWEITERTES_LOGGING",
+      "description": "Erweitertes Logging aktivieren",
+      "applicableActions": ["*"],
+      "requiresUserConfirmation": false
+    },
+    "GPS_VERIFICATION": {
+      "name": "GPS_VERIFIZIERUNG",
+      "description": "GPS-Standort verifizieren",
+      "applicableActions": ["ACCEPT_JOB", "UPDATE_STATUS", "ASSIGN_DRIVER"],
+      "requiresUserConfirmation": true
+    },
+    "TWO_FACTOR_CHALLENGE": {
+      "name": "2FA_CHALLENGE",
+      "description": "2-Faktor-Authentifizierung erforderlich",
+      "applicableActions": ["INITIATE_PAYOUT", "ACCEPT_OFFER"],
+      "requiresUserConfirmation": true
+    },
+    "DOCUMENT_RECHECK": {
+      "name": "DOKUMENTEN_CHECK",
+      "description": "Dokumente erneut pruefen",
+      "applicableActions": ["ACCEPT_JOB", "CREATE_TRANSPORT"],
+      "requiresUserConfirmation": false
+    },
+    "SUPPORT_NOTIFICATION": {
+      "name": "SUPPORT_BENACHRICHTIGUNG",
+      "description": "Support-Team benachrichtigen",
+      "applicableActions": ["*"],
+      "requiresUserConfirmation": false
+    },
+    "AMOUNT_LIMIT": {
+      "name": "BETRAGSLIMIT",
+      "description": "Betrag auf Maximum begrenzen",
+      "applicableActions": ["INITIATE_PAYOUT"],
+      "requiresUserConfirmation": false
+    },
+    "MANUAL_REVIEW_REQUIRED": {
+      "name": "MANUELLE_PRUEFUNG",
+      "description": "Manuelle Pruefung durch Support erforderlich",
+      "applicableActions": ["*"],
+      "requiresUserConfirmation": false
+    },
+    "CREATE_TICKET": {
+      "name": "TICKET_ERSTELLEN",
+      "description": "Support-Ticket automatisch erstellen",
+      "applicableActions": ["*"],
+      "requiresUserConfirmation": false
+    }
+  },
+
+  "examples": {
+    "userRiskCalculation": {
+      "description": "Beispiel: UserRiskScore Berechnung",
+      "input": {
+        "userId": "user_123",
+        "kyc_status": "missing",
+        "iban_age_hours": 24,
+        "rating_avg": 4.8,
+        "account_age_days": 100
+      },
+      "triggeredRules": [
+        { "rule": "user_kyc_missing", "weight": 20 },
+        { "rule": "user_new_iban", "weight": 15 },
+        { "rule": "user_high_rating", "weight": -10 }
+      ],
+      "result": {
+        "score": 25,
+        "level": "GREEN",
+        "recommendation": "ALLOW"
+      }
+    },
+    "companyRiskCalculation": {
+      "description": "Beispiel: CompanyRiskScore Berechnung",
+      "input": {
+        "companyId": "company_456",
+        "kyb_status": "approved",
+        "fraud_flags": 0,
+        "company_age_years": 5
+      },
+      "triggeredRules": [
+        { "rule": "company_good_history", "weight": -10 }
+      ],
+      "result": {
+        "score": 0,
+        "level": "GREEN",
+        "recommendation": "ALLOW"
+      }
+    },
+    "transactionRiskCalculation": {
+      "description": "Beispiel: TransactionRiskScore Berechnung",
+      "input": {
+        "amount": 75000,
+        "international": true,
+        "hazmat": true,
+        "has_escrow": true
+      },
+      "triggeredRules": [
+        { "rule": "tx_high_amount", "weight": 20 },
+        { "rule": "tx_international_hazardous", "weight": 20 },
+        { "rule": "tx_has_escrow", "weight": -5 }
+      ],
+      "result": {
+        "score": 35,
+        "level": "YELLOW",
+        "recommendation": "ALLOW_WITH_MITIGATIONS"
+      }
+    },
+    "combinedRiskCalculation": {
+      "description": "Beispiel: CombinedRiskScore Berechnung",
+      "input": {
+        "userScore": 25,
+        "companyScore": 10,
+        "transactionScore": 35
+      },
+      "calculation": {
+        "user": "25 * 0.40 = 10",
+        "company": "10 * 0.30 = 3",
+        "transaction": "35 * 0.30 = 10.5"
+      },
+      "result": {
+        "score": 23.5,
+        "level": "GREEN",
+        "recommendation": "ALLOW"
+      }
+    }
+  }
+}
