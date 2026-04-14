@@ -1,0 +1,842 @@
+openapi: 3.0.3
+info:
+  title: CargoBit Security Gateway API
+  description: |
+    ## Hybrid Security Layer API
+    
+    Der Security Gateway kombiniert **Permission Matrix** und **Risk Scoring** in einem einzigen API-Call.
+    
+    ### Architektur
+    ```
+    Client Service → Security Gateway → Risk Engine → Database
+                            ↓
+                    Notification Services (Slack, Email, SMS)
+    ```
+    
+    ### Risk Levels
+    | Level | Score | Decision |
+    |-------|-------|----------|
+    | 🟢 GREEN | 0-30 | `allowed` |
+    | 🟡 YELLOW | 31-60 | `allowed_with_mitigation` |
+    | 🔴 RED | 61-100 | `blocked` |
+    
+    ### Authentifizierung
+    Service-to-Service Authentifizierung via JWT Bearer Token.
+    
+    ### Rate Limits
+    - **Default**: 100 requests / 10 Sekunden pro Client-Service
+    - **Sensitive Actions**: 20 requests / 10 Sekunden (INITIATE_PAYOUT, ACCEPT_OFFER, ASSIGN_DRIVER)
+    
+  version: 1.0.0
+  contact:
+    name: CargoBit Security Team
+    email: security@cargobit.com
+  license:
+    name: Proprietary
+    url: https://cargobit.com/license
+
+servers:
+  - url: http://localhost:3004
+    description: Development Server
+  - url: https://api.cargobit.com/security
+    description: Production Server
+
+tags:
+  - name: security
+    description: Haupt-Security-Endpunkte
+  - name: monitoring
+    description: Health-Checks und Metriken
+  - name: admin
+    description: Admin-Endpunkte für Audit und Tickets
+
+paths:
+  /security/check:
+    post:
+      summary: Permission + Risk Check für eine Aktion
+      description: |
+        Führt eine hybride Security-Prüfung durch:
+        1. **Permission Check**: Prüft ob die User-Rolle die Aktion ausführen darf
+        2. **Risk Check**: Bewertet das Risiko basierend auf Entity-Kontext
+        
+        Bei HIGH RISK (RED) wird automatisch:
+        - Support-Ticket erstellt (Status: OPEN, Priority: HIGH)
+        - Slack/Teams Alert gesendet
+        - Email an Security-Team versendet
+      operationId: securityCheck
+      tags:
+        - security
+      security:
+        - serviceAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SecurityCheckRequest'
+            examples:
+              acceptOffer:
+                summary: Dispatcher akzeptiert ein Angebot
+                value:
+                  requestId: "req_550e8400-e29b-41d4-a716-446655440000"
+                  user:
+                    id: "user_12345"
+                    role: "DISPATCHER"
+                    companyId: "comp_789"
+                  action: "ACCEPT_OFFER"
+                  entity:
+                    type: "transaction"
+                    id: "tx_456"
+                    context:
+                      amount: 5000
+                      currency: "EUR"
+                      ibanAgeDays: 3
+                      userId: "user_12345"
+              initiatePayout:
+                summary: Shipper initiiert Payout
+                value:
+                  requestId: "req_660e8400-e29b-41d4-a716-446655440001"
+                  user:
+                    id: "user_67890"
+                    role: "SHIPPER_COMPANY"
+                    companyId: "comp_123"
+                  action: "INITIATE_PAYOUT"
+                  entity:
+                    type: "wallet"
+                    id: "wallet_456"
+                    context:
+                      amount: 15000
+                      currency: "EUR"
+                      iban: "DE89370400440532013000"
+      responses:
+        '200':
+          description: Security Decision erfolgreich zurückgegeben
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/AllowedResponse'
+                  - $ref: '#/components/schemas/AllowedWithMitigationResponse'
+                  - $ref: '#/components/schemas/BlockedResponse'
+                  - $ref: '#/components/schemas/PermissionDeniedResponse'
+              examples:
+                allowed:
+                  summary: Aktion erlaubt (GREEN)
+                  value:
+                    allowed: true
+                    decision: "allowed"
+                    risk:
+                      score: 15
+                      level: "GREEN"
+                      triggeredRules: []
+                    correlationId: "corr_1704067200000_abc123"
+                allowedWithMitigation:
+                  summary: Aktion erlaubt mit Mitigations (YELLOW)
+                  value:
+                    allowed: true
+                    decision: "allowed_with_mitigation"
+                    risk:
+                      score: 45
+                      level: "YELLOW"
+                      triggeredRules:
+                        - "NEW_IBAN"
+                        - "FIRST_PAYOUT"
+                    mitigations:
+                      - "delay_payout_24h"
+                      - "extra_logging"
+                      - "support_notification"
+                    correlationId: "corr_1704067200000_def456"
+                blocked:
+                  summary: Aktion blockiert (RED)
+                  value:
+                    allowed: false
+                    decision: "blocked"
+                    risk:
+                      score: 85
+                      level: "RED"
+                      triggeredRules:
+                        - "HIGH_AMOUNT_NEW_USER"
+                        - "NEW_IBAN"
+                        - "GEO_MISMATCH"
+                    errorCode: "HIGH_RISK_BLOCKED"
+                    message: "Action blocked due to high risk. Case forwarded to support."
+                    supportTicketId: "st_1704067200000_ghi789"
+                    correlationId: "corr_1704067200000_jkl012"
+                    eventFlow:
+                      ticket:
+                        id: "st_1704067200000_ghi789"
+                        priority: "critical"
+                      notifications:
+                        email:
+                          id: "email_1704067200000"
+                          status: "sent"
+                        slack:
+                          id: "slack_1704067200000"
+                          status: "sent"
+                        sms: true
+        '400':
+          description: Invalid request - Fehlende oder ungültige Felder
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                allowed: false
+                decision: "permission_denied"
+                errorCode: "INVALID_REQUEST"
+                message: "Missing required fields: user.id, user.role, action, entity.type, entity.id"
+                correlationId: "corr_1704067200000_mno345"
+        '401':
+          description: Unauthorized - Fehlender oder ungültiger Service-Token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                allowed: false
+                decision: "permission_denied"
+                errorCode: "UNAUTHORIZED"
+                message: "Missing or invalid service token"
+        '429':
+          description: Rate Limit exceeded
+          headers:
+            Retry-After:
+              schema:
+                type: integer
+              description: Sekunden bis zum nächsten erlaubten Request
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: Verbleibende Requests im aktuellen Fenster
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                allowed: false
+                decision: "blocked"
+                errorCode: "RATE_LIMIT_EXCEEDED"
+                message: "Rate limit exceeded. Please slow down your requests."
+                correlationId: "corr_1704067200000_pqr678"
+        '500':
+          description: Internal Server Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                allowed: false
+                decision: "error"
+                errorCode: "INTERNAL_ERROR"
+                message: "Internal server error. Please contact support."
+        '503':
+          description: Security Service Unavailable - Risk Engine nicht erreichbar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                allowed: false
+                decision: "blocked"
+                errorCode: "SECURITY_SERVICE_UNAVAILABLE"
+                message: "Security service temporarily unavailable. Please retry."
+
+  /security/health:
+    get:
+      summary: Service Health Check
+      description: Gibt den Gesundheits-Status des Security Gateway und aller Dependencies zurück
+      operationId: healthCheck
+      tags:
+        - monitoring
+      responses:
+        '200':
+          description: Service ist gesund
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok, degraded]
+                  service:
+                    type: string
+                  port:
+                    type: integer
+                  dependencies:
+                    type: object
+                    properties:
+                      riskEngine:
+                        type: string
+                        enum: [healthy, unavailable]
+                  fallbackMode:
+                    type: string
+                    enum: [PERMISSION_ONLY, BLOCK_ALL]
+              example:
+                status: "ok"
+                service: "security-gateway"
+                port: 3004
+                dependencies:
+                  riskEngine: "healthy"
+                fallbackMode: "PERMISSION_ONLY"
+
+  /security/permissions:
+    get:
+      summary: Permission Matrix abrufen
+      description: Gibt die vollständige Permission Matrix für alle Rollen zurück
+      operationId: getPermissions
+      tags:
+        - admin
+      security:
+        - serviceAuth: []
+      responses:
+        '200':
+          description: Permission Matrix
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      additionalProperties:
+                        type: boolean
+
+  /security/error-codes:
+    get:
+      summary: Error Code Definitionen
+      description: Gibt alle Error Codes mit HTTP-Status und Beschreibung zurück
+      operationId: getErrorCodes
+      tags:
+        - admin
+      responses:
+        '200':
+          description: Error Code Definitionen
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    additionalProperties:
+                      type: object
+                      properties:
+                        httpStatus:
+                          type: integer
+                        message:
+                          type: string
+
+  /security/audit:
+    get:
+      summary: Audit Logs abrufen
+      description: Gibt Audit-Logs für Security-Entscheidungen zurück
+      operationId: getAuditLogs
+      tags:
+        - admin
+      security:
+        - serviceAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+            maximum: 1000
+        - name: userId
+          in: query
+          schema:
+            type: string
+          description: Filtern nach User-ID
+      responses:
+        '200':
+          description: Audit Logs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AuditLogEntry'
+
+  /security/tickets:
+    get:
+      summary: Support Tickets abrufen
+      description: Gibt automatisch erstellte Support-Tickets für HIGH-RISK Events zurück
+      operationId: getTickets
+      tags:
+        - admin
+      security:
+        - serviceAuth: []
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 100
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [open, in_progress, resolved]
+          description: Filtern nach Ticket-Status
+      responses:
+        '200':
+          description: Support Tickets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SupportTicket'
+
+  /security/rate-limits:
+    get:
+      summary: Rate Limit Konfiguration
+      description: Gibt die aktuellen Rate-Limit-Einstellungen zurück
+      operationId: getRateLimits
+      tags:
+        - admin
+      responses:
+        '200':
+          description: Rate Limit Config
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      default:
+                        $ref: '#/components/schemas/RateLimitConfig'
+                      sensitive:
+                        $ref: '#/components/schemas/RateLimitConfig'
+                      sensitiveActions:
+                        type: array
+                        items:
+                          type: string
+
+  /security/mitigations:
+    get:
+      summary: Mitigation Definitionen
+      description: Gibt die Mitigation-Actions pro Risk-Level zurück
+      operationId: getMitigations
+      tags:
+        - admin
+      responses:
+        '200':
+          description: Mitigation Actions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success:
+                    type: boolean
+                  data:
+                    type: object
+                    properties:
+                      GREEN:
+                        type: array
+                        items:
+                          type: string
+                      YELLOW:
+                        type: array
+                        items:
+                          type: string
+                      RED:
+                        type: array
+                        items:
+                          type: string
+              example:
+                success: true
+                data:
+                  GREEN: []
+                  YELLOW:
+                    - "delay_payout_24h"
+                    - "extra_logging"
+                    - "support_notification"
+                  RED:
+                    - "manual_review_required"
+                    - "support_notification"
+                    - "create_ticket"
+
+components:
+  securitySchemes:
+    serviceAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: |
+        Service-to-Service Authentifizierung via JWT Bearer Token.
+        
+        Der Token muss im `Authorization` Header gesendet werden:
+        ```
+        Authorization: Bearer <service-token>
+        ```
+
+  schemas:
+    SecurityCheckRequest:
+      type: object
+      required:
+        - user
+        - action
+        - entity
+      properties:
+        requestId:
+          type: string
+          format: uuid
+          description: Optionale Correlation ID für Tracing
+        user:
+          $ref: '#/components/schemas/UserContext'
+        action:
+          $ref: '#/components/schemas/SecurityAction'
+        entity:
+          $ref: '#/components/schemas/EntityContext'
+
+    UserContext:
+      type: object
+      required:
+        - id
+        - role
+      properties:
+        id:
+          type: string
+          description: User ID
+        role:
+          $ref: '#/components/schemas/SystemRole'
+        companyId:
+          type: string
+          description: Company ID für Unternehmens-Accounts
+        email:
+          type: string
+          format: email
+          description: User Email (optional)
+
+    SystemRole:
+      type: string
+      enum:
+        - ADMIN
+        - SUPPORT
+        - SHIPPER_COMPANY
+        - SHIPPER_PRIVATE
+        - DISPATCHER
+        - DRIVER_SELF_EMPLOYED
+        - MARKETER
+      description: |
+        System-Rollen in CargoBit:
+        - `ADMIN`: Vollzugriff auf Admin-Funktionen
+        - `SUPPORT`: Read-Only für Support
+        - `SHIPPER_COMPANY`: Unternehmens-Versender
+        - `SHIPPER_PRIVATE`: Privat-Versender
+        - `DISPATCHER`: Dispatcher mit Fahrzeug-Verwaltung
+        - `DRIVER_SELF_EMPLOYED`: Selbstständige Fahrer
+        - `MARKETER`: Marketing-Zugang
+
+    SecurityAction:
+      type: string
+      enum:
+        - CREATE_TRANSPORT
+        - VIEW_TRANSPORT
+        - ACCEPT_OFFER
+        - ACCEPT_JOB
+        - MAKE_OFFER
+        - ASSIGN_DRIVER
+        - UPDATE_STATUS
+        - VIEW_WALLET
+        - INITIATE_PAYOUT
+        - MANAGE_VEHICLES
+        - MANAGE_USERS
+        - MANAGE_PLANS
+      description: |
+        Verfügbare Security-Aktionen.
+        
+        **Sensitive Actions** (strengere Rate-Limits):
+        - `INITIATE_PAYOUT`
+        - `ACCEPT_OFFER`
+        - `ASSIGN_DRIVER`
+
+    EntityContext:
+      type: object
+      required:
+        - type
+        - id
+      properties:
+        type:
+          type: string
+          enum: [user, company, transaction, transport, wallet, vehicle]
+          description: Entity-Typ für Risk-Bewertung
+        id:
+          type: string
+          description: Entity ID
+        context:
+          type: object
+          additionalProperties: true
+          description: Zusätzlicher Kontext für Risk-Engine
+
+    RiskResult:
+      type: object
+      properties:
+        score:
+          type: integer
+          minimum: 0
+          maximum: 100
+          description: Risk Score (0-100)
+        level:
+          type: string
+          enum: [GREEN, YELLOW, RED]
+          description: Risk Level
+        triggeredRules:
+          type: array
+          items:
+            type: string
+          description: Getriggerte Risk-Rules
+
+    AllowedResponse:
+      type: object
+      required:
+        - allowed
+        - decision
+      properties:
+        allowed:
+          type: boolean
+          example: true
+        decision:
+          type: string
+          enum: [allowed]
+        risk:
+          $ref: '#/components/schemas/RiskResult'
+        correlationId:
+          type: string
+
+    AllowedWithMitigationResponse:
+      type: object
+      required:
+        - allowed
+        - decision
+        - mitigations
+      properties:
+        allowed:
+          type: boolean
+          example: true
+        decision:
+          type: string
+          enum: [allowed_with_mitigation]
+        risk:
+          $ref: '#/components/schemas/RiskResult'
+        mitigations:
+          type: array
+          items:
+            type: string
+            enum:
+              - delay_payout_24h
+              - extra_logging
+              - support_notification
+        correlationId:
+          type: string
+
+    BlockedResponse:
+      type: object
+      required:
+        - allowed
+        - decision
+        - errorCode
+      properties:
+        allowed:
+          type: boolean
+          example: false
+        decision:
+          type: string
+          enum: [blocked]
+        risk:
+          $ref: '#/components/schemas/RiskResult'
+        errorCode:
+          type: string
+          enum:
+            - HIGH_RISK_BLOCKED
+            - SECURITY_SERVICE_UNAVAILABLE
+        message:
+          type: string
+        supportTicketId:
+          type: string
+        correlationId:
+          type: string
+        eventFlow:
+          type: object
+          properties:
+            ticket:
+              type: object
+              properties:
+                id:
+                  type: string
+                priority:
+                  type: string
+                  enum: [high, critical]
+            notifications:
+              type: object
+              properties:
+                email:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    status:
+                      type: string
+                      enum: [sent, failed]
+                slack:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    status:
+                      type: string
+                      enum: [sent, failed]
+                sms:
+                  type: boolean
+
+    PermissionDeniedResponse:
+      type: object
+      required:
+        - allowed
+        - decision
+        - errorCode
+      properties:
+        allowed:
+          type: boolean
+          example: false
+        decision:
+          type: string
+          enum: [permission_denied]
+        errorCode:
+          type: string
+          enum: [PERMISSION_DENIED]
+        message:
+          type: string
+        correlationId:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - allowed
+        - decision
+        - errorCode
+        - message
+      properties:
+        allowed:
+          type: boolean
+          example: false
+        decision:
+          type: string
+          enum: [permission_denied, blocked, error]
+        errorCode:
+          $ref: '#/components/schemas/SecurityErrorCode'
+        message:
+          type: string
+        correlationId:
+          type: string
+
+    SecurityErrorCode:
+      type: string
+      enum:
+        - PERMISSION_DENIED
+        - HIGH_RISK_BLOCKED
+        - SECURITY_SERVICE_UNAVAILABLE
+        - INVALID_REQUEST
+        - RATE_LIMIT_EXCEEDED
+        - UNAUTHORIZED
+        - INTERNAL_ERROR
+      description: |
+        Error Codes und ihre Bedeutung:
+        
+        | Code | HTTP Status | Beschreibung |
+        |------|-------------|--------------|
+        | `PERMISSION_DENIED` | 403 | Rolle hat keine Berechtigung |
+        | `HIGH_RISK_BLOCKED` | 403 | Aktion wegen hohem Risiko blockiert |
+        | `SECURITY_SERVICE_UNAVAILABLE` | 503 | Risk Engine nicht erreichbar |
+        | `INVALID_REQUEST` | 400 | Ungültiger Request |
+        | `RATE_LIMIT_EXCEEDED` | 429 | Rate Limit überschritten |
+        | `UNAUTHORIZED` | 401 | Fehlender/ungültiger Token |
+        | `INTERNAL_ERROR` | 500 | Interner Server-Fehler |
+
+    AuditLogEntry:
+      type: object
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+        correlationId:
+          type: string
+        clientId:
+          type: string
+        userId:
+          type: string
+        action:
+          type: string
+        result:
+          type: string
+          enum: [allowed, allowed_with_mitigation, blocked, permission_denied]
+        errorCode:
+          $ref: '#/components/schemas/SecurityErrorCode'
+        riskScore:
+          type: integer
+        riskLevel:
+          type: string
+          enum: [GREEN, YELLOW, RED]
+        reason:
+          type: string
+
+    SupportTicket:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        action:
+          type: string
+        riskScore:
+          type: integer
+        riskLevel:
+          type: string
+          enum: [GREEN, YELLOW, RED]
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [open, in_progress, resolved]
+        createdAt:
+          type: string
+          format: date-time
+
+    RateLimitConfig:
+      type: object
+      properties:
+        requests:
+          type: integer
+          description: Maximale Requests pro Fenster
+        windowMs:
+          type: integer
+          description: Fenster-Größe in Millisekunden
+
+security:
+  - serviceAuth: []
