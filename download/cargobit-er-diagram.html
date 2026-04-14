@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CargoBit ER-Diagramm</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: #F8FAFC;
+            padding: 40px;
+            min-width: 2400px;
+        }
+        
+        .title {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .title h1 {
+            font-size: 28px;
+            color: #1E293B;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .title p {
+            color: #64748B;
+            font-size: 14px;
+        }
+        
+        .diagram-container {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 30px;
+            max-width: 2400px;
+            margin: 0 auto;
+        }
+        
+        .module {
+            background: #FFFFFF;
+            border-radius: 12px;
+            padding: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08), 0 1px 2px rgba(0,0,0,0.04);
+        }
+        
+        .module-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 16px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #E2E8F0;
+        }
+        
+        .module-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        
+        .module-title {
+            font-size: 15px;
+            font-weight: 600;
+            color: #1E293B;
+        }
+        
+        /* Module Colors */
+        .module-users .module-icon { background: #EFF6FF; color: #3B82F6; }
+        .module-users .module-title { color: #1D4ED8; }
+        
+        .module-companies .module-icon { background: #F0FDF4; color: #22C55E; }
+        .module-companies .module-title { color: #16A34A; }
+        
+        .module-security .module-icon { background: #FEF3C7; color: #F59E0B; }
+        .module-security .module-title { color: #D97706; }
+        
+        .module-vehicles .module-icon { background: #F5F3FF; color: #8B5CF6; }
+        .module-vehicles .module-title { color: #7C3AED; }
+        
+        .module-transports .module-icon { background: #ECFDF5; color: #10B981; }
+        .module-transports .module-title { color: #059669; }
+        
+        .module-matching .module-icon { background: #FFF7ED; color: #F97316; }
+        .module-matching .module-title { color: #EA580C; }
+        
+        .module-tracking .module-icon { background: #FDF2F8; color: #EC4899; }
+        .module-tracking .module-title { color: #DB2777; }
+        
+        .module-wallet .module-icon { background: #F0FDFA; color: #14B8A6; }
+        .module-wallet .module-title { color: #0D9488; }
+        
+        .module-plans .module-icon { background: #EEF2FF; color: #6366F1; }
+        .module-plans .module-title { color: #4F46E5; }
+        
+        .module-support .module-icon { background: #FEF2F2; color: #EF4444; }
+        .module-support .module-title { color: #DC2626; }
+        
+        .module-intl .module-icon { background: #EFF6FF; color: #0EA5E9; }
+        .module-intl .module-title { color: #0284C7; }
+        
+        .entity {
+            background: #FAFBFC;
+            border: 1px solid #E2E8F0;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            overflow: hidden;
+        }
+        
+        .entity:last-child {
+            margin-bottom: 0;
+        }
+        
+        .entity-name {
+            background: #F1F5F9;
+            padding: 8px 12px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #334155;
+            border-bottom: 1px solid #E2E8F0;
+        }
+        
+        .entity-attrs {
+            padding: 8px 12px;
+            font-size: 11px;
+            line-height: 1.6;
+            color: #475569;
+        }
+        
+        .attr {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        
+        .attr-pk {
+            color: #DC2626;
+            font-weight: 600;
+        }
+        
+        .attr-fk {
+            color: #2563EB;
+            font-weight: 500;
+        }
+        
+        .attr-name {
+            color: #475569;
+        }
+        
+        .attr-type {
+            color: #94A3B8;
+            font-size: 10px;
+        }
+        
+        .badge {
+            display: inline-block;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 9px;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+        
+        .badge-pk {
+            background: #FEE2E2;
+            color: #DC2626;
+        }
+        
+        .badge-fk {
+            background: #DBEAFE;
+            color: #2563EB;
+        }
+        
+        .badge-json {
+            background: #F3E8FF;
+            color: #9333EA;
+        }
+        
+        /* Relationships Section */
+        .relationships {
+            grid-column: span 4;
+            background: #FFFFFF;
+            border-radius: 12px;
+            padding: 24px;
+            margin-top: 20px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        
+        .rel-header {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1E293B;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid #E2E8F0;
+        }
+        
+        .rel-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 24px;
+        }
+        
+        .rel-group {
+            background: #FAFBFC;
+            border-radius: 8px;
+            padding: 16px;
+        }
+        
+        .rel-group-title {
+            font-size: 13px;
+            font-weight: 600;
+            color: #475569;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .rel-group-title::before {
+            content: '';
+            width: 4px;
+            height: 16px;
+            border-radius: 2px;
+        }
+        
+        .rel-1-1 .rel-group-title::before { background: #10B981; }
+        .rel-1-n .rel-group-title::before { background: #3B82F6; }
+        .rel-n-m .rel-group-title::before { background: #F59E0B; }
+        
+        .rel-item {
+            font-size: 12px;
+            color: #64748B;
+            padding: 6px 0;
+            border-bottom: 1px solid #E2E8F0;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .rel-item:last-child {
+            border-bottom: none;
+        }
+        
+        .rel-arrow {
+            color: #94A3B8;
+            font-size: 14px;
+        }
+        
+        .rel-entity {
+            color: #334155;
+            font-weight: 500;
+        }
+        
+        /* Legend */
+        .legend {
+            grid-column: span 4;
+            background: #FFFFFF;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+            display: flex;
+            gap: 32px;
+            justify-content: center;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 12px;
+            color: #475569;
+        }
+        
+        .legend-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+        }
+        
+        .legend-line {
+            width: 24px;
+            height: 2px;
+        }
+    </style>
+</head>
+<body>
+    <div class="title">
+        <h1>CargoBit - Entity Relationship Diagram</h1>
+        <p>Europäische Logistik-Plattform | Vollständiges relationales Datenmodell</p>
+    </div>
+    
+    <div class="diagram-container">
+        <!-- USERS & ROLES Module -->
+        <div class="module module-users">
+            <div class="module-header">
+                <div class="module-icon">👤</div>
+                <div class="module-title">USERS & ROLES</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">users</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="attr-name">email</span> <span class="attr-type">unique</span></div>
+                    <div class="attr"><span class="attr-name">password_hash</span></div>
+                    <div class="attr"><span class="attr-name">first_name, last_name</span></div>
+                    <div class="attr"><span class="attr-name">phone, language</span></div>
+                    <div class="attr"><span class="attr-name">status</span> <span class="attr-type">active/pending/blocked</span></div>
+                    <div class="attr"><span class="attr-name">created_at, updated_at</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">roles</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="attr-name">name</span> <span class="attr-type">ADMIN/SUPPORT/SHIPPER...</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">user_roles</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">user_id</span> <span class="attr-type">→ users</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">role_id</span> <span class="attr-type">→ roles</span></div>
+                    <div class="attr"><span class="attr-name">PK: (user_id, role_id)</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- COMPANIES Module -->
+        <div class="module module-companies">
+            <div class="module-header">
+                <div class="module-icon">🏢</div>
+                <div class="module-title">COMPANIES & MEMBERS</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">companies</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="attr-name">name</span></div>
+                    <div class="attr"><span class="attr-name">type</span> <span class="attr-type">shipper/carrier/both</span></div>
+                    <div class="attr"><span class="attr-name">vat_number</span> <span class="attr-type">unique</span></div>
+                    <div class="attr"><span class="attr-name">registration_number</span></div>
+                    <div class="attr"><span class="attr-name">country, status</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">company_users</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">company_id</span> <span class="attr-type">→ companies</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">user_id</span> <span class="attr-type">→ users</span></div>
+                    <div class="attr"><span class="attr-name">role_in_company</span> <span class="attr-type">owner/admin/member</span></div>
+                    <div class="attr"><span class="attr-name">PK: (company_id, user_id)</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SECURITY Module -->
+        <div class="module module-security">
+            <div class="module-header">
+                <div class="module-icon">🔐</div>
+                <div class="module-title">VERIFICATION & SECURITY</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">verifications</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">user_id</span> <span class="attr-type">→ users</span></div>
+                    <div class="attr"><span class="attr-name">type</span> <span class="attr-type">KYC/KYB/ADR/LICENSE</span></div>
+                    <div class="attr"><span class="attr-name">status</span> <span class="attr-type">pending/approved/rejected</span></div>
+                    <div class="attr"><span class="attr-name">document_url</span></div>
+                    <div class="attr"><span class="attr-name">reviewed_by, reviewed_at</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">security_flags</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">user_id</span> <span class="attr-type">→ users</span></div>
+                    <div class="attr"><span class="attr-name">type</span> <span class="attr-type">fraud/payment_issue/...</span></div>
+                    <div class="attr"><span class="attr-name">severity</span> <span class="attr-type">low/medium/high/critical</span></div>
+                    <div class="attr"><span class="attr-name">active, notes</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- VEHICLES & DRIVERS Module -->
+        <div class="module module-vehicles">
+            <div class="module-header">
+                <div class="module-icon">🚛</div>
+                <div class="module-title">VEHICLES & DRIVERS</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">vehicles</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">company_id</span> <span class="attr-type">→ companies</span></div>
+                    <div class="attr"><span class="attr-name">type</span> <span class="attr-type">sprinter/koffer/curtainsider...</span></div>
+                    <div class="attr"><span class="attr-name">plate_number</span> <span class="attr-type">unique</span></div>
+                    <div class="attr"><span class="attr-name">max_payload_kg, volume_m3</span></div>
+                    <div class="attr"><span class="attr-name">adr_approved, cooling_available</span></div>
+                    <div class="attr"><span class="attr-name">status</span> <span class="attr-type">active/maintenance/inactive</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">drivers</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">user_id</span> <span class="attr-type">→ users (unique)</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">company_id</span> <span class="attr-type">→ companies (nullable)</span></div>
+                    <div class="attr"><span class="attr-name">license_number, adr_license</span></div>
+                    <div class="attr"><span class="attr-name">international_experience</span></div>
+                    <div class="attr"><span class="attr-name">rating_avg, rating_count</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">driver_vehicles</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">driver_id</span> <span class="attr-type">→ drivers</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">vehicle_id</span> <span class="attr-type">→ vehicles</span></div>
+                    <div class="attr"><span class="attr-name">is_primary</span></div>
+                    <div class="attr"><span class="attr-name">PK: (driver_id, vehicle_id)</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- TRANSPORTS Module -->
+        <div class="module module-transports">
+            <div class="module-header">
+                <div class="module-icon">📦</div>
+                <div class="module-title">TRANSPORTS & DETAILS</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">transports</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">shipper_user_id</span> <span class="attr-type">→ users</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">pickup_address_id</span> <span class="attr-type">→ addresses</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">delivery_address_id</span> <span class="attr-type">→ addresses</span></div>
+                    <div class="attr"><span class="attr-name">transport_type</span> <span class="attr-type">pallet/bulk/cooling...</span></div>
+                    <div class="attr"><span class="attr-name">status</span> <span class="attr-type">created/assigned/in_transit...</span></div>
+                    <div class="attr"><span class="attr-name">pickup_datetime, delivery_datetime</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">transport_details</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id</span> <span class="attr-type">→ transports (unique)</span></div>
+                    <div class="attr"><span class="attr-name">details_json</span> <span class="badge badge-json">JSON</span></div>
+                    <div class="attr"><span class="attr-name">vehicle_requirements</span> <span class="badge badge-json">JSON</span></div>
+                    <div class="attr"><span class="attr-name">driver_requirements</span> <span class="badge badge-json">JSON</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">addresses</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">company_id</span> <span class="attr-type">→ companies (opt)</span></div>
+                    <div class="attr"><span class="attr-name">label, street, zip</span></div>
+                    <div class="attr"><span class="attr-name">city, country</span></div>
+                    <div class="attr"><span class="attr-name">lat, lng</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- MATCHING Module -->
+        <div class="module module-matching">
+            <div class="module-header">
+                <div class="module-icon">🤝</div>
+                <div class="module-title">MATCHING & OFFERS</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">matching_sessions</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id</span> <span class="attr-type">→ transports</span></div>
+                    <div class="attr"><span class="attr-name">status</span> <span class="attr-type">started/running/completed/...</span></div>
+                    <div class="attr"><span class="attr-name">auto_assign</span> <span class="attr-type">bool</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">matching_candidates</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">matching_session_id</span> <span class="attr-type">→ matching_sessions</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">driver_id, vehicle_id</span></div>
+                    <div class="attr"><span class="attr-name">hard_filter_passed</span></div>
+                    <div class="attr"><span class="attr-name">fraud_safe, international_allowed</span></div>
+                    <div class="attr"><span class="attr-name">score</span> <span class="attr-type">0-100</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">offers</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id, driver_id, vehicle_id</span></div>
+                    <div class="attr"><span class="attr-name">price, currency</span></div>
+                    <div class="attr"><span class="attr-name">status</span> <span class="attr-type">pending/accepted/rejected</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">assignments</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id</span> <span class="attr-type">→ transports (unique)</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">driver_id, vehicle_id</span></div>
+                    <div class="attr"><span class="attr-name">assigned_by</span> <span class="attr-type">FK → users</span></div>
+                    <div class="attr"><span class="attr-name">assigned_at</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- TRACKING Module -->
+        <div class="module module-tracking">
+            <div class="module-header">
+                <div class="module-icon">🚚</div>
+                <div class="module-title">STATUS & TRACKING</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">transport_status_history</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id</span> <span class="attr-type">→ transports</span></div>
+                    <div class="attr"><span class="attr-name">status</span></div>
+                    <div class="attr"><span class="attr-name">changed_by</span> <span class="attr-type">FK → users</span></div>
+                    <div class="attr"><span class="attr-name">changed_at</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">tracking_points</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id, driver_id</span></div>
+                    <div class="attr"><span class="attr-name">lat, lng</span></div>
+                    <div class="attr"><span class="attr-name">timestamp</span></div>
+                    <div class="attr"><span class="attr-name">speed, heading</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">documents</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id</span> <span class="attr-type">→ transports</span></div>
+                    <div class="attr"><span class="attr-name">type</span> <span class="attr-type">cmr/lieferschein/rechnung/...</span></div>
+                    <div class="attr"><span class="attr-name">file_url, file_size</span></div>
+                    <div class="attr"><span class="attr-name">is_signed, signed_at</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- WALLET Module -->
+        <div class="module module-wallet">
+            <div class="module-header">
+                <div class="module-icon">💰</div>
+                <div class="module-title">WALLET & PAYMENTS</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">wallets</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">owner_user_id</span> <span class="attr-type">→ users (unique)</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">owner_company_id</span> <span class="attr-type">→ companies</span></div>
+                    <div class="attr"><span class="attr-name">balance, currency</span></div>
+                    <div class="attr"><span class="attr-name">status</span> <span class="attr-type">active/frozen</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">wallet_transactions</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">wallet_id</span> <span class="attr-type">→ wallets</span></div>
+                    <div class="attr"><span class="attr-name">type</span> <span class="attr-type">deposit/payout/fee/...</span></div>
+                    <div class="attr"><span class="attr-name">amount, currency</span></div>
+                    <div class="attr"><span class="attr-name">related_transport_id</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">payout_methods</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">wallet_id</span> <span class="attr-type">→ wallets</span></div>
+                    <div class="attr"><span class="attr-name">iban, holder_name</span></div>
+                    <div class="attr"><span class="attr-name">verified</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">commissions</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">transport_id</span> <span class="attr-type">→ transports</span></div>
+                    <div class="attr"><span class="attr-name">plan</span> <span class="attr-type">free/starter/pro/enterprise</span></div>
+                    <div class="attr"><span class="attr-name">commission_percent, commission_amount</span></div>
+                    <div class="attr"><span class="attr-name">wallet_fee_percent, wallet_fee_amount</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- PLANS Module -->
+        <div class="module module-plans">
+            <div class="module-header">
+                <div class="module-icon">📈</div>
+                <div class="module-title">PLANS & MARKETING</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">plans</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="attr-name">name</span> <span class="attr-type">FREE/STARTER/PRO/ENTERPRISE</span></div>
+                    <div class="attr"><span class="attr-name">monthly_fee, yearly_fee</span></div>
+                    <div class="attr"><span class="attr-name">commission_percent</span> <span class="attr-type">14/10/8/6%</span></div>
+                    <div class="attr"><span class="attr-name">wallet_fee_percent</span> <span class="attr-type">3.5%</span></div>
+                    <div class="attr"><span class="attr-name">features_json</span> <span class="badge badge-json">JSON</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">company_plans</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">company_id</span> <span class="attr-type">→ companies</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">plan_id</span> <span class="attr-type">→ plans</span></div>
+                    <div class="attr"><span class="attr-name">valid_from, valid_to</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">campaigns</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">company_id</span> <span class="attr-type">→ companies</span></div>
+                    <div class="attr"><span class="attr-name">name, position</span></div>
+                    <div class="attr"><span class="attr-name">budget, status</span></div>
+                    <div class="attr"><span class="attr-name">start_date, end_date</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">campaign_stats</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">campaign_id</span> <span class="attr-type">→ campaigns</span></div>
+                    <div class="attr"><span class="attr-name">date</span></div>
+                    <div class="attr"><span class="attr-name">impressions, clicks, conversions</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- SUPPORT Module -->
+        <div class="module module-support">
+            <div class="module-header">
+                <div class="module-icon">🛟</div>
+                <div class="module-title">SUPPORT & LOGGING</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">support_tickets</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">user_id</span> <span class="attr-type">→ users</span></div>
+                    <div class="attr"><span class="attr-name">transport_id</span> <span class="attr-type">→ transports</span></div>
+                    <div class="attr"><span class="attr-name">subject, status</span></div>
+                    <div class="attr"><span class="attr-name">priority, category</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">support_messages</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">ticket_id</span> <span class="attr-type">→ support_tickets</span></div>
+                    <div class="attr"><span class="attr-name">sender_user_id</span> <span class="attr-type">FK → users</span></div>
+                    <div class="attr"><span class="attr-name">message, attachments</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">audit_logs</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="attr-name">entity_type, entity_id</span></div>
+                    <div class="attr"><span class="attr-name">action</span> <span class="attr-type">create/update/delete/...</span></div>
+                    <div class="attr"><span class="attr-name">performed_by</span> <span class="attr-type">FK → users</span></div>
+                    <div class="attr"><span class="attr-name">data_before, data_after</span> <span class="badge badge-json">JSON</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- INTERNATIONAL Module -->
+        <div class="module module-intl">
+            <div class="module-header">
+                <div class="module-icon">🌍</div>
+                <div class="module-title">INTERNATIONAL</div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">driver_permissions</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="badge badge-fk">FK</span> <span class="attr-name">driver_id</span> <span class="attr-type">→ drivers</span></div>
+                    <div class="attr"><span class="attr-name">country_code</span> <span class="attr-type">ISO 2-letter</span></div>
+                    <div class="attr"><span class="attr-name">is_allowed, visa_required</span></div>
+                    <div class="attr"><span class="attr-name">trips_completed, last_trip_at</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">toll_systems</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="attr-name">country_code, country_name</span></div>
+                    <div class="attr"><span class="attr-name">system_name</span> <span class="attr-type">Toll Collect/eToll/...</span></div>
+                    <div class="attr"><span class="attr-name">system_type</span> <span class="attr-type">distance/vignette/hybrid</span></div>
+                    <div class="attr"><span class="attr-name">euro5_rate, euro6_rate</span></div>
+                    <div class="attr"><span class="attr-name">vignette_daily/weekly/monthly</span></div>
+                </div>
+            </div>
+            
+            <div class="entity">
+                <div class="entity-name">border_crossings</div>
+                <div class="entity-attrs">
+                    <div class="attr"><span class="badge badge-pk">PK</span> <span class="attr-name">id</span></div>
+                    <div class="attr"><span class="attr-name">from_country, to_country</span></div>
+                    <div class="attr"><span class="attr-name">crossing_name</span></div>
+                    <div class="attr"><span class="attr-name">adr_allowed, tunnel_code</span></div>
+                    <div class="attr"><span class="attr-name">customs_required, customs_type</span></div>
+                    <div class="attr"><span class="attr-name">avg_wait_minutes</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- RELATIONSHIPS Section -->
+        <div class="relationships">
+            <div class="rel-header">📊 Beziehungen (Relationships)</div>
+            <div class="rel-grid">
+                <div class="rel-group rel-1-1">
+                    <div class="rel-group-title">1:1 Beziehungen</div>
+                    <div class="rel-item">
+                        <span class="rel-entity">transports</span>
+                        <span class="rel-arrow">⟷</span>
+                        <span class="rel-entity">transport_details</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">transports</span>
+                        <span class="rel-arrow">⟷</span>
+                        <span class="rel-entity">assignments</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">users</span>
+                        <span class="rel-arrow">⟷</span>
+                        <span class="rel-entity">wallets</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">drivers</span>
+                        <span class="rel-arrow">⟷</span>
+                        <span class="rel-entity">users</span>
+                    </div>
+                </div>
+                
+                <div class="rel-group rel-1-n">
+                    <div class="rel-group-title">1:n Beziehungen</div>
+                    <div class="rel-item">
+                        <span class="rel-entity">company</span>
+                        <span class="rel-arrow">→</span>
+                        <span class="rel-entity">vehicles</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">company</span>
+                        <span class="rel-arrow">→</span>
+                        <span class="rel-entity">drivers</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">transport</span>
+                        <span class="rel-arrow">→</span>
+                        <span class="rel-entity">offers</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">transport</span>
+                        <span class="rel-arrow">→</span>
+                        <span class="rel-entity">status_history</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">transport</span>
+                        <span class="rel-arrow">→</span>
+                        <span class="rel-entity">tracking_points</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">wallet</span>
+                        <span class="rel-arrow">→</span>
+                        <span class="rel-entity">transactions</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">campaign</span>
+                        <span class="rel-arrow">→</span>
+                        <span class="rel-entity">campaign_stats</span>
+                    </div>
+                </div>
+                
+                <div class="rel-group rel-n-m">
+                    <div class="rel-group-title">n:m Beziehungen</div>
+                    <div class="rel-item">
+                        <span class="rel-entity">users</span>
+                        <span class="rel-arrow">↔</span>
+                        <span class="rel-entity">roles</span>
+                        <span class="attr-type">(via user_roles)</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">companies</span>
+                        <span class="rel-arrow">↔</span>
+                        <span class="rel-entity">users</span>
+                        <span class="attr-type">(via company_users)</span>
+                    </div>
+                    <div class="rel-item">
+                        <span class="rel-entity">drivers</span>
+                        <span class="rel-arrow">↔</span>
+                        <span class="rel-entity">vehicles</span>
+                        <span class="attr-type">(via driver_vehicles)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- LEGEND -->
+        <div class="legend">
+            <div class="legend-item">
+                <span class="badge badge-pk">PK</span>
+                <span>Primary Key</span>
+            </div>
+            <div class="legend-item">
+                <span class="badge badge-fk">FK</span>
+                <span>Foreign Key</span>
+            </div>
+            <div class="legend-item">
+                <span class="badge badge-json">JSON</span>
+                <span>JSON Feld</span>
+            </div>
+            <div class="legend-item">
+                <span style="color: #10B981;">━━</span>
+                <span>1:1</span>
+            </div>
+            <div class="legend-item">
+                <span style="color: #3B82F6;">━━▶</span>
+                <span>1:n</span>
+            </div>
+            <div class="legend-item">
+                <span style="color: #F59E0B;">◀━━▶</span>
+                <span>n:m</span>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
