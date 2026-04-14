@@ -351,3 +351,132 @@ CombinedScore = UserScore × 0.4 + CompanyScore × 0.3 + TransactionScore × 0.3
 - `GET/POST/PUT/DELETE /api/risk/rules` - Regelverwaltung
 
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
+Task ID: risk-microservice-architecture
+Agent: Main Agent
+Task: Risk-Engine als Microservice-Architektur mit Hybrid Security Layer
+
+## Work Log:
+
+### 1. Risk-Engine Microservice (Port 3003)
+- Datei: `/mini-services/risk-engine-service/index.ts` - NEU
+- Vollständige Risk Engine als eigenständiger Service
+- 20+ Regeln implementiert (User, Company, Transaction)
+- Endpoints:
+  - `POST /risk/evaluate` - Score berechnen
+  - `GET /risk/score/:type/:id` - Aktuellen Score holen
+  - `GET /risk/history/:type/:id` - Historie abrufen
+  - `GET/POST /risk/rules` - Regeln verwalten
+  - `GET /risk/events` - Letzte Events
+  - `GET /risk/stats` - Dashboard Statistiken
+
+### 2. Security-Gateway Microservice (Port 3004)
+- Datei: `/mini-services/security-gateway-service/index.ts` - NEU
+- Hybrid Security Layer als API
+- Permission Matrix + Risk Engine Integration
+- Endpoints:
+  - `POST /security/check` - Hybrid Security Check
+  - `GET /security/permissions` - Permission Matrix
+  - `GET /security/audit` - Audit Logs
+  - `GET /security/tickets` - Support Tickets
+  - `GET /security/mitigations` - Mitigation Definitionen
+
+### 3. Risk Dashboard Komponente
+- Datei: `/src/components/dashboard/risk-dashboard.tsx` - NEU
+- Security Cockpit für Admin/Support/Compliance
+- Widgets:
+  - Global Risk Overview (GREEN/YELLOW/RED Verteilung)
+  - Entity Type Breakdown (User/Company/Transaction)
+  - Recent High-Risk Events Table
+  - Rule Impact Analysis (häufigste Regeln)
+  - Tab-Navigation für Entity-Details
+
+## Stage Summary:
+
+### Microservice-Architektur:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     CARGOBIT SERVICES                        │
+├─────────────────────────────────────────────────────────────┤
+│                                                              │
+│  ┌─────────────────┐     ┌─────────────────┐                │
+│  │  Main App       │     │  Risk Engine    │                │
+│  │  Port 3000      │     │  Port 3003      │                │
+│  │  (Next.js)      │     │  (Bun Server)   │                │
+│  └────────┬────────┘     └────────┬────────┘                │
+│           │                       │                          │
+│           │                       │                          │
+│           ▼                       ▼                          │
+│  ┌─────────────────────────────────────────┐                │
+│  │        Security Gateway                  │                │
+│  │        Port 3004                         │                │
+│  │  ┌─────────────────────────────────┐    │                │
+│  │  │   POST /security/check           │    │                │
+│  │  │   1. Permission Check            │    │                │
+│  │  │   2. Risk Engine Call            │    │                │
+│  │  │   3. Decision (Allow/Mitigate/   │    │                │
+│  │  │            Block)                │    │                │
+│  │  └─────────────────────────────────┘    │                │
+│  └─────────────────────────────────────────┘                │
+│                                                              │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Hybrid Security Check API:
+```pseudo
+// POST /security/check
+Request:
+{
+  "userId": "u_123",
+  "role": "SHIPPER",
+  "action": "ACCEPT_OFFER",
+  "entity": {
+    "type": "transaction",
+    "id": "tx_987",
+    "context": { "amount": 52000, "international": true }
+  }
+}
+
+Response (GREEN):
+{
+  "allowed": true,
+  "decision": "allowed",
+  "riskLevel": "green",
+  "riskScore": 18
+}
+
+Response (YELLOW):
+{
+  "allowed": true,
+  "decision": "allowed_with_mitigation",
+  "riskLevel": "yellow",
+  "riskScore": 52,
+  "mitigations": ["DELAY_24H", "EXTRA_LOGGING"]
+}
+
+Response (RED):
+{
+  "allowed": false,
+  "decision": "blocked",
+  "riskLevel": "red",
+  "riskScore": 78,
+  "supportTicketCreated": true
+}
+```
+
+### Dashboard Widgets:
+1. **Stat Cards**: Total, GREEN, YELLOW, RED Counts
+2. **Risk Level Gauge**: Visual Verteilung mit Progress Bars
+3. **Entity Type Breakdown**: Users/Companies/Transactions
+4. **Recent Events Table**: Letzte Risk-Events mit Zeitstempel
+5. **Rule Impact Analysis**: Häufigste ausgelöste Regeln
+
+### API Communication:
+```
+Frontend → /risk/stats?XTransformPort=3003 → Risk Engine
+Frontend → /security/check?XTransformPort=3004 → Security Gateway
+Security Gateway → localhost:3003/risk/evaluate → Risk Engine
+```
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
