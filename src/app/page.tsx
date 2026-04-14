@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -38,6 +39,8 @@ import {
   Mail,
   Map,
   CheckCircle2,
+  User,
+  Building2,
 } from 'lucide-react';
 
 import { useAuthStore } from '@/lib/auth-store';
@@ -387,24 +390,392 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Hero Image/Illustration */}
+            {/* Hero Image/Illustration - Professional Dashboard Preview */}
             <div className="mt-16 relative">
               <div className="absolute inset-0 bg-gradient-to-t from-background via-transparent to-transparent z-10" />
               <div className="relative rounded-2xl overflow-hidden shadow-2xl border bg-card">
-                <div className="aspect-[16/9] bg-gradient-to-br from-primary/10 to-accent/10 flex items-center justify-center">
-                  <div className="text-center p-8">
-                    <div className="grid grid-cols-3 gap-4 mb-8">
-                      {['🚛', '📦', '🌍', '💰', '🤝', '📱'].map((emoji, i) => (
-                        <div key={i} className="w-16 h-16 rounded-xl bg-background shadow-lg flex items-center justify-center text-3xl animate-float" style={{ animationDelay: `${i * 0.2}s` }}>
-                          {emoji}
-                        </div>
-                      ))}
-                    </div>
-                    <p className="text-muted-foreground">Dashboard Vorschau</p>
-                  </div>
+                <Image
+                  src="/images/dashboard-main.png"
+                  alt="CargoBit Dashboard - Professionelle Logistikplattform"
+                  width={1344}
+                  height={768}
+                  className="w-full h-auto object-cover"
+                  priority
+                />
+                {/* Overlay with subtle gradient */}
+                <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-transparent to-transparent" />
+                {/* Bottom label */}
+                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20">
+                  <Badge variant="secondary" className="px-4 py-2 text-sm bg-background/80 backdrop-blur-sm">
+                    <Globe className="w-4 h-4 mr-2" />
+                    Dashboard Vorschau - 6 Rollen verfügbar
+                  </Badge>
+                </div>
+              </div>
+              {/* Floating badges around the image */}
+              <div className="absolute -top-4 -left-4 bg-card border rounded-xl p-3 shadow-lg animate-float hidden lg:flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-green-500/10 flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4 text-green-500" />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Transport</div>
+                  <div className="text-sm font-semibold">Erfolgreich</div>
+                </div>
+              </div>
+              <div className="absolute -bottom-4 -right-4 bg-card border rounded-xl p-3 shadow-lg animate-float hidden lg:flex items-center gap-2" style={{ animationDelay: '0.5s' }}>
+                <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                  <Wallet className="w-4 h-4 text-primary" />
+                </div>
+                <div>
+                  <div className="text-xs text-muted-foreground">Wallet</div>
+                  <div className="text-sm font-semibold">€12,450</div>
                 </div>
               </div>
             </div>
+          </div>
+        </section>
+
+        {/* Dashboard Preview Section - Interactive Role Selection */}
+        <section className="py-24 bg-muted/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div className="text-center mb-16">
+              <Badge variant="outline" className="mb-4">Dashboard-Vorschau</Badge>
+              <h2 className="text-3xl sm:text-4xl font-bold mb-4">
+                Individuelle Dashboards für jede Rolle
+              </h2>
+              <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+                Jeder Nutzer erhält ein optimiertes Dashboard - von Verladern bis zu Fahrern, Dispatcher und Administratoren.
+              </p>
+            </div>
+
+            <Tabs defaultValue="shipper" className="space-y-8">
+              <TabsList className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 w-full max-w-4xl mx-auto h-auto p-1">
+                <TabsTrigger value="shipper" className="flex flex-col items-center gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Package className="w-5 h-5" />
+                  <span className="text-xs sm:text-sm">Verlader</span>
+                </TabsTrigger>
+                <TabsTrigger value="driver" className="flex flex-col items-center gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Truck className="w-5 h-5" />
+                  <span className="text-xs sm:text-sm">Fahrer</span>
+                </TabsTrigger>
+                <TabsTrigger value="dispatcher" className="flex flex-col items-center gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Users className="w-5 h-5" />
+                  <span className="text-xs sm:text-sm">Dispatcher</span>
+                </TabsTrigger>
+                <TabsTrigger value="admin" className="flex flex-col items-center gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <Shield className="w-5 h-5" />
+                  <span className="text-xs sm:text-sm">Admin</span>
+                </TabsTrigger>
+                <TabsTrigger value="support" className="flex flex-col items-center gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <HeadphonesIcon className="w-5 h-5" />
+                  <span className="text-xs sm:text-sm">Support</span>
+                </TabsTrigger>
+                <TabsTrigger value="marketer" className="flex flex-col items-center gap-2 py-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
+                  <BarChart3 className="w-5 h-5" />
+                  <span className="text-xs sm:text-sm">Marketer</span>
+                </TabsTrigger>
+              </TabsList>
+
+              {/* Shipper Dashboard Preview */}
+              <TabsContent value="shipper" className="space-y-6">
+                <div className="grid lg:grid-cols-2 gap-8 items-center">
+                  <div className="order-2 lg:order-1">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-blue-500/10 flex items-center justify-center">
+                        <Package className="w-6 h-6 text-blue-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">Verlader Dashboard</h3>
+                        <p className="text-sm text-muted-foreground">Für Privat- & Firmenkunden</p>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground mb-6">
+                      Verwalten Sie alle Ihre Transporte an einem Ort. Erstellen Sie neue Aufträge, verfolgen Sie den Status in Echtzeit und verwalten Sie Ihre Wallet.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-blue-500">3</div>
+                        <div className="text-sm text-muted-foreground">Aktive Transporte</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-green-500">€1,250</div>
+                        <div className="text-sm text-muted-foreground">Wallet Guthaben</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-yellow-500">2</div>
+                        <div className="text-sm text-muted-foreground">Warte auf Angebote</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-primary">24</div>
+                        <div className="text-sm text-muted-foreground">Abgeschlossen</div>
+                      </div>
+                    </div>
+                    <Button className="gap-2" onClick={() => { setAuthTab('register'); setShowAuthModal(true); }}>
+                      Als Verlader registrieren
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="order-1 lg:order-2">
+                    <div className="relative rounded-2xl overflow-hidden shadow-xl border bg-card">
+                      <Image
+                        src="/images/dashboard-shipper.png"
+                        alt="Verlader Dashboard"
+                        width={1024}
+                        height={1024}
+                        className="w-full h-auto"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Driver Dashboard Preview */}
+              <TabsContent value="driver" className="space-y-6">
+                <div className="grid lg:grid-cols-2 gap-8 items-center">
+                  <div className="order-2 lg:order-1">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-green-500/10 flex items-center justify-center">
+                        <Truck className="w-6 h-6 text-green-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">Fahrer Dashboard</h3>
+                        <p className="text-sm text-muted-foreground">Für selbstständige Fahrer</p>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground mb-6">
+                      Finden Sie verfügbare Aufträge in Ihrer Nähe, akzeptieren Sie Jobs mit einem Klick und erhalten Sie schnelle Auszahlungen auf Ihre Wallet.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-green-500">€3,420</div>
+                        <div className="text-sm text-muted-foreground">Verfügbarer Verdienst</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-yellow-500">4.9 ⭐</div>
+                        <div className="text-sm text-muted-foreground">Bewertung</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-blue-500">342</div>
+                        <div className="text-sm text-muted-foreground">Abgeschlossene Touren</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-primary">8</div>
+                        <div className="text-sm text-muted-foreground">Diese Woche</div>
+                      </div>
+                    </div>
+                    <Button className="gap-2" onClick={() => { setAuthTab('register'); setShowAuthModal(true); }}>
+                      Als Fahrer registrieren
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="order-1 lg:order-2">
+                    <div className="relative rounded-2xl overflow-hidden shadow-xl border bg-card">
+                      <Image
+                        src="/images/dashboard-driver.png"
+                        alt="Fahrer Dashboard"
+                        width={1024}
+                        height={1024}
+                        className="w-full h-auto"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Dispatcher Dashboard Preview */}
+              <TabsContent value="dispatcher" className="space-y-6">
+                <div className="grid lg:grid-cols-2 gap-8 items-center">
+                  <div className="order-2 lg:order-1">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-purple-500/10 flex items-center justify-center">
+                        <Users className="w-6 h-6 text-purple-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">Dispatcher Dashboard</h3>
+                        <p className="text-sm text-muted-foreground">Für Flottenverwaltung</p>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground mb-6">
+                      Verwalten Sie Ihre gesamte Flotte, weisen Sie Fahrer Touren zu und behalten Sie den Überblick über alle Fahrzeuge in Echtzeit.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-purple-500">12</div>
+                        <div className="text-sm text-muted-foreground">Fahrzeuge</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-blue-500">15</div>
+                        <div className="text-sm text-muted-foreground">Fahrer</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-green-500">€45.200</div>
+                        <div className="text-sm text-muted-foreground">Umsatz/Monat</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-primary">18</div>
+                        <div className="text-sm text-muted-foreground">Heutige Touren</div>
+                      </div>
+                    </div>
+                    <Button className="gap-2" onClick={() => { setAuthTab('register'); setShowAuthModal(true); }}>
+                      Als Dispatcher registrieren
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <div className="order-1 lg:order-2">
+                    <div className="relative rounded-2xl overflow-hidden shadow-xl border bg-card">
+                      <Image
+                        src="/images/dashboard-dispatcher.png"
+                        alt="Dispatcher Dashboard"
+                        width={1024}
+                        height={1024}
+                        className="w-full h-auto"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Admin Dashboard Preview */}
+              <TabsContent value="admin" className="space-y-6">
+                <div className="grid lg:grid-cols-2 gap-8 items-center">
+                  <div className="order-2 lg:order-1">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-red-500/10 flex items-center justify-center">
+                        <Shield className="w-6 h-6 text-red-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">Admin Dashboard</h3>
+                        <p className="text-sm text-muted-foreground">Systemverwaltung</p>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground mb-6">
+                      Vollständige Systemübersicht, Benutzerverwaltung, Verifizierungen und KI-Überwachung für einen reibungslosen Plattformbetrieb.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-red-500">12,458</div>
+                        <div className="text-sm text-muted-foreground">Benutzer gesamt</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-green-500">€234.500</div>
+                        <div className="text-sm text-muted-foreground">Umsatz/Monat</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-blue-500">3,842</div>
+                        <div className="text-sm text-muted-foreground">Aktive Transporte</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-yellow-500">47</div>
+                        <div className="text-sm text-muted-foreground">Ausstehende Verifizierungen</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="order-1 lg:order-2">
+                    <div className="relative rounded-2xl overflow-hidden shadow-xl border bg-card aspect-square flex items-center justify-center bg-gradient-to-br from-red-500/10 to-red-500/5">
+                      <div className="text-center p-8">
+                        <Shield className="w-16 h-16 text-red-500 mx-auto mb-4" />
+                        <h4 className="text-xl font-bold mb-2">Admin Dashboard</h4>
+                        <p className="text-muted-foreground">Nur für autorisierte Administratoren</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Support Dashboard Preview */}
+              <TabsContent value="support" className="space-y-6">
+                <div className="grid lg:grid-cols-2 gap-8 items-center">
+                  <div className="order-2 lg:order-1">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-orange-500/10 flex items-center justify-center">
+                        <HeadphonesIcon className="w-6 h-6 text-orange-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">Support Dashboard</h3>
+                        <p className="text-sm text-muted-foreground">Kundensupport & Tickets</p>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground mb-6">
+                      Verwalten Sie Support-Tickets, Streitfälle und Nutzeranfragen mit KI-unterstützter Automatisierung.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-red-500">23</div>
+                        <div className="text-sm text-muted-foreground">Offene Tickets</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-green-500">42</div>
+                        <div className="text-sm text-muted-foreground">Heute gelöst</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-blue-500">8 Min</div>
+                        <div className="text-sm text-muted-foreground">Ø Antwortzeit</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-primary">68%</div>
+                        <div className="text-sm text-muted-foreground">KI-gelöst</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="order-1 lg:order-2">
+                    <div className="relative rounded-2xl overflow-hidden shadow-xl border bg-card aspect-square flex items-center justify-center bg-gradient-to-br from-orange-500/10 to-orange-500/5">
+                      <div className="text-center p-8">
+                        <HeadphonesIcon className="w-16 h-16 text-orange-500 mx-auto mb-4" />
+                        <h4 className="text-xl font-bold mb-2">Support Dashboard</h4>
+                        <p className="text-muted-foreground">24/7 Kundensupport</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+
+              {/* Marketer Dashboard Preview */}
+              <TabsContent value="marketer" className="space-y-6">
+                <div className="grid lg:grid-cols-2 gap-8 items-center">
+                  <div className="order-2 lg:order-1">
+                    <div className="flex items-center gap-3 mb-4">
+                      <div className="w-12 h-12 rounded-xl bg-pink-500/10 flex items-center justify-center">
+                        <BarChart3 className="w-6 h-6 text-pink-500" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-bold">Marketing Dashboard</h3>
+                        <p className="text-sm text-muted-foreground">Kampagnen & Analytics</p>
+                      </div>
+                    </div>
+                    <p className="text-muted-foreground mb-6">
+                      Verwalten Sie Marketing-Kampagnen, analysieren Sie Performance-Metriken und optimieren Sie die Nutzerakquise.
+                    </p>
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-pink-500">8</div>
+                        <div className="text-sm text-muted-foreground">Aktive Kampagnen</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-blue-500">245K</div>
+                        <div className="text-sm text-muted-foreground">Impressionen</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-green-500">892</div>
+                        <div className="text-sm text-muted-foreground">Conversions</div>
+                      </div>
+                      <div className="p-4 rounded-xl bg-card border">
+                        <div className="text-2xl font-bold text-primary">3.2x</div>
+                        <div className="text-sm text-muted-foreground">ROI Ø</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="order-1 lg:order-2">
+                    <div className="relative rounded-2xl overflow-hidden shadow-xl border bg-card aspect-square flex items-center justify-center bg-gradient-to-br from-pink-500/10 to-pink-500/5">
+                      <div className="text-center p-8">
+                        <BarChart3 className="w-16 h-16 text-pink-500 mx-auto mb-4" />
+                        <h4 className="text-xl font-bold mb-2">Marketing Dashboard</h4>
+                        <p className="text-muted-foreground">Kampagnen-Performance</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
           </div>
         </section>
 
