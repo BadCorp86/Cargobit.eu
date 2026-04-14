@@ -273,6 +273,89 @@ const MITIGATION_ACTIONS: Record<RiskLevel, string[]> = {
 };
 
 // ============================================
+// HIGH-RISK EVENT HANDLER INTEGRATION
+// ============================================
+
+interface HighRiskEventResult {
+  success: boolean;
+  ticket: {
+    id: string;
+    priority: string;
+  };
+  notifications: {
+    email: { id: string; status: string };
+    slack: { id: string; status: string };
+    sms: boolean;
+  };
+}
+
+async function handleHighRiskEvent(request: SecurityCheckRequest, riskResult: { score: number; level: RiskLevel; triggeredRules: string[] }): Promise<HighRiskEventResult> {
+  console.log(`[HighRiskHandler] Processing RED risk event for ${request.entity.id}`);
+  
+  // In production, this would call the HighRiskEventHandler service
+  // For now, we simulate the flow locally
+  
+  const ticketId = createSupportTicket(
+    request.user.id,
+    request.action,
+    riskResult.score,
+    riskResult.level,
+    `High risk detected: ${riskResult.triggeredRules.join(', ')}`
+  );
+  
+  // Send notifications
+  const emailSent = await sendEmailNotification(request, riskResult, ticketId);
+  const slackSent = await sendSlackAlert(request, riskResult, ticketId);
+  const smsSent = riskResult.score >= 90 ? await sendSmsAlert(request, riskResult, ticketId) : false;
+  
+  // Log audit
+  createAuditLog(request.user.id, request.action, "high_risk_handled", {
+    correlationId: request.requestId,
+    errorCode: "HIGH_RISK_BLOCKED",
+    riskScore: riskResult.score,
+    riskLevel: riskResult.level,
+    reason: "Automatic high-risk handling flow executed",
+  });
+  
+  return {
+    success: true,
+    ticket: { id: ticketId, priority: riskResult.score >= 85 ? "critical" : "high" },
+    notifications: {
+      email: { id: `email_${Date.now()}`, status: emailSent ? "sent" : "failed" },
+      slack: { id: `slack_${Date.now()}`, status: slackSent ? "sent" : "failed" },
+      sms: smsSent,
+    },
+  };
+}
+
+async function sendEmailNotification(request: SecurityCheckRequest, risk: { score: number; level: RiskLevel; triggeredRules: string[] }, ticketId: string): Promise<boolean> {
+  console.log(`[Email] Sending high-risk notification for ticket ${ticketId}`);
+  console.log(`  To: security-team@cargbit.com`);
+  console.log(`  Subject: [High Risk] Aktion blockiert – Score ${risk.score} – ${request.entity.type} ${request.entity.id}`);
+  // Simulate sending
+  return true;
+}
+
+async function sendSlackAlert(request: SecurityCheckRequest, risk: { score: number; level: RiskLevel; triggeredRules: string[] }, ticketId: string): Promise<boolean> {
+  const channel = risk.score >= 85 ? "#security-critical" : "#security-alerts";
+  console.log(`[Slack] Sending alert to ${channel}`);
+  console.log(`  🚨 High Risk Detected`);
+  console.log(`  ${request.entity.type}: ${request.entity.id}`);
+  console.log(`  Score: ${risk.score}`);
+  console.log(`  Rules: ${risk.triggeredRules.join(', ')}`);
+  console.log(`  Action blocked: ${request.action}`);
+  // Simulate sending
+  return true;
+}
+
+async function sendSmsAlert(request: SecurityCheckRequest, risk: { score: number; level: RiskLevel; triggeredRules: string[] }, ticketId: string): Promise<boolean> {
+  console.log(`[SMS] Sending critical alert for ticket ${ticketId}`);
+  console.log(`  To: on-call security team`);
+  // Simulate sending
+  return true;
+}
+
+// ============================================
 // STORAGE
 // ============================================
 
@@ -606,21 +689,23 @@ async function performSecurityCheck(
     };
   }
 
-  // High risk - block
-  const ticketId = createSupportTicket(
-    user.id,
-    action,
-    riskResult.score,
-    riskResult.level,
-    `High risk detected for action ${action}`
-  );
+  // High risk - block and trigger event flow
+  console.log(`[SecurityGateway] HIGH RISK detected for ${user.id} - triggering event flow...`);
+  
+  // Execute high-risk event flow (ticket, email, slack, sms)
+  const eventResult = await handleHighRiskEvent(request, {
+    score: riskResult.score,
+    level: riskResult.level,
+    triggeredRules: riskResult.triggeredRules,
+  });
+  
   createAuditLog(user.id, action, "blocked", {
     correlationId,
     clientId,
     errorCode: "HIGH_RISK_BLOCKED",
     riskScore: riskResult.score,
     riskLevel: riskResult.level,
-    reason: "High risk score",
+    reason: "High risk score - automatic event flow executed",
   });
 
   return {
@@ -633,8 +718,12 @@ async function performSecurityCheck(
     },
     errorCode: "HIGH_RISK_BLOCKED",
     message: "Action blocked due to high risk. Case forwarded to support.",
-    supportTicketId: ticketId,
+    supportTicketId: eventResult.ticket.id,
     correlationId,
+    eventFlow: {
+      ticket: eventResult.ticket,
+      notifications: eventResult.notifications,
+    },
   };
 }
 

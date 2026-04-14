@@ -1,15 +1,17 @@
 'use client';
 
 // ============================================
-// CARGOBIT RISK DASHBOARD - RULES MANAGEMENT
-// Regeln-Liste, Edit-View, Test-Funktion (ADMIN/SECURITY only)
+// CARGOBIT RISK DASHBOARD - SCREEN 3: RULES MANAGEMENT
+// Admin/Security View for Risk Rules
 // ============================================
 
 import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Progress } from '@/components/ui/progress';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import { Switch } from '@/components/ui/switch';
 import {
   Table,
   TableBody,
@@ -22,10 +24,10 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
   DialogTrigger,
+  DialogFooter,
 } from '@/components/ui/dialog';
 import {
   Select,
@@ -34,971 +36,810 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import { Switch } from '@/components/ui/switch';
-import { Slider } from '@/components/ui/slider';
 import {
-  AlertTriangle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
+  ArrowLeft,
   Shield,
-  Settings,
   Plus,
   Search,
   Filter,
   Edit,
-  Play,
   Trash2,
+  Play,
+  Copy,
+  Download,
+  Upload,
   CheckCircle2,
-  XCircle,
+  AlertTriangle,
   AlertCircle,
-  Info,
+  RefreshCw,
+  Save,
+  X,
   Code,
   Zap,
-  Save,
-  RotateCcw,
+  Clock,
+  ToggleLeft,
+  ToggleRight,
+  ChevronDown,
+  ChevronUp,
+  Info,
+  History,
+  TestTube,
 } from 'lucide-react';
 
 // ============================================
 // TYPES
 // ============================================
 
-type EntityType = 'USER' | 'COMPANY' | 'TRANSACTION';
-type RuleCategory = 'USER' | 'COMPANY' | 'TRANSACTION' | 'BEHAVIOR' | 'DOCUMENT' | 'SECURITY';
+type RuleCategory = 'user' | 'company' | 'transaction';
+type RuleStatus = 'active' | 'inactive' | 'testing';
 
 interface RiskRule {
   id: string;
   name: string;
-  description: string;
-  entityType: EntityType;
   category: RuleCategory;
-  condition: RuleCondition;
   weight: number;
-  priority: number;
-  active: boolean;
-  triggerCount: number;
-  lastTriggered?: string;
+  status: RuleStatus;
+  description: string;
+  conditions: RuleCondition[];
   createdAt: string;
   updatedAt: string;
-  isSystem: boolean;
+  triggerCount: number;
+  lastTriggered?: string;
+  version: number;
 }
 
 interface RuleCondition {
-  field?: string;
-  equals?: string | number | boolean;
-  not_equals?: string | number | boolean;
-  greater_than?: number;
-  less_than?: number;
-  greater_than_or_equal?: number;
-  less_than_or_equal?: number;
-  contains_any?: (string | number)[];
-  and?: RuleCondition[];
-  or?: RuleCondition[];
+  field: string;
+  operator: 'equals' | 'not_equals' | 'greater_than' | 'less_than' | 'contains' | 'exists';
+  value: string | number | boolean;
 }
 
 interface TestResult {
-  matched: boolean;
-  evaluatedFields: Record<string, unknown>;
-  conditionPath: string[];
+  success: boolean;
+  matchedRules: string[];
+  totalScore: number;
+  riskLevel: string;
+  duration: number;
+  details: Record<string, unknown>;
 }
 
 // ============================================
 // MOCK DATA
 // ============================================
 
-function getMockRules(): RiskRule[] {
-  return [
-    {
-      id: 'user_kyc_missing',
-      name: 'KYC_UNVOLLSTAENDIG',
-      description: 'KYC-Verifizierung nicht abgeschlossen',
-      entityType: 'USER',
-      category: 'DOCUMENT',
-      condition: { field: 'kyc_status', equals: 'missing' },
-      weight: 20,
-      priority: 10,
-      active: true,
-      triggerCount: 156,
-      lastTriggered: new Date().toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'user_new_iban',
-      name: 'NEUE_IBAN',
-      description: 'Neue IBAN in den letzten 48h',
-      entityType: 'USER',
-      category: 'USER',
-      condition: { field: 'iban_age_hours', less_than: 48 },
-      weight: 15,
-      priority: 8,
-      active: true,
-      triggerCount: 89,
-      lastTriggered: new Date(Date.now() - 3600000).toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'user_fraud_flag',
-      name: 'FRAUD_FLAG',
-      description: 'Betrugsverdacht in den letzten 90 Tagen',
-      entityType: 'USER',
-      category: 'SECURITY',
-      condition: { field: 'fraud_flag_days', less_than: 90 },
-      weight: 30,
-      priority: 18,
-      active: true,
-      triggerCount: 12,
-      lastTriggered: new Date(Date.now() - 86400000).toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'user_high_rating',
-      name: 'HOHE_BEWERTUNG',
-      description: 'Exzellente Bewertung über 4.7',
-      entityType: 'USER',
-      category: 'BEHAVIOR',
-      condition: { field: 'rating_avg', greater_than: 4.7 },
-      weight: -10,
-      priority: 3,
-      active: true,
-      triggerCount: 234,
-      lastTriggered: new Date(Date.now() - 1800000).toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'tx_high_amount',
-      name: 'HOHER_BETRAG',
-      description: 'Betrag über 50.000 EUR',
-      entityType: 'TRANSACTION',
-      category: 'TRANSACTION',
-      condition: { field: 'amount', greater_than: 50000 },
-      weight: 20,
-      priority: 10,
-      active: true,
-      triggerCount: 45,
-      lastTriggered: new Date(Date.now() - 7200000).toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'tx_intl_hazmat',
-      name: 'INTERNATIONAL_GEFAHRGUT',
-      description: 'Internationaler Gefahrgut-Transport',
-      entityType: 'TRANSACTION',
-      category: 'TRANSACTION',
-      condition: {
-        and: [
-          { field: 'international', equals: true },
-          { field: 'hazmat', equals: true },
-        ],
-      },
-      weight: 20,
-      priority: 10,
-      active: true,
-      triggerCount: 23,
-      lastTriggered: new Date(Date.now() - 14400000).toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'company_kyb_missing',
-      name: 'KYB_FEHLT',
-      description: 'KYB-Verifizierung fehlt',
-      entityType: 'COMPANY',
-      category: 'DOCUMENT',
-      condition: { field: 'kyb_status', equals: 'missing' },
-      weight: 20,
-      priority: 10,
-      active: true,
-      triggerCount: 67,
-      lastTriggered: new Date(Date.now() - 10800000).toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'company_fraud_flags',
-      name: 'FRAUD_FLAGS',
-      description: 'Aktive Fraud-Flags',
-      entityType: 'COMPANY',
-      category: 'SECURITY',
-      condition: { field: 'fraud_flags', greater_than: 0 },
-      weight: 25,
-      priority: 15,
-      active: true,
-      triggerCount: 8,
-      lastTriggered: new Date(Date.now() - 21600000).toISOString(),
-      createdAt: '2024-01-01T00:00:00Z',
-      updatedAt: '2024-01-01T00:00:00Z',
-      isSystem: true,
-    },
-    {
-      id: 'custom_vip_user',
-      name: 'VIP_KUNDE',
-      description: 'VIP-Kunde mit langer Historie',
-      entityType: 'USER',
-      category: 'USER',
-      condition: {
-        and: [
-          { field: 'account_age_days', greater_than: 730 },
-          { field: 'completed_transports', greater_than: 100 },
-          { field: 'rating_avg', greater_than: 4.5 },
-        ],
-      },
-      weight: -15,
-      priority: 5,
-      active: true,
-      triggerCount: 12,
-      lastTriggered: new Date(Date.now() - 86400000).toISOString(),
-      createdAt: '2024-03-15T00:00:00Z',
-      updatedAt: '2024-03-15T00:00:00Z',
-      isSystem: false,
-    },
-  ];
-}
+const mockRules: RiskRule[] = [
+  {
+    id: 'rule_001',
+    name: 'new_iban',
+    category: 'user',
+    weight: 15,
+    status: 'active',
+    description: 'IBAN wurde vor weniger als 24h hinzugefügt',
+    conditions: [
+      { field: 'iban_age_hours', operator: 'less_than', value: 24 },
+    ],
+    createdAt: '2023-01-15T10:00:00',
+    updatedAt: '2024-01-10T14:30:00',
+    triggerCount: 1284,
+    lastTriggered: '2024-01-14T10:23:00',
+    version: 3,
+  },
+  {
+    id: 'rule_002',
+    name: 'high_amount',
+    category: 'transaction',
+    weight: 25,
+    status: 'active',
+    description: 'Transaktion über 10.000€',
+    conditions: [
+      { field: 'transaction_amount', operator: 'greater_than', value: 10000 },
+    ],
+    createdAt: '2023-01-15T10:00:00',
+    updatedAt: '2024-01-12T09:15:00',
+    triggerCount: 847,
+    lastTriggered: '2024-01-14T10:22:00',
+    version: 2,
+  },
+  {
+    id: 'rule_003',
+    name: 'fraud_flags',
+    category: 'user',
+    weight: 20,
+    status: 'active',
+    description: 'Vorhandene Fraud-Flags im System',
+    conditions: [
+      { field: 'fraud_flags_count', operator: 'greater_than', value: 0 },
+    ],
+    createdAt: '2023-01-15T10:00:00',
+    updatedAt: '2023-06-20T11:00:00',
+    triggerCount: 234,
+    lastTriggered: '2024-01-14T10:20:00',
+    version: 1,
+  },
+  {
+    id: 'rule_004',
+    name: 'company_vat_mismatch',
+    category: 'company',
+    weight: 20,
+    status: 'active',
+    description: 'USt-IdNr. stimmt nicht mit Registrierungsland überein',
+    conditions: [
+      { field: 'vat_country', operator: 'not_equals', value: 'registration_country' },
+    ],
+    createdAt: '2023-02-01T10:00:00',
+    updatedAt: '2023-08-15T14:00:00',
+    triggerCount: 156,
+    lastTriggered: '2024-01-14T09:45:00',
+    version: 2,
+  },
+  {
+    id: 'rule_005',
+    name: 'location_mismatch',
+    category: 'user',
+    weight: 15,
+    status: 'active',
+    description: 'GPS-Position stimmt nicht mit Profiladresse überein',
+    conditions: [
+      { field: 'gps_distance_km', operator: 'greater_than', value: 50 },
+    ],
+    createdAt: '2023-03-10T10:00:00',
+    updatedAt: '2023-12-01T16:00:00',
+    triggerCount: 412,
+    lastTriggered: '2024-01-14T09:45:00',
+    version: 4,
+  },
+  {
+    id: 'rule_006',
+    name: 'multiple_devices',
+    category: 'user',
+    weight: 6,
+    status: 'testing',
+    description: 'Login von 3+ verschiedenen Geräten innerhalb 24h',
+    conditions: [
+      { field: 'unique_devices_24h', operator: 'greater_than', value: 3 },
+    ],
+    createdAt: '2024-01-05T10:00:00',
+    updatedAt: '2024-01-14T08:00:00',
+    triggerCount: 45,
+    lastTriggered: '2024-01-14T08:30:00',
+    version: 1,
+  },
+  {
+    id: 'rule_007',
+    name: 'payout_velocity',
+    category: 'transaction',
+    weight: 18,
+    status: 'inactive',
+    description: 'Mehr als 3 Payout-Anfragen innerhalb 24h',
+    conditions: [
+      { field: 'payout_requests_24h', operator: 'greater_than', value: 3 },
+    ],
+    createdAt: '2023-04-20T10:00:00',
+    updatedAt: '2024-01-05T11:00:00',
+    triggerCount: 0,
+    version: 1,
+  },
+];
 
 // ============================================
-// HELPER FUNCTIONS
+// UI COMPONENTS
 // ============================================
 
-const formatDate = (dateStr: string) => {
-  return new Date(dateStr).toLocaleString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
-};
-
-const getEntityTypeColor = (type: EntityType) => {
-  switch (type) {
-    case 'USER':
-      return 'bg-blue-100 text-blue-800';
-    case 'COMPANY':
-      return 'bg-purple-100 text-purple-800';
-    case 'TRANSACTION':
-      return 'bg-orange-100 text-orange-800';
-  }
-};
-
-const getCategoryColor = (category: RuleCategory) => {
-  switch (category) {
-    case 'SECURITY':
-      return 'bg-red-100 text-red-800';
-    case 'DOCUMENT':
-      return 'bg-yellow-100 text-yellow-800';
-    case 'BEHAVIOR':
-      return 'bg-green-100 text-green-800';
-    case 'USER':
-      return 'bg-blue-100 text-blue-800';
-    case 'COMPANY':
-      return 'bg-purple-100 text-purple-800';
-    case 'TRANSACTION':
-      return 'bg-orange-100 text-orange-800';
-    default:
-      return 'bg-gray-100 text-gray-800';
-  }
-};
-
-// ============================================
-// JSON CONDITION EDITOR
-// ============================================
-
-function ConditionEditor({
-  condition,
-  onChange,
-}: {
-  condition: RuleCondition;
-  onChange: (condition: RuleCondition) => void;
-}) {
-  const conditionJson = JSON.stringify(condition, null, 2);
-
-  const handleChange = (value: string) => {
-    try {
-      const parsed = JSON.parse(value);
-      onChange(parsed);
-    } catch {
-      // Invalid JSON, don't update
-    }
+// Rule Status Badge
+function RuleStatusBadge({ status }: { status: RuleStatus }) {
+  const styles = {
+    active: { bg: '#E8F8F0', color: '#2ECC71', icon: CheckCircle2 },
+    inactive: { bg: '#F2F4F7', color: '#6B7C93', icon: AlertCircle },
+    testing: { bg: '#FFF9E6', color: '#F1C40F', icon: TestTube },
   };
+  const style = styles[status];
+  const Icon = style.icon;
 
   return (
-    <div className="space-y-2">
-      <Label>Condition (JSON)</Label>
-      <Textarea
-        value={conditionJson}
-        onChange={(e) => handleChange(e.target.value)}
-        className="font-mono text-sm min-h-[150px]"
-        placeholder='{"field": "kyc_status", "equals": "missing"}'
-      />
-      <p className="text-xs text-muted-foreground">
-        Unterstützte Operatoren: equals, not_equals, greater_than, less_than, contains_any, and, or
-      </p>
-    </div>
+    <span
+      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium"
+      style={{ backgroundColor: style.bg, color: style.color }}
+    >
+      <Icon className="h-3 w-3" />
+      {status.toUpperCase()}
+    </span>
   );
 }
 
-// ============================================
-// RULE TEST PANEL
-// ============================================
-
-function RuleTestPanel({
-  rule,
-  onTest,
-}: {
-  rule: RiskRule;
-  onTest: (context: Record<string, unknown>) => TestResult;
-}) {
-  const [testContext, setTestContext] = useState<string>(
-    JSON.stringify(
-      {
-        kyc_status: 'missing',
-        iban_age_hours: 12,
-        rating_avg: 4.8,
-        amount: 75000,
-        international: true,
-        hazmat: false,
-      },
-      null,
-      2
-    )
-  );
-  const [testResult, setTestResult] = useState<TestResult | null>(null);
-
-  const runTest = () => {
-    try {
-      const context = JSON.parse(testContext);
-      const result = onTest(context);
-      setTestResult(result);
-    } catch {
-      setTestResult({
-        matched: false,
-        evaluatedFields: {},
-        conditionPath: ['Error: Invalid JSON context'],
-      });
-    }
+// Category Badge
+function CategoryBadge({ category }: { category: RuleCategory }) {
+  const styles = {
+    user: { bg: '#E8F4FD', color: '#2D8CFF' },
+    company: { bg: '#F3E8FD', color: '#8B5CF6' },
+    transaction: { bg: '#FEF3E8', color: '#F59E0B' },
   };
+  const style = styles[category];
 
   return (
-    <div className="space-y-4">
-      <div className="space-y-2">
-        <Label>Test Context (JSON)</Label>
-        <Textarea
-          value={testContext}
-          onChange={(e) => setTestContext(e.target.value)}
-          className="font-mono text-sm min-h-[100px]"
+    <span
+      className="inline-flex items-center px-2 py-1 rounded text-xs font-medium"
+      style={{ backgroundColor: style.bg, color: style.color }}
+    >
+      {category}
+    </span>
+  );
+}
+
+// Weight Indicator
+function WeightIndicator({ weight }: { weight: number }) {
+  const color = weight > 20 ? '#E74C3C' : weight > 10 ? '#F1C40F' : '#2ECC71';
+
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-16 h-2 bg-[#E0E6ED] rounded-full overflow-hidden">
+        <div
+          className="h-full rounded-full transition-all"
+          style={{ width: `${Math.min(weight * 2, 100)}%`, backgroundColor: color }}
         />
       </div>
-      <Button onClick={runTest} className="w-full">
-        <Play className="h-4 w-4 mr-2" />
-        Test Rule
-      </Button>
-      {testResult && (
-        <div
-          className={`p-4 rounded-lg border ${
-            testResult.matched
-              ? 'bg-green-50 border-green-200'
-              : 'bg-red-50 border-red-200'
-          }`}
-        >
-          <div className="flex items-center gap-2 mb-2">
-            {testResult.matched ? (
-              <CheckCircle2 className="h-5 w-5 text-green-500" />
-            ) : (
-              <XCircle className="h-5 w-5 text-red-500" />
-            )}
-            <span className="font-medium">
-              {testResult.matched ? 'Condition MATCHED' : 'Condition NOT matched'}
-            </span>
-          </div>
-          <div className="text-sm space-y-1">
-            <div className="font-medium">Evaluated Fields:</div>
-            <code className="text-xs bg-white/50 p-1 rounded block">
-              {JSON.stringify(testResult.evaluatedFields, null, 2)}
-            </code>
-          </div>
-        </div>
-      )}
+      <span className="text-sm font-medium" style={{ color }}>
+        +{weight}
+      </span>
     </div>
   );
 }
 
-// ============================================
-// EDIT RULE DIALOG
-// ============================================
-
-function EditRuleDialog({
-  rule,
-  onSave,
-  onDelete,
-}: {
-  rule: RiskRule;
-  onSave: (rule: RiskRule) => void;
-  onDelete: (ruleId: string) => void;
+// Rule Editor Component
+function RuleEditor({ 
+  rule, 
+  onSave, 
+  onCancel 
+}: { 
+  rule: RiskRule | null;
+  onSave: (rule: Partial<RiskRule>) => void;
+  onCancel: () => void;
 }) {
-  const [editedRule, setEditedRule] = useState<RiskRule>(rule);
-  const [activeTab, setActiveTab] = useState<'edit' | 'test'>('edit');
-
-  const handleSave = () => {
-    onSave(editedRule);
-  };
-
-  const testRule = (context: Record<string, unknown>): TestResult => {
-    // Simple condition evaluation
-    const evaluate = (condition: RuleCondition): boolean => {
-      if (condition.and) {
-        return condition.and.every(evaluate);
-      }
-      if (condition.or) {
-        return condition.or.some(evaluate);
-      }
-      if (condition.field) {
-        const fieldValue = context[condition.field];
-        if (condition.equals !== undefined) return fieldValue === condition.equals;
-        if (condition.not_equals !== undefined) return fieldValue !== condition.not_equals;
-        if (condition.greater_than !== undefined && typeof fieldValue === 'number') {
-          return fieldValue > condition.greater_than;
-        }
-        if (condition.less_than !== undefined && typeof fieldValue === 'number') {
-          return fieldValue < condition.less_than;
-        }
-        if (condition.greater_than_or_equal !== undefined && typeof fieldValue === 'number') {
-          return fieldValue >= condition.greater_than_or_equal;
-        }
-        if (condition.less_than_or_equal !== undefined && typeof fieldValue === 'number') {
-          return fieldValue <= condition.less_than_or_equal;
-        }
-      }
-      return false;
-    };
-
-    return {
-      matched: evaluate(editedRule.condition),
-      evaluatedFields: context,
-      conditionPath: [editedRule.name],
-    };
-  };
-
-  return (
-    <DialogContent className="max-w-2xl">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Edit className="h-5 w-5" />
-          Edit Rule: {rule.name}
-        </DialogTitle>
-        <DialogDescription>
-          {rule.isSystem ? (
-            <span className="flex items-center gap-1 text-orange-500">
-              <AlertCircle className="h-4 w-4" />
-              System Rule - Limited editing
-            </span>
-          ) : (
-            'Custom Rule - Full editing available'
-          )}
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="flex gap-2 mb-4">
-        <Button
-          variant={activeTab === 'edit' ? 'default' : 'outline'}
-          onClick={() => setActiveTab('edit')}
-        >
-          <Edit className="h-4 w-4 mr-1" />
-          Edit
-        </Button>
-        <Button
-          variant={activeTab === 'test' ? 'default' : 'outline'}
-          onClick={() => setActiveTab('test')}
-        >
-          <Play className="h-4 w-4 mr-1" />
-          Test
-        </Button>
-      </div>
-
-      {activeTab === 'edit' ? (
-        <div className="space-y-4 py-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Rule ID</Label>
-              <Input value={rule.id} disabled className="font-mono" />
-            </div>
-            <div className="space-y-2">
-              <Label>Entity Type</Label>
-              <Input value={rule.entityType} disabled />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label>Description</Label>
-            <Textarea
-              value={editedRule.description}
-              onChange={(e) => setEditedRule({ ...editedRule, description: e.target.value })}
-              disabled={rule.isSystem}
-            />
-          </div>
-
-          <ConditionEditor
-            condition={editedRule.condition}
-            onChange={(condition) => setEditedRule({ ...editedRule, condition })}
-          />
-
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label>Weight: {editedRule.weight}</Label>
-              <Slider
-                value={[editedRule.weight]}
-                onValueChange={([value]) => setEditedRule({ ...editedRule, weight: value })}
-                min={-30}
-                max={50}
-                step={5}
-                disabled={rule.isSystem}
-              />
-              <p className="text-xs text-muted-foreground">
-                Positive = erhöht Risiko, Negative = senkt Risiko
-              </p>
-            </div>
-            <div className="space-y-2">
-              <Label>Priority: {editedRule.priority}</Label>
-              <Slider
-                value={[editedRule.priority]}
-                onValueChange={([value]) => setEditedRule({ ...editedRule, priority: value })}
-                min={0}
-                max={20}
-                step={1}
-                disabled={rule.isSystem}
-              />
-              <p className="text-xs text-muted-foreground">
-                Höhere Priorität wird zuerst ausgewertet
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center justify-between">
-            <Label htmlFor="active">Active</Label>
-            <Switch
-              id="active"
-              checked={editedRule.active}
-              onCheckedChange={(active) => setEditedRule({ ...editedRule, active })}
-            />
-          </div>
-        </div>
-      ) : (
-        <div className="py-4">
-          <RuleTestPanel rule={editedRule} onTest={testRule} />
-        </div>
-      )}
-
-      <DialogFooter className="flex justify-between">
-        <div>
-          {!rule.isSystem && (
-            <Button variant="destructive" onClick={() => onDelete(rule.id)}>
-              <Trash2 className="h-4 w-4 mr-1" />
-              Delete
-            </Button>
-          )}
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setEditedRule(rule)}>
-            <RotateCcw className="h-4 w-4 mr-1" />
-            Reset
-          </Button>
-          <Button onClick={handleSave}>
-            <Save className="h-4 w-4 mr-1" />
-            Save Changes
-          </Button>
-        </div>
-      </DialogFooter>
-    </DialogContent>
+  const [formData, setFormData] = useState<Partial<RiskRule>>(
+    rule || {
+      name: '',
+      category: 'user',
+      weight: 10,
+      status: 'testing',
+      description: '',
+      conditions: [],
+    }
   );
-}
-
-// ============================================
-// CREATE RULE DIALOG
-// ============================================
-
-function CreateRuleDialog({
-  onCreate,
-}: {
-  onCreate: (rule: Omit<RiskRule, 'id' | 'triggerCount' | 'lastTriggered' | 'createdAt' | 'updatedAt' | 'isSystem'>) => void;
-}) {
-  const [newRule, setNewRule] = useState({
-    name: '',
-    description: '',
-    entityType: 'USER' as EntityType,
-    category: 'USER' as RuleCategory,
-    condition: { field: '', equals: '' },
-    weight: 10,
-    priority: 5,
-    active: true,
-  });
-
-  const handleCreate = () => {
-    onCreate(newRule);
-  };
+  const [jsonEditor, setJsonEditor] = useState(
+    JSON.stringify(rule?.conditions || [], null, 2)
+  );
 
   return (
-    <DialogContent className="max-w-2xl">
-      <DialogHeader>
-        <DialogTitle className="flex items-center gap-2">
-          <Plus className="h-5 w-5" />
-          Create New Rule
-        </DialogTitle>
-        <DialogDescription>
-          Definiere eine neue Risikoregel
-        </DialogDescription>
-      </DialogHeader>
-
-      <div className="space-y-4 py-4">
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Rule Name</Label>
-            <Input
-              value={newRule.name}
-              onChange={(e) => setNewRule({ ...newRule, name: e.target.value })}
-              placeholder="z.B. VIP_KUNDE"
-              className="font-mono"
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Entity Type</Label>
-            <Select
-              value={newRule.entityType}
-              onValueChange={(value) => setNewRule({ ...newRule, entityType: value as EntityType })}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="USER">USER</SelectItem>
-                <SelectItem value="COMPANY">COMPANY</SelectItem>
-                <SelectItem value="TRANSACTION">TRANSACTION</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <Label>Description</Label>
-          <Textarea
-            value={newRule.description}
-            onChange={(e) => setNewRule({ ...newRule, description: e.target.value })}
-            placeholder="Beschreibe die Regel..."
+    <div className="space-y-6">
+      {/* Basic Info */}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium text-[#1F2D3D]">Rule Name</label>
+          <Input
+            value={formData.name || ''}
+            onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+            placeholder="z.B. new_iban"
+            className="mt-1 border-[#E0E6ED]"
           />
         </div>
-
-        <div className="space-y-2">
-          <Label>Category</Label>
+        <div>
+          <label className="text-sm font-medium text-[#1F2D3D]">Category</label>
           <Select
-            value={newRule.category}
-            onValueChange={(value) => setNewRule({ ...newRule, category: value as RuleCategory })}
+            value={formData.category || 'user'}
+            onValueChange={(value: RuleCategory) => setFormData({ ...formData, category: value })}
           >
-            <SelectTrigger>
+            <SelectTrigger className="mt-1 border-[#E0E6ED]">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="USER">USER</SelectItem>
-              <SelectItem value="COMPANY">COMPANY</SelectItem>
-              <SelectItem value="TRANSACTION">TRANSACTION</SelectItem>
-              <SelectItem value="BEHAVIOR">BEHAVIOR</SelectItem>
-              <SelectItem value="DOCUMENT">DOCUMENT</SelectItem>
-              <SelectItem value="SECURITY">SECURITY</SelectItem>
+              <SelectItem value="user">User</SelectItem>
+              <SelectItem value="company">Company</SelectItem>
+              <SelectItem value="transaction">Transaction</SelectItem>
             </SelectContent>
           </Select>
         </div>
+      </div>
 
-        <ConditionEditor
-          condition={newRule.condition}
-          onChange={(condition) => setNewRule({ ...newRule, condition })}
-        />
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label>Weight: {newRule.weight}</Label>
-            <Slider
-              value={[newRule.weight]}
-              onValueChange={([value]) => setNewRule({ ...newRule, weight: value })}
-              min={-30}
-              max={50}
-              step={5}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label>Priority: {newRule.priority}</Label>
-            <Slider
-              value={[newRule.priority]}
-              onValueChange={([value]) => setNewRule({ ...newRule, priority: value })}
-              min={0}
-              max={20}
-              step={1}
-            />
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between">
-          <Label htmlFor="active-new">Active</Label>
-          <Switch
-            id="active-new"
-            checked={newRule.active}
-            onCheckedChange={(active) => setNewRule({ ...newRule, active })}
+      <div className="grid grid-cols-2 gap-4">
+        <div>
+          <label className="text-sm font-medium text-[#1F2D3D]">Weight (Score Impact)</label>
+          <Input
+            type="number"
+            min="1"
+            max="50"
+            value={formData.weight || 10}
+            onChange={(e) => setFormData({ ...formData, weight: parseInt(e.target.value) })}
+            className="mt-1 border-[#E0E6ED]"
           />
+          <p className="text-xs text-[#6B7C93] mt-1">1-50 Punkte</p>
+        </div>
+        <div>
+          <label className="text-sm font-medium text-[#1F2D3D]">Status</label>
+          <Select
+            value={formData.status || 'testing'}
+            onValueChange={(value: RuleStatus) => setFormData({ ...formData, status: value })}
+          >
+            <SelectTrigger className="mt-1 border-[#E0E6ED]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="testing">Testing</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
-      <DialogFooter>
-        <Button variant="outline">Cancel</Button>
-        <Button onClick={handleCreate}>
-          <Plus className="h-4 w-4 mr-1" />
-          Create Rule
+      <div>
+        <label className="text-sm font-medium text-[#1F2D3D]">Description</label>
+        <Textarea
+          value={formData.description || ''}
+          onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+          placeholder="Beschreibung der Regel..."
+          className="mt-1 border-[#E0E6ED]"
+          rows={2}
+        />
+      </div>
+
+      {/* JSON Editor for Conditions */}
+      <div>
+        <label className="text-sm font-medium text-[#1F2D3D] flex items-center gap-2">
+          <Code className="h-4 w-4" />
+          Conditions (JSON)
+        </label>
+        <Textarea
+          value={jsonEditor}
+          onChange={(e) => setJsonEditor(e.target.value)}
+          className="mt-1 font-mono text-sm border-[#E0E6ED] bg-[#F7F9FB]"
+          rows={8}
+          placeholder={`[
+  { "field": "transaction_amount", "operator": "greater_than", "value": 10000 }
+]`}
+        />
+        <p className="text-xs text-[#6B7C93] mt-1">
+          Operators: equals, not_equals, greater_than, less_than, contains, exists
+        </p>
+      </div>
+
+      {/* Actions */}
+      <div className="flex items-center justify-between pt-4 border-t border-[#E0E6ED]">
+        <Button variant="outline" onClick={onCancel} className="border-[#E0E6ED]">
+          <X className="h-4 w-4 mr-2" />
+          Abbrechen
         </Button>
-      </DialogFooter>
-    </DialogContent>
+        <Button onClick={() => onSave(formData)} className="bg-[#2D8CFF] hover:bg-[#1B6ED6]">
+          <Save className="h-4 w-4 mr-2" />
+          Regel speichern
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// Test Rule Dialog
+function TestRuleDialog({ 
+  rule, 
+  onClose 
+}: { 
+  rule: RiskRule;
+  onClose: () => void;
+}) {
+  const [testContext, setTestContext] = useState('{\n  "user_id": "u_123",\n  "transaction_amount": 15000,\n  "iban_age_hours": 12\n}');
+  const [result, setResult] = useState<TestResult | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  const runTest = async () => {
+    setLoading(true);
+    // Simulate API call
+    await new Promise(resolve => setTimeout(resolve, 500));
+    setResult({
+      success: true,
+      matchedRules: [rule.name],
+      totalScore: rule.weight,
+      riskLevel: rule.weight > 20 ? 'RED' : rule.weight > 10 ? 'YELLOW' : 'GREEN',
+      duration: 45,
+      details: {
+        conditions_checked: rule.conditions.length,
+        conditions_matched: 1,
+        evaluated_at: new Date().toISOString(),
+      },
+    });
+    setLoading(false);
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <label className="text-sm font-medium text-[#1F2D3D] flex items-center gap-2">
+          <TestTube className="h-4 w-4 text-[#2D8CFF]" />
+          Test Context (JSON)
+        </label>
+        <Textarea
+          value={testContext}
+          onChange={(e) => setTestContext(e.target.value)}
+          className="mt-1 font-mono text-sm border-[#E0E6ED] bg-[#F7F9FB]"
+          rows={6}
+        />
+      </div>
+
+      <Button onClick={runTest} disabled={loading} className="w-full bg-[#2D8CFF]">
+        {loading ? (
+          <RefreshCw className="h-4 w-4 mr-2 animate-spin" />
+        ) : (
+          <Play className="h-4 w-4 mr-2" />
+        )}
+        Test ausführen
+      </Button>
+
+      {result && (
+        <Card className={`border-2 ${result.matchedRules.length > 0 ? 'border-[#E74C3C]' : 'border-[#2ECC71]'}`}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              {result.matchedRules.length > 0 ? (
+                <AlertTriangle className="h-4 w-4 text-[#E74C3C]" />
+              ) : (
+                <CheckCircle2 className="h-4 w-4 text-[#2ECC71]" />
+              )}
+              Test Ergebnis
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3 text-sm">
+            <div className="flex justify-between">
+              <span className="text-[#6B7C93]">Matched Rules</span>
+              <span className="font-medium">{result.matchedRules.join(', ') || 'Keine'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#6B7C93]">Total Score</span>
+              <span className="font-bold text-lg" style={{ color: result.riskLevel === 'RED' ? '#E74C3C' : result.riskLevel === 'YELLOW' ? '#F1C40F' : '#2ECC71' }}>
+                +{result.totalScore}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#6B7C93]">Risk Level</span>
+              <Badge className={result.riskLevel === 'RED' ? 'bg-[#E74C3C]' : result.riskLevel === 'YELLOW' ? 'bg-[#F1C40F]' : 'bg-[#2ECC71]'}>
+                {result.riskLevel}
+              </Badge>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[#6B7C93]">Duration</span>
+              <span className="font-mono">{result.duration}ms</span>
+            </div>
+            <div className="pt-2 border-t border-[#E0E6ED]">
+              <span className="text-[#6B7C93]">Details:</span>
+              <pre className="mt-1 text-xs bg-[#F7F9FB] p-2 rounded overflow-auto">
+                {JSON.stringify(result.details, null, 2)}
+              </pre>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+    </div>
   );
 }
 
 // ============================================
-// MAIN COMPONENT
+// MAIN RULES MANAGEMENT COMPONENT
 // ============================================
 
-export function RulesManagement() {
-  const [rules, setRules] = useState<RiskRule[]>([]);
-  const [filterType, setFilterType] = useState<string>('all');
-  const [filterCategory, setFilterCategory] = useState<string>('all');
+interface RulesManagementProps {
+  onBack: () => void;
+}
+
+export function RulesManagement({ onBack }: RulesManagementProps) {
+  const [rules, setRules] = useState<RiskRule[]>(mockRules);
+  const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
+  const [filterStatus, setFilterStatus] = useState<string>('all');
   const [editingRule, setEditingRule] = useState<RiskRule | null>(null);
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [testingRule, setTestingRule] = useState<RiskRule | null>(null);
+  const [showNewRuleDialog, setShowNewRuleDialog] = useState(false);
 
-  useEffect(() => {
-    setRules(getMockRules());
-  }, []);
-
-  const filteredRules = rules.filter((rule) => {
-    const matchesType = filterType === 'all' || rule.entityType === filterType;
+  // Filter rules
+  const filteredRules = rules.filter(rule => {
+    const matchesSearch = rule.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                          rule.description.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = filterCategory === 'all' || rule.category === filterCategory;
-    const matchesSearch =
-      !searchQuery ||
-      rule.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      rule.description.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesType && matchesCategory && matchesSearch;
+    const matchesStatus = filterStatus === 'all' || rule.status === filterStatus;
+    return matchesSearch && matchesCategory && matchesStatus;
   });
 
-  const handleSaveRule = (updatedRule: RiskRule) => {
-    setRules(rules.map((r) => (r.id === updatedRule.id ? updatedRule : r)));
+  // Stats
+  const stats = {
+    total: rules.length,
+    active: rules.filter(r => r.status === 'active').length,
+    testing: rules.filter(r => r.status === 'testing').length,
+    inactive: rules.filter(r => r.status === 'inactive').length,
+    totalTriggers: rules.reduce((sum, r) => sum + r.triggerCount, 0),
+  };
+
+  const handleToggleStatus = (rule: RiskRule) => {
+    setRules(rules.map(r => {
+      if (r.id === rule.id) {
+        const newStatus: RuleStatus = r.status === 'active' ? 'inactive' : 'active';
+        return { ...r, status: newStatus, updatedAt: new Date().toISOString() };
+      }
+      return r;
+    }));
+  };
+
+  const handleSaveRule = (ruleData: Partial<RiskRule>) => {
+    if (editingRule) {
+      setRules(rules.map(r => r.id === editingRule.id ? { ...r, ...ruleData } : r));
+    } else {
+      const newRule: RiskRule = {
+        id: `rule_${Date.now()}`,
+        name: ruleData.name || 'new_rule',
+        category: ruleData.category || 'user',
+        weight: ruleData.weight || 10,
+        status: ruleData.status || 'testing',
+        description: ruleData.description || '',
+        conditions: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        triggerCount: 0,
+        version: 1,
+      };
+      setRules([...rules, newRule]);
+    }
     setEditingRule(null);
+    setShowNewRuleDialog(false);
   };
 
   const handleDeleteRule = (ruleId: string) => {
-    setRules(rules.filter((r) => r.id !== ruleId));
-    setEditingRule(null);
-  };
-
-  const handleCreateRule = (
-    newRule: Omit<RiskRule, 'id' | 'triggerCount' | 'lastTriggered' | 'createdAt' | 'updatedAt' | 'isSystem'>
-  ) => {
-    const rule: RiskRule = {
-      ...newRule,
-      id: `custom_${Date.now()}`,
-      triggerCount: 0,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
-      isSystem: false,
-    };
-    setRules([...rules, rule]);
-    setShowCreateDialog(false);
+    setRules(rules.filter(r => r.id !== ruleId));
   };
 
   return (
-    <div className="min-h-screen bg-background p-6 space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-3">
-            <Settings className="h-8 w-8 text-primary" />
-            Rules Management
-          </h1>
-          <p className="text-muted-foreground">
-            Verwalte Risk-Regeln • ADMIN / SECURITY only
-          </p>
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" onClick={onBack} className="text-[#6B7C93]">
+            <ArrowLeft className="h-4 w-4 mr-2" />
+            Zurück
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold text-[#1F2D3D] flex items-center gap-3">
+              <Shield className="h-7 w-7 text-[#2D8CFF]" />
+              Rules Management
+            </h1>
+            <p className="text-[#6B7C93] mt-1">
+              Verwalte Risk-Engine Regeln (Admin/Security only)
+            </p>
+          </div>
         </div>
-        <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-          <DialogTrigger asChild>
-            <Button>
-              <Plus className="h-4 w-4 mr-1" />
-              Create Rule
-            </Button>
-          </DialogTrigger>
-          <CreateRuleDialog onCreate={handleCreateRule} />
-        </Dialog>
+        <div className="flex items-center gap-2">
+          <Button variant="outline" className="border-[#E0E6ED]">
+            <Upload className="h-4 w-4 mr-2" />
+            Import
+          </Button>
+          <Button variant="outline" className="border-[#E0E6ED]">
+            <Download className="h-4 w-4 mr-2" />
+            Export
+          </Button>
+          <Button 
+            className="bg-[#2D8CFF] hover:bg-[#1B6ED6]"
+            onClick={() => setShowNewRuleDialog(true)}
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Neue Regel
+          </Button>
+        </div>
       </div>
 
-      {/* Stats */}
-      <div className="grid gap-4 md:grid-cols-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{rules.length}</div>
-            <p className="text-xs text-muted-foreground">Total Rules</p>
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-5">
+        <Card className="border-[#E0E6ED]">
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-[#1F2D3D]">{stats.total}</div>
+            <div className="text-xs text-[#6B7C93]">Total Rules</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{rules.filter((r) => r.active).length}</div>
-            <p className="text-xs text-muted-foreground">Active</p>
+        <Card className="border-[#2ECC71] bg-[#E8F8F0]">
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-[#2ECC71]">{stats.active}</div>
+            <div className="text-xs text-[#6B7C93]">Active</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{rules.filter((r) => r.isSystem).length}</div>
-            <p className="text-xs text-muted-foreground">System Rules</p>
+        <Card className="border-[#F1C40F] bg-[#FFF9E6]">
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-[#F1C40F]">{stats.testing}</div>
+            <div className="text-xs text-[#6B7C93]">Testing</div>
           </CardContent>
         </Card>
-        <Card>
-          <CardContent className="p-4">
-            <div className="text-2xl font-bold">{rules.filter((r) => !r.isSystem).length}</div>
-            <p className="text-xs text-muted-foreground">Custom Rules</p>
+        <Card className="border-[#E0E6ED]">
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-[#6B7C93]">{stats.inactive}</div>
+            <div className="text-xs text-[#6B7C93]">Inactive</div>
+          </CardContent>
+        </Card>
+        <Card className="border-[#E0E6ED]">
+          <CardContent className="pt-4">
+            <div className="text-2xl font-bold text-[#2D8CFF]">{stats.totalTriggers.toLocaleString()}</div>
+            <div className="text-xs text-[#6B7C93]">Total Triggers</div>
           </CardContent>
         </Card>
       </div>
 
       {/* Filters */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search rules..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-8"
-              />
-            </div>
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Entity Type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="USER">USER</SelectItem>
-                <SelectItem value="COMPANY">COMPANY</SelectItem>
-                <SelectItem value="TRANSACTION">TRANSACTION</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Categories</SelectItem>
-                <SelectItem value="USER">USER</SelectItem>
-                <SelectItem value="COMPANY">COMPANY</SelectItem>
-                <SelectItem value="TRANSACTION">TRANSACTION</SelectItem>
-                <SelectItem value="BEHAVIOR">BEHAVIOR</SelectItem>
-                <SelectItem value="DOCUMENT">DOCUMENT</SelectItem>
-                <SelectItem value="SECURITY">SECURITY</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex items-center gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-[#6B7C93]" />
+          <Input
+            placeholder="Regeln suchen..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 border-[#E0E6ED]"
+          />
+        </div>
+        <Select value={filterCategory} onValueChange={setFilterCategory}>
+          <SelectTrigger className="w-36 border-[#E0E6ED]">
+            <Filter className="h-4 w-4 mr-2" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Kategorien</SelectItem>
+            <SelectItem value="user">User</SelectItem>
+            <SelectItem value="company">Company</SelectItem>
+            <SelectItem value="transaction">Transaction</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-32 border-[#E0E6ED]">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Alle Status</SelectItem>
+            <SelectItem value="active">Active</SelectItem>
+            <SelectItem value="testing">Testing</SelectItem>
+            <SelectItem value="inactive">Inactive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
       {/* Rules Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>All Rules</CardTitle>
-          <CardDescription>
-            {filteredRules.length} Regeln angezeigt
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+      <Card className="border-[#E0E6ED]">
+        <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow>
-                <TableHead>Rule ID</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Entity</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead className="text-right">Weight</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-right">Triggers</TableHead>
-                <TableHead>Last Triggered</TableHead>
-                <TableHead className="text-right">Action</TableHead>
+              <TableRow className="bg-[#F7F9FB] hover:bg-[#F7F9FB]">
+                <TableHead className="text-xs font-semibold text-[#6B7C93] uppercase tracking-wider">Rule</TableHead>
+                <TableHead className="text-xs font-semibold text-[#6B7C93] uppercase tracking-wider">Category</TableHead>
+                <TableHead className="text-xs font-semibold text-[#6B7C93] uppercase tracking-wider">Weight</TableHead>
+                <TableHead className="text-xs font-semibold text-[#6B7C93] uppercase tracking-wider">Status</TableHead>
+                <TableHead className="text-xs font-semibold text-[#6B7C93] uppercase tracking-wider text-right">Triggers</TableHead>
+                <TableHead className="text-xs font-semibold text-[#6B7C93] uppercase tracking-wider">Last Triggered</TableHead>
+                <TableHead className="text-xs font-semibold text-[#6B7C93] uppercase tracking-wider text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {filteredRules.map((rule) => (
-                <TableRow key={rule.id} className={!rule.active ? 'opacity-50' : ''}>
+                <TableRow key={rule.id} className="hover:bg-[#F2F6FA]">
                   <TableCell>
-                    <div className="flex items-center gap-2">
-                      <code className="text-xs bg-muted px-1.5 py-0.5 rounded">
-                        {rule.name}
-                      </code>
-                      {rule.isSystem && (
-                        <Badge variant="outline" className="text-xs">
-                          System
-                        </Badge>
-                      )}
+                    <div>
+                      <div className="font-medium text-[#1F2D3D]">{rule.name}</div>
+                      <div className="text-xs text-[#6B7C93] mt-0.5">{rule.description}</div>
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[200px] truncate">
-                    {rule.description}
+                  <TableCell>
+                    <CategoryBadge category={rule.category} />
                   </TableCell>
                   <TableCell>
-                    <Badge className={getEntityTypeColor(rule.entityType)}>
-                      {rule.entityType}
-                    </Badge>
+                    <WeightIndicator weight={rule.weight} />
                   </TableCell>
                   <TableCell>
-                    <Badge className={getCategoryColor(rule.category)}>
-                      {rule.category}
-                    </Badge>
+                    <RuleStatusBadge status={rule.status} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <span
-                      className={`font-bold ${
-                        rule.weight > 0 ? 'text-red-500' : 'text-green-500'
-                      }`}
-                    >
-                      {rule.weight > 0 ? '+' : ''}
-                      {rule.weight}
+                    <span className="font-medium text-[#1F2D3D]">{rule.triggerCount.toLocaleString()}</span>
+                  </TableCell>
+                  <TableCell>
+                    <span className="text-sm text-[#6B7C93]">
+                      {rule.lastTriggered ? new Date(rule.lastTriggered).toLocaleString('de-DE', {
+                        day: '2-digit',
+                        month: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }) : '-'}
                     </span>
                   </TableCell>
-                  <TableCell>
-                    {rule.active ? (
-                      <CheckCircle2 className="h-4 w-4 text-green-500" />
-                    ) : (
-                      <XCircle className="h-4 w-4 text-red-500" />
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right font-mono">
-                    {rule.triggerCount}
-                  </TableCell>
-                  <TableCell className="text-sm text-muted-foreground">
-                    {rule.lastTriggered ? formatDate(rule.lastTriggered) : '-'}
-                  </TableCell>
                   <TableCell className="text-right">
-                    <Dialog>
-                      <DialogTrigger asChild>
-                        <Button size="sm" variant="outline" onClick={() => setEditingRule(rule)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                      </DialogTrigger>
-                      {editingRule?.id === rule.id && (
-                        <EditRuleDialog
-                          rule={editingRule}
-                          onSave={handleSaveRule}
-                          onDelete={handleDeleteRule}
-                        />
-                      )}
-                    </Dialog>
+                    <div className="flex items-center justify-end gap-1">
+                      {/* Toggle Status */}
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleToggleStatus(rule)}
+                        title={rule.status === 'active' ? 'Deaktivieren' : 'Aktivieren'}
+                      >
+                        {rule.status === 'active' ? (
+                          <ToggleRight className="h-4 w-4 text-[#2ECC71]" />
+                        ) : (
+                          <ToggleLeft className="h-4 w-4 text-[#6B7C93]" />
+                        )}
+                      </Button>
+                      
+                      {/* Test */}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="ghost" size="sm" title="Testen">
+                            <Play className="h-4 w-4 text-[#2D8CFF]" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-lg">
+                          <DialogHeader>
+                            <DialogTitle className="flex items-center gap-2">
+                              <TestTube className="h-5 w-5 text-[#2D8CFF]" />
+                              Test Rule: {rule.name}
+                            </DialogTitle>
+                            <DialogDescription>
+                              Führe diese Regel mit einem Test-Context aus
+                            </DialogDescription>
+                          </DialogHeader>
+                          <TestRuleDialog rule={rule} onClose={() => {}} />
+                        </DialogContent>
+                      </Dialog>
+
+                      {/* Edit */}
+                      <Dialog>
+                        <DialogTrigger asChild>
+                          <Button variant="ghost" size="sm" onClick={() => setEditingRule(rule)} title="Bearbeiten">
+                            <Edit className="h-4 w-4 text-[#6B7C93]" />
+                          </Button>
+                        </DialogTrigger>
+                        <DialogContent className="max-w-2xl">
+                          <DialogHeader>
+                            <DialogTitle>Regel bearbeiten: {rule.name}</DialogTitle>
+                            <DialogDescription>
+                              Version {rule.version} • Zuletzt aktualisiert: {new Date(rule.updatedAt).toLocaleString('de-DE')}
+                            </DialogDescription>
+                          </DialogHeader>
+                          <RuleEditor
+                            rule={rule}
+                            onSave={handleSaveRule}
+                            onCancel={() => setEditingRule(null)}
+                          />
+                        </DialogContent>
+                      </Dialog>
+
+                      {/* Delete */}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="sm" title="Löschen">
+                            <Trash2 className="h-4 w-4 text-[#E74C3C]" />
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Regel löschen?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Möchtest du die Regel "{rule.name}" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Abbrechen</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleDeleteRule(rule.id)}
+                              className="bg-[#E74C3C] hover:bg-[#C0392B]"
+                            >
+                              Löschen
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -1006,6 +847,38 @@ export function RulesManagement() {
           </Table>
         </CardContent>
       </Card>
+
+      {/* New Rule Dialog */}
+      <Dialog open={showNewRuleDialog} onOpenChange={setShowNewRuleDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Plus className="h-5 w-5 text-[#2D8CFF]" />
+              Neue Regel erstellen
+            </DialogTitle>
+            <DialogDescription>
+              Definiere eine neue Risk-Engine Regel
+            </DialogDescription>
+          </DialogHeader>
+          <RuleEditor
+            rule={null}
+            onSave={handleSaveRule}
+            onCancel={() => setShowNewRuleDialog(false)}
+          />
+        </DialogContent>
+      </Dialog>
+
+      {/* Info Box */}
+      <div className="flex items-start gap-3 p-4 bg-[#E8F4FD] rounded-xl border border-[#2D8CFF]">
+        <Info className="h-5 w-5 text-[#2D8CFF] flex-shrink-0 mt-0.5" />
+        <div className="text-sm">
+          <p className="font-medium text-[#1F2D3D]">Regeln werden in Echtzeit angewendet</p>
+          <p className="text-[#6B7C93] mt-1">
+            Änderungen an Regeln werden sofort wirksam. Neuen Regeln sollten immer im Status "Testing" gestartet werden,
+            bevor sie auf "Active" gesetzt werden.
+          </p>
+        </div>
+      </div>
     </div>
   );
 }
