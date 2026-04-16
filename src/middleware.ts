@@ -22,10 +22,15 @@ interface RouteConfig {
 }
 
 const ROUTE_PROTECTION: Record<string, RouteConfig> = {
-  // Public routes
+  // Public pages
+  '/': { requiresAuth: false, riskLevel: 'LOW' },
+  '/marketplace': { requiresAuth: false, riskLevel: 'LOW' },
+
+  // Public API routes
   '/api/auth/login': { requiresAuth: false, riskLevel: 'MEDIUM', rateLimit: { requests: 10, windowMs: 60000 } },
   '/api/auth/register': { requiresAuth: false, riskLevel: 'MEDIUM', rateLimit: { requests: 5, windowMs: 60000 } },
   '/api/auth/reset-password': { requiresAuth: false, riskLevel: 'HIGH', rateLimit: { requests: 3, windowMs: 60000 } },
+  '/api/health': { requiresAuth: false, riskLevel: 'LOW' },
   
   // User routes
   '/api/user': { requiresAuth: true, riskLevel: 'LOW' },
@@ -117,8 +122,17 @@ function getRouteConfig(pathname: string): RouteConfig | null {
     }
   }
   
-  // Default for unmatched routes
-  return { requiresAuth: true, riskLevel: 'MEDIUM' };
+  // Default for unmatched routes - allow static assets and pages
+  if (pathname.startsWith('/_next') ||
+      pathname.startsWith('/static') ||
+      pathname.startsWith('/images') ||
+      pathname.includes('.') ||
+      pathname === '/favicon.ico') {
+    return { requiresAuth: false, riskLevel: 'LOW' };
+  }
+
+  // Default for other routes
+  return { requiresAuth: false, riskLevel: 'LOW' };
 }
 
 // ============================================
