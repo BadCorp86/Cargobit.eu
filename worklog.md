@@ -888,3 +888,107 @@ Task: Incident-Response-Playbook für Security Operations erstellen
 - Key Contacts
 
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
+Task ID: partner-portal-implementation
+Agent: Main Agent
+Task: Partner-Portal für Versicherungs- und Werbepartner implementieren
+
+## Work Log:
+
+### 1. Datenbank-Schema Erweiterung
+- Datei: `/prisma/schema.prisma` - Erweitert mit Partner-Portal Modellen
+- Neue Enums:
+  - `PartnerType`: INSURANCE, ADS
+  - `PartnerStatus`: PENDING, ACTIVE, SUSPENDED, REJECTED
+  - `ApiKeyStatus`: ACTIVE, REVOKED, EXPIRED
+  - `BillingStatus`: OPEN, PAID, OVERDUE, CANCELLED
+  - `AdSlotType`: MARKETPLACE_SIDEBAR, MARKETPLACE_BANNER, LISTING_HIGHLIGHT, CHECKOUT_UPSELL, EMAIL_SPONSOR
+  - `CampaignPricingModel`: CPC, CPM, CPA
+- Neue Models:
+  - `Partner`: Haupttabelle für Partner
+  - `PartnerApiKey`: API-Keys mit Scopes
+  - `InsuranceProduct`: Versicherungsprodukte
+  - `InsurancePolicy`: Policen
+  - `PartnerAdCampaign`: Werbekampagnen
+  - `PartnerAdStat`: Tägliche Kampagnen-Statistiken
+  - `PartnerBilling`: Rechnungen
+
+### 2. Partner Authentication Service
+- Datei: `/src/lib/partner-auth.ts` - NEU
+- Features:
+  - API-Key Generierung (cb_prefix_xxx)
+  - API-Key Hashing (SHA-256)
+  - Scope-basierte Berechtigungen
+  - Rate Limiting (300 req/min, Burst 100)
+  - Session Management
+
+### 3. API Routes
+- `/api/partner/auth/login` - Partner Login via API-Key
+- `/api/partner/dashboard` - Dashboard Daten (KPIs)
+- `/api/partner/insurance/products` - CRUD für Versicherungsprodukte
+- `/api/partner/insurance/products/[id]` - Einzelnes Produkt
+- `/api/partner/insurance/policies` - Policen auflisten
+- `/api/partner/ads/campaigns` - CRUD für Werbekampagnen
+- `/api/partner/ads/campaigns/[id]` - Einzelne Kampagne
+- `/api/partner/ads/campaigns/[id]/performance` - Performance-Metriken
+- `/api/partner/billing` - Rechnungen auflisten
+- `/api/partner/onboarding` - Registrierung + Admin-Genehmigung
+
+### 4. Partner Portal UI
+- Datei: `/src/components/partner/partner-portal.tsx` - NEU
+- Features:
+  - Login via API-Key
+  - Dashboard (unterschiedlich für Insurance vs Ads)
+  - Produkte/Kampagnen erstellen und verwalten
+  - API-Zugang anzeigen
+  - Rechnungen einsehen
+  - Tab-Navigation
+  - Responsive Design
+
+### 5. Test-Daten
+- Datei: `/scripts/seed-partners.ts` - NEU
+- Seed Partner erstellt:
+  - Allianz Transport (Insurance Partner)
+  - Spedition Schmidt (Ads Partner)
+- Test API-Keys generiert
+- Beispiel-Produkte, Kampagnen, Rechnungen
+
+## Stage Summary:
+
+### Implementierte Dateien:
+1. `/prisma/schema.prisma` - 7 neue Models
+2. `/src/lib/partner-auth.ts` - Auth Service
+3. `/src/app/api/partner/auth/login/route.ts` - Login
+4. `/src/app/api/partner/dashboard/route.ts` - Dashboard
+5. `/src/app/api/partner/insurance/products/route.ts` - Produkte
+6. `/src/app/api/partner/insurance/products/[id]/route.ts` - Produkt CRUD
+7. `/src/app/api/partner/insurance/policies/route.ts` - Policen
+8. `/src/app/api/partner/ads/campaigns/route.ts` - Kampagnen
+9. `/src/app/api/partner/ads/campaigns/[id]/route.ts` - Kampagne CRUD
+10. `/src/app/api/partner/ads/campaigns/[id]/performance/route.ts` - Performance
+11. `/src/app/api/partner/billing/route.ts` - Rechnungen
+12. `/src/app/api/partner/onboarding/route.ts` - Onboarding
+13. `/src/components/partner/partner-portal.tsx` - UI Komponente
+14. `/scripts/seed-partners.ts` - Seed Script
+15. `/home/z/my-project/download/Partner_Portal_Test_Credentials.md` - Test Credentials
+
+### Test Credentials:
+```
+Insurance Partner (Allianz Transport):
+  API Key: cb_partner_iFmolezvoio3odlrS-PVF5Ilyv-0Wecdvv6l_qlJa64
+
+Ads Partner (Spedition Schmidt):
+  API Key: cb_partner_O4bcIUEOH-aV0AQnS7kCa3IA8djyuG2v82fHkIYFzhY
+```
+
+### Security Scopes:
+| Scope | Beschreibung |
+|-------|--------------|
+| `insurance:read` | Versicherungsprodukte lesen |
+| `insurance:write` | Versicherungsprodukte erstellen/bearbeiten |
+| `ads:read` | Werbekampagnen lesen |
+| `ads:write` | Werbekampagnen erstellen/bearbeiten |
+| `billing:read` | Rechnungen einsehen |
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT

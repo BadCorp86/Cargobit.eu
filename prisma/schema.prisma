@@ -1319,10 +1319,10 @@ model RiskHistory {
 model RiskThreshold {
   id            String          @id @default(cuid())
   name          String          @unique  // "green", "yellow", "red"
-  
+
   minValue      Int             // Inclusive
   maxValue      Int             // Inclusive
-  
+
   // Actions
   allowAction   Boolean         @default(true)
   requireDelay  Boolean         @default(false)
@@ -1331,12 +1331,384 @@ model RiskThreshold {
   requireGPS    Boolean         @default(false)
   createTicket  Boolean         @default(false)
   notifySupport Boolean         @default(false)
-  
+
   // Mitigations as JSON
   mitigations   String?         // JSON array of mitigation actions
-  
+
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
-  
+
   @@index([name])
+}
+
+// ============================================
+// 16. PARTNER PORTAL SYSTEM
+// ============================================
+
+enum PartnerType {
+  INSURANCE
+  ADS
+}
+
+enum PartnerStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+  REJECTED
+}
+
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+enum BillingStatus {
+  OPEN
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+enum AdSlotType {
+  MARKETPLACE_SIDEBAR
+  MARKETPLACE_BANNER
+  LISTING_HIGHLIGHT
+  CHECKOUT_UPSELL
+  EMAIL_SPONSOR
+}
+
+enum CampaignPricingModel {
+  CPC  // Cost per Click
+  CPM  // Cost per Mille (1000 impressions)
+  CPA  // Cost per Action
+}
+
+model Partner {
+  id              String        @id @default(cuid())
+
+  // Basic Info
+  name            String        // Company name
+  type            PartnerType   // insurance or ads
+  contactEmail    String
+  contactPhone    String?
+  contactPerson   String?       // Name of contact person
+  website         String?
+
+  // Legal
+  vatNumber       String?       @unique
+  registrationNumber String?
+  country         String?
+  address         String?
+
+  // Status
+  status          PartnerStatus @default(PENDING)
+  statusReason    String?       // Reason for rejection/suspension
+
+  // Documents
+  contractUrl     String?       // Signed contract PDF
+  complianceDocs  String?       // JSON array of document URLs
+
+  // Configuration
+  webhookUrl      String?
+  testMode        Boolean       @default(true)
+  liveModeEnabled Boolean       @default(false)
+
+  // Commission
+  commissionRate  Float         @default(10.0)  // Partner's commission percentage
+
+  // Limits
+  rateLimitPerMin Int           @default(300)
+  burstLimit      Int           @default(100)
+
+  // Timestamps
+  approvedAt      DateTime?
+  approvedBy      String?       // Admin user ID
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  apiKeys         PartnerApiKey[]
+  insuranceProducts InsuranceProduct[]
+  adCampaigns     PartnerAdCampaign[]
+  billings        PartnerBilling[]
+  policies         InsurancePolicy[]
+  adStats          PartnerAdStat[]
+
+  @@index([type])
+  @@index([status])
+  @@index([contactEmail])
+}
+
+model PartnerApiKey {
+  id              String        @id @default(cuid())
+  partnerId       String
+
+  // Key Info
+  name            String        // "Production Key", "Test Key"
+  apiKey          String        @unique  // The actual API key (hashed in production)
+  apiKeyPrefix    String        // First 8 chars for identification
+
+  // Scopes
+  scopes          String        // JSON array: ["insurance:read", "insurance:write", "ads:read", "ads:write", "billing:read"]
+
+  // Status
+  status          ApiKeyStatus  @default(ACTIVE)
+  isTestKey       Boolean       @default(true)
+
+  // Limits
+  rateLimitPerMin Int?
+  lastUsedAt      DateTime?
+
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  expiresAt       DateTime?
+  revokedAt       DateTime?
+  revokedReason   String?
+
+  // Relations
+  partner         Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@index([apiKey])
+  @@index([status])
+}
+
+model InsuranceProduct {
+  id              String        @id @default(cuid())
+  partnerId       String
+
+  // Product Info
+  name            String        // "Standard Cargo", "Premium Cargo", "ADR Coverage"
+  description     String?
+  productCode     String?       // Internal product code
+
+  // Coverage
+  coverageEur     Float         // Maximum coverage in EUR
+  deductibleEur   Float         @default(0)
+
+  // Pricing
+  basePremiumEur  Float         // Base premium in EUR
+  premiumType     String        @default("fixed")  // fixed, percentage, per_kg
+
+  // Risk Modifiers
+  riskModifiers   String?       // JSON: { "yellow": 1.2, "red": 1.5 }
+  routeModifiers  String?       // JSON for international routes
+  cargoModifiers  String?       // JSON for cargo types
+
+  // Coverage Options
+  coversTheft     Boolean       @default(true)
+  coversDelay     Boolean       @default(false)
+  coversDamage    Boolean       @default(true)
+  coversHazmat    Boolean       @default(false)
+
+  // Additional Options (available add-ons)
+  additionalOptions String?     // JSON array of available options
+
+  // Status
+  isActive        Boolean       @default(true)
+
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  partner         Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  policies         InsurancePolicy[]
+
+  @@index([partnerId])
+  @@index([isActive])
+}
+
+model InsurancePolicy {
+  id              String        @id @default(cuid())
+  partnerId       String
+  productId       String
+  transportId     String?       // Link to transport
+
+  // Policy Info
+  policyNumber    String        @unique
+  status          String        @default("active")  // active, cancelled, expired, claimed
+
+  // Coverage
+  coverageEur     Float
+  premiumEur      Float
+  deductibleEur   Float
+
+  // Insured Party
+  insuredUserId   String?
+  insuredName     String
+  insuredEmail    String
+
+  // Risk Assessment
+  riskLevel       String?       // green, yellow, red
+  riskScore       Int?
+
+  // Route Info
+  pickupCountry   String?
+  deliveryCountry String?
+  transitCountries String?      // JSON array
+
+  // Cargo Info
+  cargoDescription String?
+  cargoValueEur   Float?
+
+  // Premium Details
+  basePremium     Float
+  riskSurcharge   Float         @default(0)
+  totalPremium    Float
+
+  // Commission
+  partnerCommission Float
+
+  // Dates
+  validFrom       DateTime
+  validUntil      DateTime
+  cancelledAt     DateTime?
+
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  partner         Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  product         InsuranceProduct @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@index([productId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PartnerAdCampaign {
+  id              String        @id @default(cuid())
+  partnerId       String
+
+  // Campaign Info
+  name            String
+  description     String?
+
+  // Placement
+  slot            AdSlotType    @default(MARKETPLACE_SIDEBAR)
+
+  // Creative
+  bannerUrl       String?
+  bannerAlt       String?
+  targetUrl       String
+  callToAction    String?       // "Jetzt absichern", "Mehr erfahren"
+
+  // Budget
+  budgetEur       Float
+  spentEur        Float         @default(0)
+  currency        String        @default("EUR")
+
+  // Pricing Model
+  pricingModel    CampaignPricingModel @default(CPC)
+  cpcEur          Float?        // Cost per click
+  cpmEur          Float?        // Cost per 1000 impressions
+  cpaEur          Float?        // Cost per action/conversion
+
+  // Targeting
+  targeting       String?       // JSON: { "riskLevels": ["yellow", "red"], "roles": ["shipper"], "countries": ["DE", "AT"] }
+  languageTarget  String?       // JSON array of language codes
+
+  // Schedule
+  startDate       DateTime?
+  endDate         DateTime?
+
+  // Status
+  status          CampaignStatus @default(DRAFT)
+
+  // Stats (aggregated)
+  totalImpressions Int          @default(0)
+  totalClicks     Int           @default(0)
+  totalConversions Int          @default(0)
+
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  partner         Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  dailyStats      PartnerAdStat[]
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([slot])
+}
+
+model PartnerAdStat {
+  id              String        @id @default(cuid())
+  partnerId       String
+  campaignId      String
+
+  // Date
+  date            DateTime
+
+  // Metrics
+  impressions     Int           @default(0)
+  clicks          Int           @default(0)
+  conversions     Int           @default(0)
+
+  // Costs
+  costEur         Float         @default(0)
+
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  partner         Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+  campaign        PartnerAdCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, date])
+  @@index([partnerId])
+  @@index([campaignId])
+  @@index([date])
+}
+
+model PartnerBilling {
+  id              String        @id @default(cuid())
+  partnerId       String
+
+  // Billing Info
+  invoiceNumber   String        @unique
+  type            PartnerType   // insurance or ads
+
+  // Period
+  periodMonth     Int           // 1-12
+  periodYear      Int
+
+  // Amounts
+  grossAmountEur  Float
+  commissionEur   Float         // CargoBit's commission
+  netAmountEur    Float         // Partner receives this
+  vatEur          Float?
+  totalEur        Float
+
+  // Status
+  status          BillingStatus @default(OPEN)
+
+  // Payment
+  paidAt          DateTime?
+  paymentMethod   String?
+  paymentReference String?
+
+  // Documents
+  invoiceUrl      String?       // PDF URL
+
+  // Details (JSON)
+  lineItems       String?       // JSON array of billing line items
+
+  // Timestamps
+  dueDate         DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  // Relations
+  partner         Partner       @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+
+  @@index([partnerId])
+  @@index([status])
+  @@index([periodYear, periodMonth])
 }

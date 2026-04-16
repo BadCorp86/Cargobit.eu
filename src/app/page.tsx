@@ -47,6 +47,7 @@ import { useAuthStore } from '@/lib/auth-store';
 import { AuthModal } from '@/components/auth/auth-modal';
 import { Dashboard } from '@/components/dashboard/dashboard';
 import { TransportForm } from '@/components/transport/transport-form';
+import { PartnerPortal } from '@/components/partner/partner-portal';
 
 // Translation object (simplified - would come from i18n in production)
 const translations = {
@@ -133,6 +134,7 @@ export default function Home() {
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authTab, setAuthTab] = useState<'login' | 'register'>('login');
   const [showTransportForm, setShowTransportForm] = useState(false);
+  const [showPartnerPortal, setShowPartnerPortal] = useState(false);
 
   useEffect(() => {
     const handleScroll = () => setScrolled(window.scrollY > 20);
@@ -160,6 +162,23 @@ export default function Home() {
       description: 'Ihr Transport wurde veröffentlicht. Sie erhalten Benachrichtigungen über neue Angebote.'
     });
   };
+
+  // If Partner Portal is active
+  if (showPartnerPortal) {
+    return (
+      <>
+        <Toaster position="top-right" richColors />
+        <PartnerPortal />
+        <Button
+          className="fixed bottom-4 right-4 gap-2 shadow-lg"
+          onClick={() => setShowPartnerPortal(false)}
+        >
+          <ArrowRight className="w-4 h-4 rotate-180" />
+          Zurück zur Hauptseite
+        </Button>
+      </>
+    );
+  }
 
   // If authenticated, show dashboard
   if (isAuthenticated) {
@@ -263,6 +282,15 @@ export default function Home() {
                   onClick={() => { setAuthTab('login'); setShowAuthModal(true); }}
                 >
                   {t.hero.cta_login}
+                </Button>
+                <Button 
+                  variant="outline"
+                  size="sm"
+                  className="gap-2"
+                  onClick={() => setShowPartnerPortal(true)}
+                >
+                  <Building2 className="w-4 h-4" />
+                  Partner-Portal
                 </Button>
                 <Button 
                   size="sm" 
