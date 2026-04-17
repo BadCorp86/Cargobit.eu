@@ -1,0 +1,276 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cargobit.io/schemas/security-config.schema.json",
+  "title": "CargoBit Security Configuration",
+  "description": "Complete security configuration schema for CargoBit Transport Platform",
+  "type": "object",
+  "required": ["version", "roles", "abac", "fraud", "rateLimits"],
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}$",
+      "description": "Version in format YYYY-MM-DD-NN",
+      "examples": ["2024-01-15-01", "2024-01-15-02"]
+    },
+
+    "roles": {
+      "type": "object",
+      "description": "RBAC role definitions with permissions",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["can"],
+        "additionalProperties": false,
+        "properties": {
+          "can": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z]+:[a-z]+:[a-z]+$"
+            },
+            "description": "List of permissions in format resource:action:scope"
+          },
+          "description": {
+            "type": "string",
+            "description": "Optional role description"
+          }
+        }
+      }
+    },
+
+    "abac": {
+      "type": "object",
+      "required": ["rules"],
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "appliesTo", "condition"],
+            "additionalProperties": false,
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Rule identifier"
+              },
+              "appliesTo": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Roles this rule applies to"
+              },
+              "condition": {
+                "type": "string",
+                "description": "JavaScript boolean expression for the rule"
+              },
+              "description": {
+                "type": "string",
+                "description": "Optional rule description"
+              }
+            }
+          }
+        }
+      }
+    },
+
+    "fraud": {
+      "type": "object",
+      "required": ["carrierScore", "bidScore", "totalScore"],
+      "additionalProperties": false,
+      "properties": {
+        "carrierScore": {
+          "type": "object",
+          "required": ["weights", "thresholds"],
+          "additionalProperties": false,
+          "properties": {
+            "weights": {
+              "type": "object",
+              "required": ["cancelRate", "disputeRate", "noShowRate", "patternScore"],
+              "additionalProperties": false,
+              "properties": {
+                "cancelRate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Weight for carrier cancellation rate"
+                },
+                "disputeRate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Weight for carrier dispute rate"
+                },
+                "noShowRate": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Weight for carrier no-show rate"
+                },
+                "patternScore": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Weight for behavioral pattern score"
+                }
+              }
+            },
+            "thresholds": {
+              "type": "object",
+              "required": ["observe", "suspect"],
+              "additionalProperties": false,
+              "properties": {
+                "observe": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Threshold for observation status"
+                },
+                "suspect": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Threshold for suspect status"
+                }
+              }
+            }
+          }
+        },
+
+        "bidScore": {
+          "type": "object",
+          "required": ["weights", "dumping", "spam", "coordination"],
+          "additionalProperties": false,
+          "properties": {
+            "weights": {
+              "type": "object",
+              "required": ["dumping", "spam", "coordination"],
+              "additionalProperties": false,
+              "properties": {
+                "dumping": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Weight for price dumping detection"
+                },
+                "spam": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Weight for bid spam detection"
+                },
+                "coordination": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Weight for bid coordination detection"
+                }
+              }
+            },
+            "dumping": {
+              "type": "object",
+              "required": ["maxDiscountVsMarket"],
+              "additionalProperties": false,
+              "properties": {
+                "maxDiscountVsMarket": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.9,
+                  "exclusiveMaximum": true,
+                  "description": "Maximum allowed discount vs market price (0.9 = 90% below market triggers alert)"
+                }
+              }
+            },
+            "spam": {
+              "type": "object",
+              "required": ["maxBidsPerOrderPerHour"],
+              "additionalProperties": false,
+              "properties": {
+                "maxBidsPerOrderPerHour": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Maximum bids per carrier per order per hour"
+                }
+              }
+            },
+            "coordination": {
+              "type": "object",
+              "required": ["similarityWindowMinutes", "similarityThreshold"],
+              "additionalProperties": false,
+              "properties": {
+                "similarityWindowMinutes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "description": "Time window in minutes to detect similar bids"
+                },
+                "similarityThreshold": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1,
+                  "description": "Similarity threshold for coordination detection"
+                }
+              }
+            }
+          }
+        },
+
+        "totalScore": {
+          "type": "object",
+          "required": ["alphaCarrier", "penaltyFactor"],
+          "additionalProperties": false,
+          "properties": {
+            "alphaCarrier": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Weight for carrier score in total fraud score (α), bid score = 1-α"
+            },
+            "penaltyFactor": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1,
+              "description": "Penalty factor applied to matching score"
+            }
+          }
+        }
+      }
+    },
+
+    "rateLimits": {
+      "type": "array",
+      "description": "Rate limiting rules per route",
+      "items": {
+        "type": "object",
+        "required": ["route", "method", "limit", "windowSeconds", "key"],
+        "additionalProperties": false,
+        "properties": {
+          "route": {
+            "type": "string",
+            "description": "Route pattern (supports wildcards)"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "PATCH", "DELETE", "*"],
+            "description": "HTTP method"
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Maximum requests per window"
+          },
+          "windowSeconds": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Time window in seconds"
+          },
+          "key": {
+            "type": "string",
+            "enum": ["sub", "ip", "carrierId", "shipperId"],
+            "description": "Key to identify the client"
+          }
+        }
+      }
+    }
+  }
+}

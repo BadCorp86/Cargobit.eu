@@ -1,0 +1,270 @@
+# =============================================================================
+# CargoBit Distributed Tracing Configuration (Tempo/Jaeger)
+# =============================================================================
+# OpenTelemetry-based tracing for end-to-end request visibility
+# Version: 2026-04-18-01
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Trace Context Propagation
+# -----------------------------------------------------------------------------
+propagation:
+  format: "w3c"  # W3C TraceContext standard
+  headers:
+    traceparent: "00-{traceId}-{spanId}-{flags}"
+    tracestate: ""
+
+# -----------------------------------------------------------------------------
+# Spans Configuration
+# -----------------------------------------------------------------------------
+# Each request receives:
+# - traceId: 32 hex characters (16 bytes)
+# - spanId: 16 hex characters (8 bytes)
+
+spans:
+  # ===========================================================================
+  # Pricing Service Spans
+  # ===========================================================================
+  pricing:
+    - name: "pricing.validation"
+      description: "Bid price validation"
+      attributes:
+        - orderId
+        - bidId
+        - carrierId
+        - price
+        - marketPrice
+        - fraudScore
+      
+    - name: "pricing.fraud_check"
+      description: "Fraud score calculation"
+      attributes:
+        - carrierId
+        - carrierScore
+        - bidScore
+        - totalScore
+      
+    - name: "pricing.market_compare"
+      description: "Market price comparison"
+      attributes:
+        - orderId
+        - bidPrice
+        - marketPrice
+        - discountPercent
+
+  # ===========================================================================
+  # Matching Service Spans
+  # ===========================================================================
+  matching:
+    - name: "matching.computation"
+      description: "Matching score computation"
+      attributes:
+        - orderId
+        - carrierId
+        - rawScore
+        - fraudPenalty
+        - finalScore
+    
+    - name: "matching.fraud_penalty"
+      description: "Fraud penalty application"
+      attributes:
+        - carrierId
+        - fraudScore
+        - penaltyFactor
+        - penaltyApplied
+    
+    - name: "matching.ranking"
+      description: "Carrier ranking"
+      attributes:
+        - orderId
+        - candidatesCount
+        - topScore
+        - bottomScore
+
+  # ===========================================================================
+  # Execution Service Spans
+  # ===========================================================================
+  execution:
+    - name: "execution.status_update"
+      description: "Execution status update"
+      attributes:
+        - executionId
+        - orderId
+        - carrierId
+        - previousStatus
+        - newStatus
+    
+    - name: "execution.event_publish"
+      description: "Event publishing to Kafka"
+      attributes:
+        - eventType
+        - topic
+        - partition
+        - offset
+
+  # ===========================================================================
+  # API Gateway Spans
+  # ===========================================================================
+  gateway:
+    - name: "gateway.auth"
+      description: "JWT validation"
+      attributes:
+        - userId
+        - role
+        - issuer
+        - valid
+    
+    - name: "gateway.rbac"
+      description: "RBAC permission check"
+      attributes:
+        - userId
+        - role
+        - permission
+        - allowed
+    
+    - name: "gateway.rate_limit"
+      description: "Rate limit check"
+      attributes:
+        - key
+        - limit
+        - remaining
+        - allowed
+    
+    - name: "gateway.proxy"
+      description: "Request proxy to upstream"
+      attributes:
+        - targetService
+        - targetPath
+        - statusCode
+        - durationMs
+
+# -----------------------------------------------------------------------------
+# Sampling Configuration
+# -----------------------------------------------------------------------------
+sampling:
+  # Global sampling rate (10% by default)
+  defaultRate: 0.1
+  
+  # Per-service sampling rates
+  serviceRates:
+    api-gateway: 0.1
+    pricing-service: 0.2  # Higher for fraud analysis
+    matching-service: 0.15
+    execution-service: 0.1
+    security-config-service: 0.05  # Lower for config service
+  
+  # Always sample these conditions
+  alwaysSample:
+    - condition: "statusCode >= 400"
+      description: "All error responses"
+    
+    - condition: "durationMs > 1000"
+      description: "Slow requests (>1s)"
+    
+    - condition: "fraudScore > 0.6"
+      description: "High fraud score events"
+    
+    - condition: "error = true"
+      description: "All errors"
+
+# -----------------------------------------------------------------------------
+# Trace Export Configuration
+# -----------------------------------------------------------------------------
+exporter:
+  type: "otlp"
+  endpoint: "http://tempo.observability.svc.cluster.local:4318"
+  
+  otlp:
+    protocol: "http"  # http | grpc
+    compression: "gzip"
+    timeout: "10s"
+    headers:
+      X-Scope-OrgID: "cargobit"
+
+# -----------------------------------------------------------------------------
+# Service Instrumentation
+# -----------------------------------------------------------------------------
+instrumentation:
+  # Automatic instrumentation libraries
+  libraries:
+    - name: "@opentelemetry/instrumentation-http"
+      enabled: true
+    - name: "@opentelemetry/instrumentation-express"
+      enabled: true
+    - name: "@opentelemetry/instrumentation-kafkajs"
+      enabled: true
+    - name: "@opentelemetry/instrumentation-redis-4"
+      enabled: true
+    - name: "@opentelemetry/instrumentation-pg"
+      enabled: true
+  
+  # Resource attributes for all spans
+  resource:
+    service.namespace: "cargobit"
+    deployment.environment: "production"
+    service.version: "${SERVICE_VERSION}"
+
+# -----------------------------------------------------------------------------
+# Trace Queries (TraceQL)
+# -----------------------------------------------------------------------------
+queries:
+  # Slow traces (>500ms)
+  slowTraces: |
+    { service.name =~ ".*-service" && duration > 500ms }
+  
+  # Error traces
+  errorTraces: |
+    { status = error }
+  
+  # High fraud score traces
+  highFraud: |
+    { service.name = "pricing-service" && fraudScore > 0.6 }
+  
+  # Rate limited requests
+  rateLimited: |
+    { service.name = "api-gateway" && statusCode = 429 }
+  
+  # Complete order flow
+  orderFlow: |
+    { service.name =~ "api-gateway|order-service|pricing-service|matching-service|execution-service" } 
+    && orderId = "<order_id>"
+
+# -----------------------------------------------------------------------------
+# Tempo Storage Configuration
+# -----------------------------------------------------------------------------
+tempo:
+  storage:
+    backend: "s3"
+    s3:
+      bucket: "cargobit-traces"
+      endpoint: "s3.eu-central-1.amazonaws.com"
+      region: "eu-central-1"
+    
+  retention: "168h"  # 7 days
+  
+  compactor:
+    compaction:
+      blockRetention: "168h"
+      compactionWindow: "1h"
+
+# -----------------------------------------------------------------------------
+# Grafana Tempo Integration
+# -----------------------------------------------------------------------------
+grafana:
+  datasource:
+    type: "tempo"
+    url: "http://tempo.observability.svc.cluster.local:3100"
+    access: "proxy"
+    isDefault: false
+    jsonData:
+      httpMethod: "GET"
+      tracesToLogs:
+        datasourceUid: "loki"
+        mappedTags:
+          - key: "service.name"
+            value: "service"
+        mapTagNamesEnabled: true
+        spanStartTimeShift: "-1h"
+        spanEndTimeShift: "1h"
+        filterByTraceID: true
+        filterBySpanID: true

@@ -1,58 +1,84 @@
-{{- if .Values.networkPolicy.enabled -}}
+{{- if .Values.networkPolicy.enabled }}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
-  name: {{ include "pricing-service.fullname" . }}
+  name: {{ include "pricing-service.fullname" . }}-netpol
   labels:
     {{- include "pricing-service.labels" . | nindent 4 }}
 spec:
   podSelector:
     matchLabels:
       {{- include "pricing-service.selectorLabels" . | nindent 6 }}
+  
   policyTypes:
     - Ingress
     - Egress
+  
   ingress:
-    # Only from API-Gateway in core namespace
+    # Allow from API Gateway (core namespace)
     - from:
         - namespaceSelector:
             matchLabels:
               type: core
-          podSelector:
+        - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: api-gateway
+              type: domain
       ports:
-        - protocol: TCP
-          port: 3002
+        - port: {{ .Values.service.targetPort }}
+          protocol: TCP
+    
+    # Allow metrics scraping from Prometheus
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: observability
+      ports:
+        - port: {{ .Values.observability.metrics.port }}
+          protocol: TCP
+  
   egress:
     # Allow DNS
     - to:
         - namespaceSelector: {}
       ports:
-        - protocol: UDP
-          port: 53
-    # Allow to Security-Config-Service
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    
+    # Allow to Security-Config-Service (core namespace)
     - to:
         - namespaceSelector:
             matchLabels:
               type: core
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: security-config-service
-    # Allow to Kafka
+      ports:
+        - port: 3005
+          protocol: TCP
+    
+    # Allow to Kafka (data namespace)
     - to:
         - namespaceSelector:
             matchLabels:
               type: data
-          podSelector:
-            matchLabels:
-              app.kubernetes.io/name: kafka
-    # Allow to PostgreSQL
+      ports:
+        - port: 9092
+          protocol: TCP
+    
+    # Allow to Redis (data namespace)
     - to:
         - namespaceSelector:
             matchLabels:
               type: data
-          podSelector:
+      ports:
+        - port: 6379
+          protocol: TCP
+    
+    # Allow to Tempo for tracing
+    - to:
+        - namespaceSelector:
             matchLabels:
-              app.kubernetes.io/name: postgres
+              name: observability
+      ports:
+        - port: 4318
+          protocol: TCP
 {{- end }}

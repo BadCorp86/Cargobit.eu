@@ -1,4 +1,3 @@
-{{- if .Values.configMap.enabled -}}
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -6,7 +5,24 @@ metadata:
   labels:
     {{- include "pricing-service.labels" . | nindent 4 }}
 data:
-  {{- range $key, $value := .Values.configMap.data }}
-  {{ $key }}: {{ $value | quote }}
-  {{- end }}
-{{- end }}
+  # Service Configuration
+  SERVICE_NAME: "pricing-service"
+  SERVICE_PORT: {{ .Values.service.targetPort | quote }}
+  
+  # Observability
+  METRICS_ENABLED: {{ .Values.observability.metrics.enabled | quote }}
+  METRICS_PORT: {{ .Values.observability.metrics.port | quote }}
+  TRACING_ENABLED: {{ .Values.observability.tracing.enabled | quote }}
+  LOG_FORMAT: {{ .Values.observability.logging.format | quote }}
+  LOG_LEVEL: {{ .Values.observability.logging.level | quote }}
+  
+  # Fraud Scoring (defaults, overridden by Security-Config)
+  FRAUD_CARRIER_WEIGHT_CANCEL: {{ .Values.fraudConfig.carrierScoreWeights.cancelRate | quote }}
+  FRAUD_CARRIER_WEIGHT_DISPUTE: {{ .Values.fraudConfig.carrierScoreWeights.disputeRate | quote }}
+  FRAUD_CARRIER_WEIGHT_NOSHOW: {{ .Values.fraudConfig.carrierScoreWeights.noShowRate | quote }}
+  FRAUD_CARRIER_WEIGHT_PATTERN: {{ .Values.fraudConfig.carrierScoreWeights.patternScore | quote }}
+  FRAUD_BID_WEIGHT_DUMPING: {{ .Values.fraudConfig.bidScoreWeights.dumping | quote }}
+  FRAUD_BID_WEIGHT_SPAM: {{ .Values.fraudConfig.bidScoreWeights.spam | quote }}
+  FRAUD_BID_WEIGHT_COORDINATION: {{ .Values.fraudConfig.bidScoreWeights.coordination | quote }}
+  FRAUD_ALPHA_CARRIER: {{ .Values.fraudConfig.totalScore.alphaCarrier | quote }}
+  FRAUD_PENALTY_FACTOR: {{ .Values.fraudConfig.totalScore.penaltyFactor | quote }}

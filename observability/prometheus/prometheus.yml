@@ -1,0 +1,170 @@
+# =============================================================================
+# CargoBit Prometheus Configuration
+# =============================================================================
+# Metrics collection for all CargoBit services
+# Version: 2026-04-18-01
+# =============================================================================
+
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    cluster: 'cargobit-prod'
+    environment: 'production'
+
+# =============================================================================
+# Alerting Configuration
+# =============================================================================
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - 'alertmanager.observability.svc.cluster.local:9093'
+
+rule_files:
+  - '/etc/prometheus/rules/*.yml'
+
+# =============================================================================
+# Scrape Configurations
+# =============================================================================
+scrape_configs:
+  # ===========================================================================
+  # Kubernetes Service Discovery (Core Layer)
+  # ===========================================================================
+  - job_name: 'security-config-service'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - core
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: security-config-service
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+        regex: (.+)
+        replacement: $1
+    metrics_path: /metrics
+
+  # ===========================================================================
+  # Domain Services
+  # ===========================================================================
+  - job_name: 'pricing-service'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - domain
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: pricing-service
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_port]
+        action: replace
+        target_label: __address__
+    metrics_path: /metrics
+
+  - job_name: 'matching-service'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - domain
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: matching-service
+    metrics_path: /metrics
+
+  - job_name: 'execution-service'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - domain
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: execution-service
+    metrics_path: /metrics
+
+  - job_name: 'order-service'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - domain
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: order-service
+    metrics_path: /metrics
+
+  - job_name: 'bidding-service'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - domain
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: bidding-service
+    metrics_path: /metrics
+
+  # ===========================================================================
+  # API Gateway
+  # ===========================================================================
+  - job_name: 'api-gateway'
+    kubernetes_sd_configs:
+      - role: pod
+        namespaces:
+          names:
+            - core
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_label_app_kubernetes_io_name]
+        action: keep
+        regex: api-gateway
+    metrics_path: /metrics
+
+  # ===========================================================================
+  # Data Layer Services
+  # ===========================================================================
+  - job_name: 'kafka'
+    static_configs:
+      - targets:
+          - 'kafka-0.kafka-headless.data.svc.cluster.local:7071'
+          - 'kafka-1.kafka-headless.data.svc.cluster.local:7071'
+          - 'kafka-2.kafka-headless.data.svc.cluster.local:7071'
+
+  - job_name: 'redis'
+    static_configs:
+      - targets:
+          - 'redis-exporter.data.svc.cluster.local:9121'
+
+  # ===========================================================================
+  # Kubernetes Infrastructure
+  # ===========================================================================
+  - job_name: 'kubernetes-nodes'
+    kubernetes_sd_configs:
+      - role: node
+    relabel_configs:
+      - action: labelmap
+        regex: __meta_kubernetes_node_label_(.+)
+
+  - job_name: 'kubernetes-pods'
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: true
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+        action: replace
+        target_label: __metrics_path__
+        regex: (.+)

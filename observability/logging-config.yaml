@@ -1,0 +1,233 @@
+# =============================================================================
+# CargoBit Logging Configuration (Loki)
+# =============================================================================
+# Structured JSON logging format for all CargoBit services
+# Version: 2026-04-18-01
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Log Format Specification
+# -----------------------------------------------------------------------------
+# Every log entry MUST contain the following fields:
+
+logFormat:
+  # Required fields
+  required:
+    - name: timestamp
+      type: string
+      format: "ISO8601"
+      description: "UTC timestamp in ISO 8601 format"
+      example: "2026-04-18T14:30:00.123Z"
+    
+    - name: service
+      type: string
+      description: "Service name emitting the log"
+      example: "pricing-service"
+    
+    - name: correlationId
+      type: string
+      format: "UUID"
+      description: "Unique identifier for request correlation across services"
+      example: "550e8400-e29b-41d4-a716-446655440000"
+    
+    - name: level
+      type: string
+      enum: ["DEBUG", "INFO", "WARN", "ERROR", "FATAL"]
+      description: "Log severity level"
+      example: "INFO"
+    
+    - name: message
+      type: string
+      description: "Human-readable log message"
+      example: "Bid validation completed"
+
+  # Optional fields (context-specific)
+  optional:
+    - name: traceId
+      type: string
+      description: "OpenTelemetry trace ID for distributed tracing"
+      example: "4bf92f3577b34da6a3ce929d0e0e4736"
+    
+    - name: spanId
+      type: string
+      description: "OpenTelemetry span ID"
+      example: "00f067aa0ba902b7"
+    
+    - name: userId
+      type: string
+      description: "User ID from JWT"
+      example: "usr_123456"
+    
+    - name: role
+      type: string
+      description: "User role from JWT"
+      example: "CARRIER"
+    
+    - name: carrierId
+      type: string
+      description: "Carrier ID if applicable"
+      example: "car_789"
+    
+    - name: shipperId
+      type: string
+      description: "Shipper ID if applicable"
+      example: "shp_456"
+    
+    - name: orderId
+      type: string
+      description: "Order ID being processed"
+      example: "ord_abc123"
+    
+    - name: bidId
+      type: string
+      description: "Bid ID being processed"
+      example: "bid_xyz789"
+    
+    - name: fraudScore
+      type: number
+      description: "Calculated fraud score"
+      example: 0.35
+    
+    - name: durationMs
+      type: number
+      description: "Operation duration in milliseconds"
+      example: 42
+    
+    - name: statusCode
+      type: number
+      description: "HTTP status code"
+      example: 200
+    
+    - name: error
+      type: object
+      description: "Error details if applicable"
+      properties:
+        - name: code
+          type: string
+        - name: stack
+          type: string
+        - name: details
+          type: object
+
+# -----------------------------------------------------------------------------
+# Example Log Entries
+# -----------------------------------------------------------------------------
+examples:
+  # Pricing Service - Bid Validation
+  - timestamp: "2026-04-18T14:30:00.123Z"
+    service: "pricing-service"
+    correlationId: "550e8400-e29b-41d4-a716-446655440000"
+    traceId: "4bf92f3577b34da6a3ce929d0e0e4736"
+    spanId: "00f067aa0ba902b7"
+    level: "INFO"
+    message: "Bid validation completed"
+    userId: "usr_123456"
+    role: "CARRIER"
+    carrierId: "car_789"
+    orderId: "ord_abc123"
+    bidId: "bid_xyz789"
+    fraudScore: 0.35
+    durationMs: 42
+
+  # API Gateway - Request
+  - timestamp: "2026-04-18T14:30:00.100Z"
+    service: "api-gateway"
+    correlationId: "550e8400-e29b-41d4-a716-446655440000"
+    traceId: "4bf92f3577b34da6a3ce929d0e0e4736"
+    level: "INFO"
+    message: "Incoming request"
+    userId: "usr_123456"
+    role: "SHIPPER"
+    method: "POST"
+    path: "/api/orders"
+    statusCode: 201
+    durationMs: 150
+
+  # Matching Service - Fraud Penalty Applied
+  - timestamp: "2026-04-18T14:30:01.500Z"
+    service: "matching-service"
+    correlationId: "550e8400-e29b-41d4-a716-446655440000"
+    traceId: "4bf92f3577b34da6a3ce929d0e0e4736"
+    level: "WARN"
+    message: "Fraud penalty applied to matching score"
+    carrierId: "car_789"
+    originalScore: 85
+    penaltyFactor: 0.5
+    fraudScore: 0.65
+    finalScore: 42.5
+
+  # Security-Config-Service - Validation Error
+  - timestamp: "2026-04-18T14:30:02.000Z"
+    service: "security-config-service"
+    correlationId: "n/a"
+    level: "ERROR"
+    message: "Configuration validation failed"
+    error:
+      code: "CARRIER_WEIGHTS_SUM"
+      details:
+        path: "/fraud/carrierScore/weights"
+        expected: 1.0
+        actual: 1.2
+
+# -----------------------------------------------------------------------------
+# Loki Configuration
+# -----------------------------------------------------------------------------
+loki:
+  # Promtail pipeline configuration
+  promtail:
+    pipelineStages:
+      - json:
+          expressions:
+            timestamp: timestamp
+            service: service
+            level: level
+            message: message
+            correlationId: correlationId
+            traceId: traceId
+      
+      - labels:
+          service:
+          level:
+          
+      - timestamp:
+          source: timestamp
+          format: RFC3339Nano
+      
+      - output:
+          source: message
+
+  # Retention
+  retention:
+    duration: "30d"
+    compression: "snappy"
+
+# -----------------------------------------------------------------------------
+# Log Aggregation Queries (LogQL)
+# -----------------------------------------------------------------------------
+queries:
+  # All errors in pricing-service
+  errors: |
+    {service="pricing-service", level="ERROR"}
+  
+  # Fraud score warnings
+  fraudWarnings: |
+    {service=~"pricing-service|matching-service"} 
+    | json 
+    | fraudScore > 0.6
+  
+  # Slow requests (>500ms)
+  slowRequests: |
+    {service=~"pricing-service|matching-service|api-gateway"} 
+    | json 
+    | durationMs > 500
+  
+  # Rate limit hits
+  rateLimits: |
+    {service="api-gateway"} 
+    | json 
+    | statusCode = 429
+  
+  # Tracing correlation
+  traceCorrelation: |
+    {traceId="<trace_id>"} 
+    | json

@@ -1,29 +1,40 @@
 # =============================================================================
-# Pricing-Service Helm Values
+# CargoBit Pricing Service - Helm Values
+# =============================================================================
+# Version: 2026-04-18-01
 # =============================================================================
 
-# Image configuration
+# -----------------------------------------------------------------------------
+# Application Settings
+# -----------------------------------------------------------------------------
+replicaCount: 2
+
 image:
   repository: cargobit/pricing-service
-  tag: "2.0.0"
+  tag: "1.0.0"
   pullPolicy: IfNotPresent
 
-# Replica configuration
-replicaCount: 3
+nameOverride: ""
+fullnameOverride: ""
 
-# Service account
+# -----------------------------------------------------------------------------
+# Service Account
+# -----------------------------------------------------------------------------
 serviceAccount:
   create: true
-  name: ""
-  automountServiceAccountToken: false
+  annotations: {}
+  name: "pricing-service"
+  automountServiceAccountToken: true
 
-# Pod security context
+# -----------------------------------------------------------------------------
+# Pod Security Context
+# -----------------------------------------------------------------------------
 podSecurityContext:
   runAsNonRoot: true
   runAsUser: 1000
+  runAsGroup: 1000
   fsGroup: 1000
 
-# Container security context
 securityContext:
   allowPrivilegeEscalation: false
   capabilities:
@@ -31,160 +42,87 @@ securityContext:
       - ALL
   readOnlyRootFilesystem: true
   runAsNonRoot: true
-  runAsUser: 1000
 
-# Service configuration
+# -----------------------------------------------------------------------------
+# Service Configuration
+# -----------------------------------------------------------------------------
 service:
   type: ClusterIP
   port: 80
   targetPort: 3002
+  annotations: {}
 
-# Resource limits
+# -----------------------------------------------------------------------------
+# Environment Variables
+# -----------------------------------------------------------------------------
+env:
+  SECURITY_CONFIG_URL: "http://security-config-service.core.svc.cluster.local:3005"
+  KAFKA_BROKER: "kafka.data.svc.cluster.local:9092"
+  KAFKA_CONSUMER_GROUP: "pricing-service"
+  KAFKA_TOPIC_ORDERS: "cargobit.orders"
+  KAFKA_TOPIC_BIDS: "cargobit.bids"
+  KAFKA_TOPIC_EVENTS: "cargobit.events"
+  REDIS_URL: "redis://redis.data.svc.cluster.local:6379"
+  LOG_LEVEL: "info"
+  NODE_ENV: "production"
+
+envFrom:
+  - configMapRef:
+      name: pricing-service-config
+  - secretRef:
+      name: pricing-service-secrets
+
+# -----------------------------------------------------------------------------
+# Resources
+# -----------------------------------------------------------------------------
 resources:
-  requests:
-    cpu: "200m"
-    memory: "256Mi"
   limits:
-    cpu: "500m"
-    memory: "512Mi"
+    cpu: 1000m
+    memory: 512Mi
+  requests:
+    cpu: 200m
+    memory: 256Mi
 
-# Autoscaling
+# -----------------------------------------------------------------------------
+# Autoscaling (HPA)
+# -----------------------------------------------------------------------------
 autoscaling:
   enabled: true
   minReplicas: 2
   maxReplicas: 10
   targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
 
-# Pod disruption budget
+# -----------------------------------------------------------------------------
+# Pod Disruption Budget
+# -----------------------------------------------------------------------------
 podDisruptionBudget:
   enabled: true
   minAvailable: 1
+  # maxUnavailable: 1
 
-# Affinity
-affinity:
-  podAntiAffinity:
-    preferredDuringSchedulingIgnoredDuringExecution:
-      - weight: 100
-        podAffinityTerm:
-          labelSelector:
-            matchLabels:
-              app.kubernetes.io/name: pricing-service
-          topologyKey: kubernetes.io/hostname
+# -----------------------------------------------------------------------------
+# Node Selector & Tolerations
+# -----------------------------------------------------------------------------
+nodeSelector: {}
+tolerations: []
+affinity: {}
 
-# =============================================================================
-# ENVIRONMENT CONFIGURATION
-# =============================================================================
-
-env:
-  NODE_ENV: "production"
-  PORT: "3002"
-  LOG_LEVEL: "info"
-  SECURITY_CONFIG_URL: "http://security-config-service.core.svc.cluster.local:3005"
-  KAFKA_BROKERS: "kafka.data.svc.cluster.local:9092"
-  REDIS_URL: "redis.data.svc.cluster.local:6379"
-
-# Database configuration
-database:
-  enabled: true
-  host: "postgres.data.svc.cluster.local"
-  port: 5432
-  name: "pricing"
-  existingSecret: "pricing-db-credentials"
-  secretKeys:
-    username: "username"
-    password: "password"
-    url: "url"
-
-# =============================================================================
-# SECURITY CONFIG CLIENT
-# =============================================================================
-
-securityConfigClient:
-  enabled: true
-  checkIntervalMs: 60000
-  timeoutMs: 5000
-  maxRetries: 3
-  serviceToken:
-    existingSecret: "pricing-service-token"
-    key: "token"
-
-# =============================================================================
-# FRAUD SCORING CONFIGURATION
-# =============================================================================
-
-fraudScoring:
-  enabled: true
-  
-  # Override config values (normally from Security-Config-Service)
-  carrierScore:
-    weights:
-      cancelRate: 0.3
-      disputeRate: 0.3
-      noShowRate: 0.2
-      patternScore: 0.2
-    thresholds:
-      observe: 0.3
-      suspect: 0.6
-  
-  bidScore:
-    weights:
-      dumping: 0.5
-      spam: 0.3
-      coordination: 0.2
-    dumping:
-      maxDiscountVsMarket: 0.35
-      hardFloorEur: 20
-      minPriceFactor: 0.85
-  
-  totalScore:
-    alphaCarrier: 0.6
-    penaltyFactor: 0.5
-
-# =============================================================================
-# NETWORK POLICY
-# =============================================================================
-
-networkPolicy:
-  enabled: true
-  allowedNamespaces:
-    - core  # API-Gateway, Security-Config-Service
-    - domain  # Other domain services
-  allowedServices:
-    - security-config-service
-
-# =============================================================================
-# KAFKA CONFIGURATION
-# =============================================================================
-
-kafka:
-  enabled: true
-  topics:
-    - name: pricing.calculated
-    - name: bid.validated
-    - name: fraud.suspected
-  consumerGroups:
-    - pricing-service
-
-# =============================================================================
-# MONITORING
-# =============================================================================
-
-serviceMonitor:
-  enabled: true
-  interval: 30s
-  path: /metrics
-  labels:
-    release: prometheus
-
-# =============================================================================
-# LIVENESS & READINESS PROBES
-# =============================================================================
-
+# -----------------------------------------------------------------------------
+# Health Checks
+# -----------------------------------------------------------------------------
 livenessProbe:
   httpGet:
     path: /health
-    port: 3002
-  initialDelaySeconds: 15
+    port: http
+  initialDelaySeconds: 10
   periodSeconds: 10
   timeoutSeconds: 5
   failureThreshold: 3
@@ -192,16 +130,86 @@ livenessProbe:
 readinessProbe:
   httpGet:
     path: /ready
-    port: 3002
+    port: http
   initialDelaySeconds: 5
   periodSeconds: 5
   timeoutSeconds: 3
   failureThreshold: 3
 
-# =============================================================================
-# CONFIGMAP
-# =============================================================================
-
-configMap:
+# -----------------------------------------------------------------------------
+# Network Policy
+# -----------------------------------------------------------------------------
+networkPolicy:
   enabled: true
-  data: {}
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              type: core
+        - namespaceSelector:
+            matchLabels:
+              type: domain
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              type: core
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              type: data
+
+# -----------------------------------------------------------------------------
+# mTLS Configuration
+# -----------------------------------------------------------------------------
+mtls:
+  enabled: true
+  caSecretName: "internal-ca"
+  clientCertSecretName: "pricing-service-client-cert"
+
+# -----------------------------------------------------------------------------
+# Observability
+# -----------------------------------------------------------------------------
+observability:
+  metrics:
+    enabled: true
+    port: 9090
+    path: /metrics
+  
+  tracing:
+    enabled: true
+    sampleRate: 0.1
+    endpoint: "http://tempo.observability.svc.cluster.local:4318"
+  
+  logging:
+    format: "json"
+    level: "info"
+
+# -----------------------------------------------------------------------------
+# Rate Limiting (Service-Specific)
+# -----------------------------------------------------------------------------
+rateLimits:
+  rules:
+    - route: /api/pricing/orders/*/bid/validate
+      method: POST
+      limit: 300
+      windowSeconds: 60
+      key: sub
+
+# -----------------------------------------------------------------------------
+# Fraud Scoring Configuration (from Security-Config)
+# -----------------------------------------------------------------------------
+fraudConfig:
+  enabled: true
+  carrierScoreWeights:
+    cancelRate: 0.3
+    disputeRate: 0.3
+    noShowRate: 0.2
+    patternScore: 0.2
+  bidScoreWeights:
+    dumping: 0.5
+    spam: 0.3
+    coordination: 0.2
+  totalScore:
+    alphaCarrier: 0.6
+    penaltyFactor: 0.5

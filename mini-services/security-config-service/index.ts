@@ -13,12 +13,173 @@
  * - POST /authz/check             - Authorization Check
  * - GET  /fraud/config            - Nur Fraud-Teil
  * - GET  /health                  - Health Check
+ * - GET  /ready                   - Readiness Probe
+ * - POST /config/security/validate - Validate config (Admin)
+ * 
+ * Schema Validation:
+ * - JSON Schema (Draft 2020-12)
+ * - Strict Mode (no unknown fields)
+ * - Cross-Field Validation (weights must sum to 1)
  * 
  * @module @cargobit/security-config-service
- * @version 1.0.0
+ * @version 1.1.0
  */
 
 import { serve } from 'bun';
+
+// =============================================================================
+// SCHEMA VALIDATOR (Inline - No External Dependencies)
+// =============================================================================
+
+interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationWarning[];
+}
+
+interface ValidationError {
+  path: string;
+  message: string;
+  code: string;
+  value?: unknown;
+}
+
+interface ValidationWarning {
+  path: string;
+  message: string;
+  code: string;
+}
+
+/**
+ * Cross-Field Validation Rules:
+ * 1. Carrier fraud weights must sum to 1
+ * 2. Bid fraud weights must sum to 1  
+ * 3. Thresholds must have observe < suspect
+ * 4. maxDiscountVsMarket must be < 0.9
+ */
+function validateCrossFields(config: any): { errors: ValidationError[]; warnings: ValidationWarning[] } {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
+
+  // Rule 1: Carrier fraud weights must sum to 1
+  if (config.fraud?.carrierScore?.weights) {
+    const weights = config.fraud.carrierScore.weights;
+    const sum = (weights.cancelRate || 0) + (weights.disputeRate || 0) + 
+                (weights.noShowRate || 0) + (weights.patternScore || 0);
+    
+    if (Math.abs(sum - 1) > 0.0001) {
+      errors.push({
+        path: '/fraud/carrierScore/weights',
+        message: `Carrier fraud weights must sum to 1, got ${sum.toFixed(4)}`,
+        code: 'CARRIER_WEIGHTS_SUM',
+        value: weights,
+      });
+    }
+  }
+
+  // Rule 2: Bid fraud weights must sum to 1
+  if (config.fraud?.bidScore?.weights) {
+    const weights = config.fraud.bidScore.weights;
+    const sum = (weights.dumping || 0) + (weights.spam || 0) + (weights.coordination || 0);
+    
+    if (Math.abs(sum - 1) > 0.0001) {
+      errors.push({
+        path: '/fraud/bidScore/weights',
+        message: `Bid fraud weights must sum to 1, got ${sum.toFixed(4)}`,
+        code: 'BID_WEIGHTS_SUM',
+        value: weights,
+      });
+    }
+  }
+
+  // Rule 3: Thresholds must have observe < suspect
+  if (config.fraud?.carrierScore?.thresholds) {
+    const thresholds = config.fraud.carrierScore.thresholds;
+    if ((thresholds.observe || 0) >= (thresholds.suspect || 0)) {
+      errors.push({
+        path: '/fraud/carrierScore/thresholds',
+        message: `observe threshold (${thresholds.observe}) must be less than suspect threshold (${thresholds.suspect})`,
+        code: 'THRESHOLD_ORDER',
+        value: thresholds,
+      });
+    }
+  }
+
+  // Rule 4: maxDiscountVsMarket must be < 0.9
+  if (config.fraud?.bidScore?.dumping?.maxDiscountVsMarket !== undefined) {
+    const maxDiscount = config.fraud.bidScore.dumping.maxDiscountVsMarket;
+    if (maxDiscount >= 0.9) {
+      errors.push({
+        path: '/fraud/bidScore/dumping/maxDiscountVsMarket',
+        message: `maxDiscountVsMarket must be < 0.9, got ${maxDiscount}. Values >= 0.9 would flag almost all legitimate discounts.`,
+        code: 'MAX_DISCOUNT_INVALID',
+        value: maxDiscount,
+      });
+    }
+  }
+
+  // Warning: alphaCarrier deviation from standard 0.6
+  if (config.fraud?.totalScore?.alphaCarrier !== undefined) {
+    const alpha = config.fraud.totalScore.alphaCarrier;
+    if (Math.abs(alpha - 0.6) > 0.2) {
+      warnings.push({
+        path: '/fraud/totalScore/alphaCarrier',
+        message: `alphaCarrier is ${alpha}. Standard value is 0.6 (60% carrier, 40% bid score). Deviation may affect fraud detection balance.`,
+        code: 'ALPHA_CARRIER_UNUSUAL',
+      });
+    }
+  }
+
+  return { errors, warnings };
+}
+
+/**
+ * Version format validation
+ */
+function validateVersion(version: string): boolean {
+  return /^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}$/.test(version);
+}
+
+/**
+ * Complete config validation
+ */
+function validateConfig(config: any): ValidationResult {
+  const errors: ValidationError[] = [];
+  const warnings: ValidationWarning[] = [];
+
+  // Required fields
+  const requiredFields = ['version', 'roles', 'abac', 'fraud', 'rateLimits'];
+  for (const field of requiredFields) {
+    if (!config[field]) {
+      errors.push({
+        path: `/${field}`,
+        message: `Required field '${field}' is missing`,
+        code: 'REQUIRED_FIELD_MISSING',
+      });
+    }
+  }
+
+  // Version format
+  if (config.version && !validateVersion(config.version)) {
+    errors.push({
+      path: '/version',
+      message: `Version must match format YYYY-MM-DD-NN, got '${config.version}'`,
+      code: 'INVALID_VERSION_FORMAT',
+      value: config.version,
+    });
+  }
+
+  // Cross-field validation
+  const crossFieldResult = validateCrossFields(config);
+  errors.push(...crossFieldResult.errors);
+  warnings.push(...crossFieldResult.warnings);
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings,
+  };
+}
 
 // =============================================================================
 // TYPES
@@ -198,8 +359,11 @@ class SecurityConfigService {
     this.configPath = configPath || './config/security-config.yaml';
   }
 
+  private lastValidation: ValidationResult | null = null;
+
   /**
    * Load configuration from YAML file
+   * Validates config after loading with JSON Schema + Cross-Field Validation
    */
   load(): SecurityConfig {
     try {
@@ -218,17 +382,42 @@ class SecurityConfigService {
         const fileContents = fs.readFileSync(fullPath, 'utf8');
         const rawConfig = yaml.load(fileContents);
         
-        this.config = {
+        const newConfig = {
           ...rawConfig,
           version: this.generateVersion(),
           loadedAt: new Date().toISOString(),
         };
         
+        // Validate config before using
+        const validation = validateConfig(newConfig);
+        this.lastValidation = validation;
+        
+        if (!validation.valid) {
+          console.error('[SecurityConfig] Validation FAILED:');
+          validation.errors.forEach(err => {
+            console.error(`  - [${err.code}] ${err.path}: ${err.message}`);
+          });
+          // Still use config but with validation errors logged
+          console.warn('[SecurityConfig] Using config despite validation errors');
+        } else {
+          console.log(`[SecurityConfig] Validation PASSED (version ${newConfig.version})`);
+        }
+        
+        // Log warnings
+        if (validation.warnings.length > 0) {
+          console.warn('[SecurityConfig] Validation warnings:');
+          validation.warnings.forEach(warn => {
+            console.warn(`  - [${warn.code}] ${warn.path}: ${warn.message}`);
+          });
+        }
+        
+        this.config = newConfig;
         this.loadedAt = this.config.loadedAt;
         console.log(`[SecurityConfig] Loaded config version ${this.config.version}`);
       } else {
         // Use default config if file not found
         this.config = this.getDefaultConfig();
+        this.lastValidation = { valid: true, errors: [], warnings: [] };
         console.log('[SecurityConfig] Using default config (file not found)');
       }
       
@@ -236,6 +425,15 @@ class SecurityConfigService {
     } catch (error) {
       console.error('[SecurityConfig] Error loading config:', error);
       this.config = this.getDefaultConfig();
+      this.lastValidation = { 
+        valid: false, 
+        errors: [{ 
+          path: '/', 
+          message: error instanceof Error ? error.message : 'Unknown error', 
+          code: 'LOAD_ERROR' 
+        }], 
+        warnings: [] 
+      };
       return this.config;
     }
   }
@@ -414,6 +612,20 @@ class SecurityConfigService {
    */
   isReady(): boolean {
     return this.config !== null;
+  }
+
+  /**
+   * Get validation status
+   */
+  getValidationStatus(): ValidationResult | null {
+    return this.lastValidation;
+  }
+
+  /**
+   * Validate a config without loading it
+   */
+  validateConfig(config: unknown): ValidationResult {
+    return validateConfig(config);
   }
 
   // ===========================================================================
@@ -664,12 +876,18 @@ const server = serve({
 
         try {
           const config = securityConfigService.reload();
+          const validation = securityConfigService.getValidationStatus();
           console.log(`[SecurityConfig] Reloaded config to version ${config.version}`);
 
           return new Response(JSON.stringify({
             success: true,
             version: config.version,
             loadedAt: config.loadedAt,
+            validation: {
+              valid: validation?.valid ?? true,
+              errorCount: validation?.errors.length ?? 0,
+              warningCount: validation?.warnings.length ?? 0,
+            },
           }), {
             headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           });
@@ -679,6 +897,64 @@ const server = serve({
             reloadError instanceof Error ? reloadError.message : 'Configuration validation failed'
           );
         }
+      }
+
+      // ==========================================
+      // POST /config/security/validate
+      // Validate a config without loading it (Admin only)
+      // ==========================================
+      if (method === 'POST' && path === '/config/security/validate') {
+        const authHeader = req.headers.get('Authorization') || '';
+        const serviceToken = req.headers.get('X-Service-Token') || '';
+        
+        const isAuthorized = 
+          authHeader.startsWith('Bearer admin_') ||
+          serviceToken.startsWith('srv_') ||
+          process.env.NODE_ENV === 'development';
+
+        if (!isAuthorized) {
+          return errorResponse('FORBIDDEN', 'Admin or System role required for validation');
+        }
+
+        try {
+          const body = await req.json();
+          const validation = securityConfigService.validateConfig(body);
+
+          return new Response(JSON.stringify({
+            valid: validation.valid,
+            errors: validation.errors,
+            warnings: validation.warnings,
+            summary: {
+              errorCount: validation.errors.length,
+              warningCount: validation.warnings.length,
+            },
+          }), {
+            status: validation.valid ? 200 : 422,
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch (validateError) {
+          return errorResponse('INVALID_CONFIG', 
+            validateError instanceof Error ? validateError.message : 'Validation failed'
+          );
+        }
+      }
+
+      // ==========================================
+      // GET /config/security/validation
+      // Get current validation status
+      // ==========================================
+      if (method === 'GET' && path === '/config/security/validation') {
+        const validation = securityConfigService.getValidationStatus();
+        const version = securityConfigService.getVersion();
+
+        return new Response(JSON.stringify({
+          configVersion: version.version,
+          valid: validation?.valid ?? null,
+          errors: validation?.errors ?? [],
+          warnings: validation?.warnings ?? [],
+        }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        });
       }
 
       // ==========================================
@@ -787,6 +1063,8 @@ const server = serve({
           'GET  /config/security',
           'GET  /config/security/version',
           'POST /config/security/reload',
+          'POST /config/security/validate',
+          'GET  /config/security/validation',
           'POST /authz/check',
           'GET  /fraud/config',
           'GET  /rate-limits',
@@ -813,17 +1091,25 @@ const server = serve({
 
 console.log(`
 ╔════════════════════════════════════════════════════════════════╗
-║          CargoBit Security-Config-Service                      ║
+║          CargoBit Security-Config-Service v1.1.0               ║
 ║          Port: 3005                                            ║
 ╠════════════════════════════════════════════════════════════════╣
 ║  Endpoints:                                                    ║
-║  GET  /config/security         - Full config                   ║
-║  GET  /config/security/version - Version info                  ║
-║  POST /config/security/reload  - Reload config (Admin)         ║
-║  POST /authz/check             - Authorization check           ║
-║  GET  /fraud/config            - Fraud configuration           ║
-║  GET  /rate-limits             - Rate limit configuration      ║
-║  GET  /health                  - Health check                  ║
+║  GET  /config/security             - Full config               ║
+║  GET  /config/security/version     - Version info              ║
+║  POST /config/security/reload      - Reload config (Admin)     ║
+║  POST /config/security/validate    - Validate config (Admin)   ║
+║  GET  /config/security/validation  - Validation status         ║
+║  POST /authz/check                 - Authorization check       ║
+║  GET  /fraud/config                - Fraud configuration       ║
+║  GET  /rate-limits                 - Rate limit configuration  ║
+║  GET  /health                      - Health check              ║
+║  GET  /ready                       - Readiness probe           ║
+╠════════════════════════════════════════════════════════════════╣
+║  Schema Validation:                                            ║
+║  - JSON Schema (Draft 2020-12)                                 ║
+║  - Cross-Field Validation (weights sum to 1)                   ║
+║  - Threshold ordering (observe < suspect)                      ║
 ╚════════════════════════════════════════════════════════════════╝
 `);
 

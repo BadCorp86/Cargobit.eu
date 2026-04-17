@@ -1,0 +1,352 @@
+# =============================================================================
+# CargoBit API Gateway Rules Configuration
+# =============================================================================
+# This configuration can be translated 1:1 to Kong, APIM, or NGINX
+# Version: 2026-04-18-01
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# B.1 AuthN (JWT) Configuration
+# -----------------------------------------------------------------------------
+jwt:
+  issuer: "https://auth.cargobit.io"
+  audience: "cargobit-api"
+  algorithms: ["RS256", "RS512"]
+  
+  # Token validation rules
+  validation:
+    - check: "iss == https://auth.cargobit.io"
+      onError: "INVALID_ISSUER"
+      statusCode: 401
+    - check: "aud == cargobit-api"
+      onError: "INVALID_AUDIENCE"
+      statusCode: 401
+    - check: "exp > now()"
+      onError: "TOKEN_EXPIRED"
+      statusCode: 401
+    - check: "token != null"
+      onError: "MISSING_TOKEN"
+      statusCode: 401
+
+  # Required claims
+  requiredClaims:
+    - sub          # User/Service ID
+    - role         # SHIPPER | CARRIER | ADMIN | SUPPORT | SYSTEM
+    # Optional:
+    - carrierId?   # If role == CARRIER
+    - shipperId?   # If role == SHIPPER
+    - companyId?   # Company association
+
+  # Reject cases
+  rejectCases:
+    - name: "missing_token"
+      condition: "Authorization header missing or empty"
+      statusCode: 401
+      errorResponse:
+        error: "MISSING_TOKEN"
+        message: "Authorization header required"
+
+    - name: "expired_token"
+      condition: "exp claim is in the past"
+      statusCode: 401
+      errorResponse:
+        error: "TOKEN_EXPIRED"
+        message: "Token has expired"
+
+    - name: "invalid_issuer"
+      condition: "iss does not match https://auth.cargobit.io"
+      statusCode: 401
+      errorResponse:
+        error: "INVALID_ISSUER"
+        message: "Token issuer not trusted"
+
+    - name: "invalid_audience"
+      condition: "aud does not match cargobit-api"
+      statusCode: 401
+      errorResponse:
+        error: "INVALID_AUDIENCE"
+        message: "Token audience mismatch"
+
+# -----------------------------------------------------------------------------
+# B.2 AuthZ (Route-Level) Configuration
+# -----------------------------------------------------------------------------
+authz:
+  # Route-to-role mapping
+  routeRules:
+    # Shipper routes
+    - pattern: "/api/shipper/**"
+      method: "*"
+      requiredRole: "SHIPPER"
+      description: "Shipper-only endpoints"
+      
+    - pattern: "/api/orders"
+      method: "POST"
+      requiredRole: "SHIPPER"
+      description: "Create orders (shippers only)"
+      
+    - pattern: "/api/orders/*"
+      method: "GET"
+      requiredRole: "SHIPPER"
+      abacCheck: true
+      condition: "resource.shipperId == subject.sub"
+      description: "Read own orders"
+
+    # Carrier routes
+    - pattern: "/api/carrier/**"
+      method: "*"
+      requiredRole: "CARRIER"
+      description: "Carrier-only endpoints"
+      
+    - pattern: "/api/bids"
+      method: "POST"
+      requiredRole: "CARRIER"
+      description: "Submit bids (carriers only)"
+      
+    - pattern: "/api/bids/*"
+      method: "GET"
+      requiredRole: "CARRIER"
+      abacCheck: true
+      condition: "resource.carrierId == subject.carrierId"
+      description: "Read own bids"
+
+    # Admin routes
+    - pattern: "/api/admin/**"
+      method: "*"
+      requiredRole: "ADMIN"
+      description: "Admin-only endpoints"
+
+    # Support routes (read-only)
+    - pattern: "/api/support/**"
+      method: "GET"
+      requiredRole: "SUPPORT"
+      description: "Support read access"
+
+    # System routes (service-to-service)
+    - pattern: "/internal/**"
+      method: "*"
+      requiredRole: "SYSTEM"
+      description: "Internal service endpoints"
+      additionalCheck: "subject.whitelistedEndpoints CONTAINS endpoint"
+
+  # Default policy
+  defaultPolicy: "DENY"
+  
+  # Authz check endpoint
+  authzCheckUrl: "http://security-config-service.core.svc.cluster.local:3005/authz/check"
+
+# -----------------------------------------------------------------------------
+# B.3 Rate-Limits (Concrete)
+# -----------------------------------------------------------------------------
+rateLimits:
+  defaults:
+    keyStrategy: "sub"  # Use JWT 'sub' claim as key
+    windowSeconds: 60
+    statusCode: 429
+    errorResponse:
+      error: "RATE_LIMITED"
+      message: "Too many requests"
+
+  rules:
+    # Order creation - 60/min per shipper
+    - route: "POST /api/orders"
+      limit: 60
+      windowSeconds: 60
+      key: "sub"
+      description: "Order creation limit"
+      
+    # Bid submission - 120/min per carrier
+    - route: "POST /api/bids"
+      limit: 120
+      windowSeconds: 60
+      key: "sub"
+      description: "Bid submission limit"
+      
+    # Pricing validation - 300/min per user
+    - route: "POST /api/pricing/**/bid/validate"
+      limit: 300
+      windowSeconds: 60
+      key: "sub"
+      description: "Pricing validation limit"
+      
+    # Execution status updates - 240/min per carrier
+    - route: "POST /api/executions/**/status"
+      limit: 240
+      windowSeconds: 60
+      key: "sub"
+      description: "Status update limit"
+      
+    # Global read limit - 1000/min per user
+    - route: "GET /**"
+      limit: 1000
+      windowSeconds: 60
+      key: "sub"
+      description: "Global read limit"
+      
+    # Global IP limit - 10000/min (DDoS protection)
+    - route: "* /**"
+      limit: 10000
+      windowSeconds: 60
+      key: "ip"
+      description: "Global IP limit"
+
+  # Headers to include in responses
+  headers:
+    - name: "X-RateLimit-Limit"
+      value: "{limit}"
+    - name: "X-RateLimit-Remaining"
+      value: "{remaining}"
+    - name: "X-RateLimit-Reset"
+      value: "{resetTimestamp}"
+    - name: "Retry-After"
+      value: "{retryAfterSeconds}"
+
+# -----------------------------------------------------------------------------
+# B.4 mTLS Downstream Configuration
+# -----------------------------------------------------------------------------
+mtls:
+  enabled: true
+  
+  # Gateway → Domain-Services
+  gatewayToServices:
+    caSecret: "internal-ca"
+    clientCertSecret: "gateway-client-cert"
+    verifyServer: true
+    serverCertCN: "*.domain.svc.cluster.local"
+    
+  # Domain-Services → Security-Config-Service
+  servicesToSecurityConfig:
+    caSecret: "internal-ca"
+    clientCertSecret: "service-client-cert"
+    verifyServer: true
+    serverCertCN: "security-config-service.core.svc.cluster.local"
+
+  # Certificate rotation
+  certRotation:
+    enabled: true
+    schedule: "0 4 * * *"  # Daily at 4 AM
+    secretNames:
+      - "gateway-client-cert"
+      - "service-client-cert"
+
+  # mTLS enforcement
+  enforcement:
+    mode: "strict"  # strict | permissive
+    rejectWithoutCert: true
+    allowedNamespaces:
+      - "core"
+      - "domain"
+      - "data"
+
+# -----------------------------------------------------------------------------
+# Routing Configuration
+# -----------------------------------------------------------------------------
+routing:
+  # Service endpoints
+  upstreams:
+    - name: "order-service"
+      url: "http://order-service.domain.svc.cluster.local:3001"
+      healthCheck: "/health"
+      
+    - name: "pricing-service"
+      url: "http://pricing-service.domain.svc.cluster.local:3002"
+      healthCheck: "/health"
+      
+    - name: "matching-service"
+      url: "http://matching-service.domain.svc.cluster.local:3003"
+      healthCheck: "/health"
+      
+    - name: "execution-service"
+      url: "http://execution-service.domain.svc.cluster.local:3004"
+      healthCheck: "/health"
+      
+    - name: "security-config-service"
+      url: "http://security-config-service.core.svc.cluster.local:3005"
+      healthCheck: "/health"
+
+  # Route mappings
+  routes:
+    - path: "/api/orders/**"
+      upstream: "order-service"
+      stripPrefix: false
+      
+    - path: "/api/pricing/**"
+      upstream: "pricing-service"
+      stripPrefix: false
+      
+    - path: "/api/matching/**"
+      upstream: "matching-service"
+      stripPrefix: false
+      
+    - path: "/api/executions/**"
+      upstream: "execution-service"
+      stripPrefix: false
+      
+    - path: "/internal/security/**"
+      upstream: "security-config-service"
+      stripPrefix: true
+      prefixToRemove: "/internal/security"
+
+  # Timeouts
+  timeouts:
+    connect: 5000    # 5 seconds
+    read: 30000      # 30 seconds
+    write: 30000     # 30 seconds
+    idle: 60000      # 60 seconds
+
+  # Retry configuration
+  retry:
+    maxAttempts: 3
+    backoffMs: 100
+    backoffMultiplier: 2
+    retryableStatusCodes: [502, 503, 504]
+
+# -----------------------------------------------------------------------------
+# Circuit Breaker Configuration
+# -----------------------------------------------------------------------------
+circuitBreaker:
+  defaults:
+    failureThreshold: 5
+    successThreshold: 2
+    timeout: 60000          # 60 seconds in OPEN state
+    halfOpenRequests: 3     # Number of test requests in HALF_OPEN
+
+  perUpstream:
+    - upstream: "security-config-service"
+      failureThreshold: 5
+      timeout: 60000
+      fallbackBehavior: "cache"  # Use cached config
+
+# -----------------------------------------------------------------------------
+# Logging & Observability
+# -----------------------------------------------------------------------------
+observability:
+  # Access logging
+  accessLog:
+    enabled: true
+    format: "json"
+    fields:
+      - timestamp
+      - traceId
+      - spanId
+      - method
+      - path
+      - statusCode
+      - latencyMs
+      - userAgent
+      - remoteIp
+      - sub
+      - role
+
+  # Metrics
+  metrics:
+    enabled: true
+    path: "/metrics"
+    port: 9090
+    prefix: "cargobit_gateway"
+
+  # Tracing
+  tracing:
+    enabled: true
+    sampleRate: 0.1  # 10% sampling
+    exporter: "otlp"
+    endpoint: "http://tempo.observability.svc.cluster.local:4318"

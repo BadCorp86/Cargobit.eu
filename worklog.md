@@ -1384,3 +1384,230 @@ GET  /health                  → Health check
 - Event-driven Matching mit Fraud-Penalty
 
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
+Task ID: security-config-validation-helm-observability
+Agent: Main Agent
+Task: Vier Bausteine implementieren: A) Security-Config Schema-Validation, B) API-Gateway Regeln, C) Helm-Chart-Layout, D) Observability-Setup
+
+## Work Log:
+
+### Baustein A: Security-Config Schema-Validation (Deep Level)
+
+**A.1 JSON-Schema für komplette Security-Config**
+- Datei: `/schemas/security-config.schema.json` - NEU
+- JSON Schema Draft 2020-12 konform
+- Required Fields: version, roles, abac, fraud, rateLimits
+- Strict Mode: additionalProperties: false
+- Version Pattern: `^[0-9]{4}-[0-9]{2}-[0-9]{2}-[0-9]{2}$`
+
+**A.2 Cross-Field-Validation (Custom Rules)**
+- Datei: `/src/services/security-config-validator.ts` - NEU
+- Validierungsregeln:
+  1. Carrier fraud weights must sum to 1
+  2. Bid fraud weights must sum to 1
+  3. Thresholds must have observe < suspect
+  4. maxDiscountVsMarket must be < 0.9
+- Warning für alphaCarrier Abweichung von 0.6
+
+**A.3 Security-Config-Service Update**
+- Datei: `/mini-services/security-config-service/index.ts` - Aktualisiert
+- Neue Endpoints:
+  - `POST /config/security/validate` - Validate config without loading
+  - `GET /config/security/validation` - Current validation status
+- Validation on load mit Error-Logging
+- Validation Response mit Errors und Warnings
+
+### Baustein B: API-Gateway Regeln (konkret)
+
+**B.1 AuthN (JWT) Konfiguration**
+- Datei: `/config/api-gateway-rules.yaml` - NEU
+- Issuer: https://auth.cargobit.io
+- Audience: cargobit-api
+- Required Claims: sub, role
+- Reject Cases: missing_token, expired_token, invalid_issuer, invalid_audience
+
+**B.2 AuthZ (Route-Level)**
+- Route-to-Role Mapping:
+  - `/api/shipper/**` → SHIPPER
+  - `/api/carrier/**` → CARRIER
+  - `/api/admin/**` → ADMIN
+- ABAC Conditions: resource.shipperId == subject.id, etc.
+- Default Policy: DENY
+
+**B.3 Rate-Limits (konkret)**
+- POST /orders → 60/min per sub
+- POST /bids → 120/min per sub
+- POST /pricing/**/bid/validate → 300/min per sub
+- POST /executions/**/status → 240/min per sub
+- Response Headers: X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After
+
+**B.4 mTLS Downstream**
+- Gateway → Domain-Services: Client-Certificate required
+- Domain-Services → Security-Config-Service: Client-Certificate required
+- Certificate Rotation: Daily at 4 AM
+
+### Baustein C: Helm-Chart-Layout (konkret)
+
+**C.1 Verzeichnisstruktur**
+```
+helm/
+├── core/
+│   └── api-gateway/
+│       ├── Chart.yaml
+│       ├── values.yaml
+│       └── templates/
+│           ├── deployment.yaml
+│           ├── service.yaml
+│           ├── configmap.yaml
+│           ├── networkpolicy.yaml
+│           └── ...
+└── domain/
+    └── pricing-service/
+        ├── Chart.yaml
+        ├── values.yaml
+        └── templates/
+            ├── deployment.yaml
+            ├── service.yaml
+            ├── configmap.yaml
+            ├── networkpolicy.yaml
+            ├── hpa.yaml
+            ├── pdb.yaml
+            ├── serviceaccount.yaml
+            └── _helpers.tpl
+```
+
+**C.2 values.yaml (Pricing-Service)**
+- replicaCount: 2
+- resources: 200m-1000m CPU, 256-512Mi Memory
+- HPA: 2-10 replicas, 70% CPU target
+- PDB: minAvailable 1
+- NetworkPolicy: Ingress from core/domain, Egress to core/data
+- mTLS: enabled with internal-ca
+- Observability: metrics port 9090, tracing 10% sample rate
+
+**C.3 Templates**
+- deployment.yaml: Security Context, Health Probes, Volume Mounts
+- networkpolicy.yaml: Namespace-based ingress/egress rules
+- hpa.yaml: Autoscaling with behavior policies
+- pdb.yaml: Pod Disruption Budget
+
+### Baustein D: Observability-Setup (Prometheus/Grafana/Tempo)
+
+**D.1 Metrics (Prometheus)**
+- Datei: `/observability/prometheus/prometheus.yml` - NEU
+- Scrape Targets: Alle CargoBit Services
+- Recording Rules: Latency percentiles, fraud score distribution
+- Datei: `/observability/prometheus/rules.yml` - NEU
+- Alert Rules:
+  - GatewayHighErrorRate (>5%)
+  - PricingValidationLatencyHigh (>500ms)
+  - MatchingLatencyHigh (>1s)
+  - KafkaConsumerLag (>10000)
+
+**D.2 Logs (Loki)**
+- Datei: `/observability/logging-config.yaml` - NEU
+- Log Format: JSON
+- Required Fields: timestamp, service, correlationId, level, message
+- Optional Fields: traceId, spanId, userId, role, fraudScore
+- Promtail Pipeline: JSON parsing, label extraction
+- LogQL Queries: errors, fraud warnings, slow requests
+
+**D.3 Tracing (Tempo/Jaeger)**
+- Datei: `/observability/tempo/tracing-config.yaml` - NEU
+- Propagation: W3C TraceContext
+- Key Spans:
+  - pricing.validation, pricing.fraud_check
+  - matching.computation, matching.fraud_penalty
+  - execution.status_update
+  - gateway.auth, gateway.rbac, gateway.rate_limit
+- Sampling: 10% default, 100% for errors/fraud
+- TraceQL Queries: slowTraces, errorTraces, highFraud
+
+**D.4 Dashboards (Grafana)**
+- Datei: `/observability/grafana/dashboards/pricing-service.json` - NEU
+  - Validation Latency (P50/P95/P99)
+  - Fraud Score Distribution
+  - Request Rate by Status
+- Datei: `/observability/grafana/dashboards/matching-service.json` - NEU
+  - Matching Latency
+  - Score Distribution
+  - Fraud Penalty Impact
+- Datei: `/observability/grafana/dashboards/gateway.json` - NEU
+  - Rate Limit Hits by Route
+  - JWT Failures
+  - Upstream Latency
+
+## Stage Summary:
+
+### Erstellte Dateien (18):
+
+**Baustein A - Schema Validation:**
+1. `/schemas/security-config.schema.json` - JSON Schema
+2. `/src/services/security-config-validator.ts` - Validator
+3. `/mini-services/security-config-service/index.ts` - Aktualisiert
+
+**Baustein B - API Gateway Rules:**
+4. `/config/api-gateway-rules.yaml` - Gateway Configuration
+
+**Baustein C - Helm Charts:**
+5. `/helm/domain/pricing-service/Chart.yaml`
+6. `/helm/domain/pricing-service/values.yaml`
+7. `/helm/domain/pricing-service/templates/deployment.yaml`
+8. `/helm/domain/pricing-service/templates/service.yaml`
+9. `/helm/domain/pricing-service/templates/configmap.yaml`
+10. `/helm/domain/pricing-service/templates/networkpolicy.yaml`
+11. `/helm/domain/pricing-service/templates/hpa.yaml`
+12. `/helm/domain/pricing-service/templates/pdb.yaml`
+13. `/helm/domain/pricing-service/templates/serviceaccount.yaml`
+14. `/helm/domain/pricing-service/templates/_helpers.tpl`
+
+**Baustein D - Observability:**
+15. `/observability/prometheus/prometheus.yml`
+16. `/observability/prometheus/rules.yml`
+17. `/observability/logging-config.yaml`
+18. `/observability/tempo/tracing-config.yaml`
+19. `/observability/grafana/dashboards/pricing-service.json`
+20. `/observability/grafana/dashboards/matching-service.json`
+21. `/observability/grafana/dashboards/gateway.json`
+
+### Architektur-Übersicht:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        OBSERVABILITY STACK                       │
+├─────────────────────────────────────────────────────────────────┤
+│  Grafana Dashboards                                              │
+│  ├── Pricing Service: Validation Latency, Fraud Distribution    │
+│  ├── Matching Service: Latency, Score Distribution              │
+│  └── Gateway: Rate Limits, JWT Failures, Upstream Latency       │
+├─────────────────────────────────────────────────────────────────┤
+│  Prometheus                    │  Tempo (Tracing)                │
+│  ├── Scraping all services     │  ├── OTLP receiver              │
+│  ├── Recording Rules           │  ├── 10% sampling               │
+│  └── Alert Rules               │  └── TraceQL queries            │
+├─────────────────────────────────────────────────────────────────┤
+│  Loki (Logs)                                                      │
+│  ├── JSON structured logs                                       │
+│  ├── Required: timestamp, service, correlationId, level         │
+│  └── Promtail pipeline for parsing                              │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Validation Rules Summary:
+| Rule | Error Code | Condition |
+|------|------------|-----------|
+| Carrier weights sum | CARRIER_WEIGHTS_SUM | sum ≠ 1 |
+| Bid weights sum | BID_WEIGHTS_SUM | sum ≠ 1 |
+| Threshold order | THRESHOLD_ORDER | observe ≥ suspect |
+| Max discount | MAX_DISCOUNT_INVALID | maxDiscountVsMarket ≥ 0.9 |
+
+### Rate Limits Summary:
+| Route | Limit | Window | Key |
+|-------|-------|--------|-----|
+| POST /orders | 60 | 60s | sub |
+| POST /bids | 120 | 60s | sub |
+| POST /pricing/**/validate | 300 | 60s | sub |
+| POST /executions/**/status | 240 | 60s | sub |
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT

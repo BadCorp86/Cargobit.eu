@@ -1,0 +1,284 @@
+# =============================================================================
+# CargoBit Prometheus Recording & Alerting Rules
+# =============================================================================
+# Version: 2026-04-18-01
+# =============================================================================
+
+groups:
+  # ===========================================================================
+  # Recording Rules - Pre-computed metrics for dashboards
+  # ===========================================================================
+  - name: cargobit.recording_rules
+    rules:
+      # Request rate per service
+      - record: cargobit:http_requests:rate5m
+        expr: sum by (service, method, status) (rate(http_requests_total[5m]))
+        labels:
+          job: cargobit
+
+      # Request latency percentiles
+      - record: cargobit:http_request_duration:p50_5m
+        expr: histogram_quantile(0.5, sum by (service, le) (rate(http_request_duration_seconds_bucket[5m])))
+      
+      - record: cargobit:http_request_duration:p95_5m
+        expr: histogram_quantile(0.95, sum by (service, le) (rate(http_request_duration_seconds_bucket[5m])))
+      
+      - record: cargobit:http_request_duration:p99_5m
+        expr: histogram_quantile(0.99, sum by (service, le) (rate(http_request_duration_seconds_bucket[5m])))
+
+      # Fraud score distribution
+      - record: cargobit:fraud_score:avg_5m
+        expr: avg by (service) (rate(fraud_score_total_sum[5m]) / rate(fraud_score_total_count[5m]))
+      
+      - record: cargobit:fraud_score:high_risk_count
+        expr: sum by (service) (increase(fraud_score_total{score_level="suspect"}[5m]))
+
+      # Pricing validation latency
+      - record: cargobit:pricing_validation:latency_p95
+        expr: histogram_quantile(0.95, sum by (le) (rate(pricing_validation_duration_seconds_bucket[5m])))
+
+      # Matching computation latency
+      - record: cargobit:matching:latency_p95
+        expr: histogram_quantile(0.95, sum by (le) (rate(matching_duration_seconds_bucket[5m])))
+
+      # Kafka consumer lag
+      - record: cargobit:kafka_consumer_lag:max
+        expr: max by (consumer_group) (kafka_consumer_lag)
+
+  # ===========================================================================
+  # API Gateway Alerts
+  # ===========================================================================
+  - name: cargobit.gateway_alerts
+    rules:
+      - alert: GatewayHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{service="api-gateway",status=~"5.."}[5m])) 
+          / sum(rate(http_requests_total{service="api-gateway"}[5m])) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+          service: api-gateway
+        annotations:
+          summary: "API Gateway high error rate"
+          description: "Gateway error rate is {{ $value | humanizePercentage }} (>5%)"
+
+      - alert: GatewayRateLimitHits
+        expr: sum(rate(http_requests_total{service="api-gateway",status="429"}[5m])) > 100
+        for: 2m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "High rate limit rejections"
+          description: "Rate limit hits: {{ $value | humanize }} req/s"
+
+      - alert: GatewayJWTFailures
+        expr: sum(rate(http_requests_total{service="api-gateway",status="401"}[5m])) > 50
+        for: 5m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "High JWT validation failures"
+          description: "JWT failures: {{ $value | humanize }} req/s"
+
+      - alert: GatewayUpstreamLatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket{service="api-gateway"}[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "Gateway upstream latency high"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+
+  # ===========================================================================
+  # Pricing Service Alerts
+  # ===========================================================================
+  - name: cargobit.pricing_alerts
+    rules:
+      - alert: PricingValidationLatencyHigh
+        expr: histogram_quantile(0.95, rate(pricing_validation_duration_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: pricing-service
+        annotations:
+          summary: "Pricing validation latency high"
+          description: "P95 validation latency is {{ $value | humanizeDuration }}"
+
+      - alert: PricingFraudScoreHigh
+        expr: avg(fraud_score_total) > 0.7
+        for: 10m
+        labels:
+          severity: warning
+          service: pricing-service
+        annotations:
+          summary: "Average fraud score elevated"
+          description: "Average fraud score is {{ $value }} (>0.7)"
+
+      - alert: PricingServiceDown
+        expr: up{job="pricing-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: pricing-service
+        annotations:
+          summary: "Pricing service is down"
+          description: "Pricing service instance is not responding"
+
+  # ===========================================================================
+  # Matching Service Alerts
+  # ===========================================================================
+  - name: cargobit.matching_alerts
+    rules:
+      - alert: MatchingLatencyHigh
+        expr: histogram_quantile(0.95, rate(matching_duration_seconds_bucket[5m])) > 1
+        for: 5m
+        labels:
+          severity: warning
+          service: matching-service
+        annotations:
+          summary: "Matching latency high"
+          description: "P95 matching latency is {{ $value | humanizeDuration }}"
+
+      - alert: MatchingQueueBacklog
+        expr: matching_queue_size > 1000
+        for: 5m
+        labels:
+          severity: warning
+          service: matching-service
+        annotations:
+          summary: "Matching queue backlog"
+          description: "Queue size: {{ $value }} matches pending"
+
+      - alert: MatchingFraudPenaltyImpact
+        expr: |
+          sum(rate(matching_fraud_penalty_applied_total[5m])) 
+          / sum(rate(matching_total[5m])) > 0.3
+        for: 10m
+        labels:
+          severity: info
+          service: matching-service
+        annotations:
+          summary: "High fraud penalty impact on matching"
+          description: "{{ $value | humanizePercentage }} of matches affected by fraud penalty"
+
+  # ===========================================================================
+  # Execution Service Alerts
+  # ===========================================================================
+  - name: cargobit.execution_alerts
+    rules:
+      - alert: ExecutionStatusUpdateLatency
+        expr: histogram_quantile(0.95, rate(execution_status_update_duration_seconds_bucket[5m])) > 0.3
+        for: 5m
+        labels:
+          severity: warning
+          service: execution-service
+        annotations:
+          summary: "Execution status update latency high"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+
+      - alert: ExecutionStaleJobs
+        expr: execution_jobs_stale_count > 50
+        for: 10m
+        labels:
+          severity: warning
+          service: execution-service
+        annotations:
+          summary: "Stale execution jobs detected"
+          description: "{{ $value }} jobs have not been updated in 30+ minutes"
+
+  # ===========================================================================
+  # Kafka Alerts
+  # ===========================================================================
+  - name: cargobit.kafka_alerts
+    rules:
+      - alert: KafkaConsumerLag
+        expr: kafka_consumer_lag > 10000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka consumer lag high"
+          description: "Consumer group {{ $labels.consumer_group }} lag: {{ $value }}"
+
+      - alert: KafkaConsumerLagCritical
+        expr: kafka_consumer_lag > 50000
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka consumer lag critical"
+          description: "Consumer group {{ $labels.consumer_group }} lag: {{ $value }}"
+
+  # ===========================================================================
+  # Security-Config-Service Alerts
+  # ===========================================================================
+  - name: cargobit.security_config_alerts
+    rules:
+      - alert: SecurityConfigServiceDown
+        expr: up{job="security-config-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: security-config-service
+        annotations:
+          summary: "Security-Config-Service is down"
+          description: "Critical service is not responding - other services may degrade"
+
+      - alert: SecurityConfigValidationErrors
+        expr: increase(security_config_validation_errors_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: warning
+          service: security-config-service
+        annotations:
+          summary: "Security config validation errors"
+          description: "{{ $value }} validation errors detected"
+
+      - alert: SecurityConfigCacheStale
+        expr: time() - security_config_cache_timestamp > 600
+        for: 2m
+        labels:
+          severity: warning
+          service: security-config-service
+        annotations:
+          summary: "Security config cache may be stale"
+          description: "Config cache is {{ $value | humanizeDuration }} old"
+
+  # ===========================================================================
+  # Infrastructure Alerts
+  # ===========================================================================
+  - name: cargobit.infrastructure_alerts
+    rules:
+      - alert: HighMemoryUsage
+        expr: |
+          sum(container_memory_working_set_bytes{namespace=~"core|domain|data"}) 
+          / sum(container_memory_limit_bytes{namespace=~"core|domain|data"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High memory usage in CargoBit namespaces"
+          description: "Memory usage is {{ $value | humanizePercentage }}"
+
+      - alert: HighCPUUsage
+        expr: |
+          sum(rate(container_cpu_usage_seconds_total{namespace=~"core|domain|data"}[5m])) 
+          / sum(container_cpu_limit{namespace=~"core|domain|data"}) > 0.85
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High CPU usage in CargoBit namespaces"
+          description: "CPU usage is {{ $value | humanizePercentage }}"
+
+      - alert: PodCrashLooping
+        expr: rate(kube_pod_container_status_restarts_total{namespace=~"core|domain|data"}[15m]) > 0.1
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Pod {{ $labels.pod }} is crash looping"
+          description: "Restart rate: {{ $value | humanize }}/s"

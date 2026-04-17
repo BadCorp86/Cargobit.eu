@@ -4,68 +4,103 @@ metadata:
   name: {{ include "pricing-service.fullname" . }}
   labels:
     {{- include "pricing-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: domain-service
+    app.kubernetes.io/part-of: cargobit
 spec:
-  {{- if not .Values.autoscaling.enabled }}
   replicas: {{ .Values.replicaCount }}
-  {{- end }}
   selector:
     matchLabels:
       {{- include "pricing-service.selectorLabels" . | nindent 6 }}
   template:
     metadata:
-      annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/port: "3002"
-        prometheus.io/path: "/metrics"
-        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
       labels:
         {{- include "pricing-service.selectorLabels" . | nindent 8 }}
-        version: v1
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.observability.metrics.port }}"
+        prometheus.io/path: "{{ .Values.observability.metrics.path }}"
     spec:
       serviceAccountName: {{ include "pricing-service.serviceAccountName" . }}
+      
+      {{- with .Values.podSecurityContext }}
       securityContext:
-        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
       containers:
         - name: {{ .Chart.Name }}
+          {{- with .Values.securityContext }}
           securityContext:
-            {{- toYaml .Values.securityContext | nindent 12 }}
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          
           ports:
             - name: http
-              containerPort: 3002
+              containerPort: {{ .Values.service.targetPort }}
               protocol: TCP
+            {{- if .Values.observability.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.observability.metrics.port }}
+              protocol: TCP
+            {{- end }}
+          
           env:
-            - name: NODE_ENV
-              value: {{ .Values.env.NODE_ENV | quote }}
-            - name: PORT
-              value: {{ .Values.env.PORT | quote }}
-            - name: LOG_LEVEL
-              value: {{ .Values.env.LOG_LEVEL | quote }}
-            - name: SECURITY_CONFIG_URL
-              value: {{ .Values.env.SECURITY_CONFIG_URL | quote }}
-            - name: KAFKA_BROKERS
-              value: {{ .Values.env.KAFKA_BROKERS | quote }}
-            {{- if .Values.database.enabled }}
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.database.existingSecret }}
-                  key: {{ .Values.database.secretKeys.url }}
+            {{- range $key, $value := .Values.env }}
+            - name: {{ $key }}
+              value: {{ $value | quote }}
             {{- end }}
-            {{- if .Values.securityConfigClient.serviceToken.existingSecret }}
-            - name: SERVICE_TOKEN
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.securityConfigClient.serviceToken.existingSecret }}
-                  key: {{ .Values.securityConfigClient.serviceToken.key }}
-            {{- end }}
+          
+          envFrom:
+            {{- toYaml .Values.envFrom | nindent 12 }}
+          
+          {{- with .Values.resources }}
+          resources:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          
           livenessProbe:
             {{- toYaml .Values.livenessProbe | nindent 12 }}
+          
           readinessProbe:
             {{- toYaml .Values.readinessProbe | nindent 12 }}
-          resources:
-            {{- toYaml .Values.resources | nindent 12 }}
+          
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            {{- if .Values.mtls.enabled }}
+            - name: mtls-ca
+              mountPath: /etc/ssl/certs/internal
+              readOnly: true
+            - name: mtls-client
+              mountPath: /etc/ssl/client
+              readOnly: true
+            {{- end }}
+      
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        {{- if .Values.mtls.enabled }}
+        - name: mtls-ca
+          secret:
+            secretName: {{ .Values.mtls.caSecretName }}
+        - name: mtls-client
+          secret:
+            secretName: {{ .Values.mtls.clientCertSecretName }}
+        {{- end }}
+      
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      
       {{- with .Values.affinity }}
       affinity:
         {{- toYaml . | nindent 8 }}
