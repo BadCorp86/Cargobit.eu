@@ -240,15 +240,38 @@ class SecurityConfigService {
     }
   }
 
+  private versionCounter: number = 0;
+  
   /**
-   * Generate version string based on timestamp
+   * Generate version string in YYYY-MM-DD-NN format
+   * 
+   * Format:
+   * - YYYY = Year
+   * - MM = Month (01-12)
+   * - DD = Day (01-31)
+   * - NN = Sequential number for the day (01-99)
+   * 
+   * Example: 2026-04-18-01
    */
   private generateVersion(): string {
     const now = new Date();
-    const date = now.toISOString().split('T')[0].replace(/-/g, '');
-    const time = now.toTimeString().split(' ')[0].replace(/:/g, '').substring(0, 4);
-    return `${date}-${time}`;
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    
+    // Reset counter if day changed
+    const today = `${year}-${month}-${day}`;
+    if (this.lastVersionDate !== today) {
+      this.lastVersionDate = today;
+      this.versionCounter = 0;
+    }
+    
+    this.versionCounter++;
+    const seq = String(this.versionCounter).padStart(2, '0');
+    
+    return `${year}-${month}-${day}-${seq}`;
   }
+  private lastVersionDate: string = '';
 
   /**
    * Get default configuration
@@ -553,6 +576,33 @@ const server = serve({
       return new Response(null, { headers: corsHeaders });
     }
 
+    // ===========================================================================
+    // ERROR RESPONSE HELPERS
+    // ===========================================================================
+    
+    const errorResponse = (
+      type: 'CONFIG_NOT_FOUND' | 'SOURCE_UNAVAILABLE' | 'INVALID_CONFIG' | 'UNAUTHORIZED' | 'FORBIDDEN' | 'RATE_LIMITED',
+      message: string,
+      retryAfterSeconds?: number
+    ): Response => {
+      const statusMap: Record<string, number> = {
+        CONFIG_NOT_FOUND: 404,
+        SOURCE_UNAVAILABLE: 503,
+        INVALID_CONFIG: 422,
+        UNAUTHORIZED: 401,
+        FORBIDDEN: 403,
+        RATE_LIMITED: 429,
+      };
+      
+      const body: any = { error: type, message };
+      if (retryAfterSeconds) body.retryAfterSeconds = retryAfterSeconds;
+      
+      return new Response(JSON.stringify(body), {
+        status: statusMap[type],
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    };
+
     try {
       // ==========================================
       // GET /config/security
@@ -561,10 +611,12 @@ const server = serve({
         // Check service token for internal access
         const serviceToken = req.headers.get('X-Service-Token');
         if (!serviceToken && process.env.REQUIRE_SERVICE_TOKEN === 'true') {
-          return new Response(JSON.stringify({ error: 'Unauthorized' }), {
-            status: 401,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          return errorResponse('UNAUTHORIZED', 'Missing or invalid service token');
+        }
+
+        // Check if config is loaded
+        if (!securityConfigService.isReady()) {
+          return errorResponse('SOURCE_UNAVAILABLE', 'Configuration not loaded', 30);
         }
 
         const config = securityConfigService.getConfig();
@@ -573,25 +625,31 @@ const server = serve({
             ...corsHeaders,
             'Content-Type': 'application/json',
             'X-Config-Version': config.version,
+            'Cache-Control': 'no-store',
           },
         });
       }
 
       // ==========================================
       // GET /config/security/version
+      // Extremely lightweight - polled every 60s
       // ==========================================
       if (method === 'GET' && path === '/config/security/version') {
         const versionInfo = securityConfigService.getVersion();
-        return new Response(JSON.stringify(versionInfo), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        return new Response(JSON.stringify({ version: versionInfo.version }), {
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'Cache-Control': 'max-age=30',
+          },
         });
       }
 
       // ==========================================
       // POST /config/security/reload
+      // Only Admin/System can trigger reload
       // ==========================================
       if (method === 'POST' && path === '/config/security/reload') {
-        // Only Admin/System can reload
         const authHeader = req.headers.get('Authorization') || '';
         const serviceToken = req.headers.get('X-Service-Token') || '';
         
@@ -601,22 +659,26 @@ const server = serve({
           process.env.NODE_ENV === 'development';
 
         if (!isAuthorized) {
-          return new Response(JSON.stringify({ error: 'Forbidden - Admin or System role required' }), {
-            status: 403,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-          });
+          return errorResponse('FORBIDDEN', 'Admin or System role required for reload');
         }
 
-        const config = securityConfigService.reload();
-        console.log(`[SecurityConfig] Reloaded config to version ${config.version}`);
+        try {
+          const config = securityConfigService.reload();
+          console.log(`[SecurityConfig] Reloaded config to version ${config.version}`);
 
-        return new Response(JSON.stringify({
-          success: true,
-          version: config.version,
-          loadedAt: config.loadedAt,
-        }), {
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        });
+          return new Response(JSON.stringify({
+            success: true,
+            version: config.version,
+            loadedAt: config.loadedAt,
+          }), {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          });
+        } catch (reloadError) {
+          console.error('[SecurityConfig] Reload failed:', reloadError);
+          return errorResponse('INVALID_CONFIG', 
+            reloadError instanceof Error ? reloadError.message : 'Configuration validation failed'
+          );
+        }
       }
 
       // ==========================================
