@@ -1201,6 +1201,170 @@ Task: Vier produktreife Bausteine implementieren (Schema-Validation, API-Gateway
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
 
 ---
+Task ID: operational-playbooks-slos-deployment
+Agent: Main Agent
+Task: E + F + G Bausteine implementieren (Incident-Playbooks, SLO/SLI, Deployment-Playbook)
+
+## Work Log:
+
+### E) Incident-Playbooks (5 kritische Incidents)
+
+**E.1 Pricing-Service Down / Validation Fails**
+- Datei: `/playbooks/incident-pricing-service-down.md` - NEU
+- Trigger: 5xx-Rate, Bid-Validation fails, Fraud-Score not calculated
+- Diagnosis: Pod status, logs, health probes, config reachability, DB connectivity, Kafka lag
+- Immediate Actions: Pod restart, cache fallback, rate limit increase, scale up
+- Root Causes: Config reload failed, fraud config invalid, DB pool exhausted, memory leak
+
+**E.2 Matching-Service Stuck / No Matches Produced**
+- Datei: `/playbooks/incident-matching-service-stuck.md` - NEU
+- Trigger: matching.completed events missing, latency high, Kafka lag rising
+- Diagnosis: Matching metrics, Kafka consumer status, DB locks, CPU saturation
+- Immediate Actions: Scale workers, disable fraud penalty, partition rebalance
+
+**E.3 Fraud-Config Invalid / Reload Fails**
+- Datei: `/playbooks/incident-fraud-config-invalid.md` - NEU
+- Trigger: INVALID_CONFIG error, services stuck on old version
+- Diagnosis: Config service logs, JSON schema validation, source check
+- Immediate Actions: Rollback to last good version, block reload, notify admin
+
+**E.4 Kafka Lag / Event-Backpressure**
+- Datei: `/playbooks/incident-kafka-lag.md` - NEU
+- Trigger: Lag > 10,000, delayed processing
+- Diagnosis: Lag metrics, consumer performance, partition distribution
+- Immediate Actions: Scale consumers, increase partitions, restart slow consumers
+
+**E.5 API-Gateway Rate-Limit Spikes**
+- Datei: `/playbooks/incident-gateway-ratelimit-spikes.md` - NEU
+- Trigger: 429-Rate rising, carriers/shippers blocked
+- Diagnosis: Gateway metrics, rate limit logs, IP distribution, bot detection
+- Immediate Actions: Increase limits, block IPs, prioritize carrier traffic
+
+### F) SLO/SLI-Definitionen
+
+**F.1 Pricing-Service SLOs**
+- Datei: `/slos/slo-definitions.md` - NEU
+- Validation Latency P95 < 150ms
+- Error Rate < 0.1%
+- Availability 99.9%
+- Error Budget: 43.2 min/month
+
+**F.2 Matching-Service SLOs**
+- Matching Latency P95 < 500ms
+- Kafka Lag < 1,000 events
+- Availability 99.9%
+
+**F.3 Execution-Service SLOs**
+- Status Update P95 < 200ms
+- POD Upload Success > 99.5%
+- Availability 99.9%
+
+**F.4 API-Gateway SLOs**
+- Auth Latency P95 < 50ms
+- Rate Limit False-Positives < 0.1%
+- Availability 99.99%
+- Error Budget: 4.3 min/month
+
+**Recording & Alerting Rules**
+- Datei: `/slos/slo-recording-rules.yaml` - NEU
+- Datei: `/slos/slo-alerting-rules.yaml` - NEU
+- Error Budget Burn Rate Alerts
+- SLO Violation Alerts
+
+### G) End-to-End Deployment-Playbook
+
+**Phase 1: Infrastructure**
+- Datei: `/docs/deployment-playbook.md` - NEU
+- Kubernetes Cluster
+- Namespaces: core, domain, data, observability
+- Secrets: JWT keys, mTLS certs
+- Storage: PostgreSQL, Redis, Kafka, MinIO
+
+**Phase 2: Core Layer**
+- Observability Stack (Prometheus, Grafana, Loki, Tempo)
+- Security-Config-Service
+- Auth-Service
+- API-Gateway
+
+**Phase 3: Domain Layer (Dependency Order)**
+1. carrier-service
+2. shipper-service
+3. order-service
+4. pricing-service
+5. bidding-service
+6. matching-service
+7. execution-service
+8. risk-service
+
+**Phase 4: Smoke Tests**
+- Pricing Validation
+- Bid Submission
+- Matching Flow
+- Execution Status Update
+- Fraud-Score Calculation
+- Config Reload
+
+**Phase 5: Load Tests**
+- 1000 Orders/min
+- 5000 Bids/min
+- 2000 Status Updates/min
+- Fraud-Score Stress Test
+- Gateway Rate-Limit Test
+
+**Phase 6: Go-Live Checklist**
+- SLO Dashboards aktiv
+- Alerts aktiv
+- On-Call Rotation definiert
+- Incident Playbooks verteilt
+- Config-Version pinned
+- Canary Deployment aktiviert
+- Rollback-Plan vorhanden
+
+## Stage Summary:
+
+### Erstellte Dateien:
+**Incident Playbooks (5):**
+1. `/playbooks/incident-pricing-service-down.md`
+2. `/playbooks/incident-matching-service-stuck.md`
+3. `/playbooks/incident-fraud-config-invalid.md`
+4. `/playbooks/incident-kafka-lag.md`
+5. `/playbooks/incident-gateway-ratelimit-spikes.md`
+
+**SLO Definitions (3):**
+1. `/slos/slo-definitions.md`
+2. `/slos/slo-recording-rules.yaml`
+3. `/slos/slo-alerting-rules.yaml`
+
+**Deployment Playbooks (2):**
+1. `/docs/deployment-playbook.md`
+2. `/docs/deployment-commands.md`
+
+### SLO Summary:
+| Service | Availability SLO | Latency SLO | Error Budget |
+|---------|-----------------|-------------|--------------|
+| Pricing | 99.9% | P95 < 150ms | 43.2 min/mo |
+| Matching | 99.9% | P95 < 500ms | 43.2 min/mo |
+| Execution | 99.9% | P95 < 200ms | 43.2 min/mo |
+| Gateway | 99.99% | P95 < 50ms | 4.3 min/mo |
+
+### Deployment Phases:
+```
+Phase 1: Infrastructure (K8s, Namespaces, Secrets, Storage)
+    ↓
+Phase 2: Core Layer (Observability, Config, Auth, Gateway)
+    ↓
+Phase 3: Domain Layer (Carrier → Shipper → Order → Pricing → Bidding → Matching → Execution → Risk)
+    ↓
+Phase 4: Smoke Tests (6 critical flows)
+    ↓
+Phase 5: Load Tests (5 scenarios)
+    ↓
+Phase 6: Go-Live Checklist (7 items)
+```
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
 Task ID: service-landscape-architecture
 Agent: Main Agent
 Task: Service-Landscape Architektur mit Core Domain Services, Event-Bus, Data Ownership

@@ -1,532 +1,762 @@
 # CargoBit End-to-End Deployment Playbook
 
-## Übersicht
-
-Dieses Playbook beschreibt die vollständige Deployment-Reihenfolge für die CargoBit Transport-Plattform auf Kubernetes.
-
-**Deployment-Reihenfolge:** Data → Core → Domain
+**Version:** 2024-01-15-01  
+**Owner:** Platform Team  
+**Environment:** Production  
 
 ---
 
-## 1. Voraussetzungen
+## Overview
+
+This playbook describes the complete deployment sequence for the CargoBit Transport Platform. Following this order ensures proper dependency resolution and service availability.
+
+### Deployment Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                     DEPLOYMENT PHASES                            │
+├─────────────────────────────────────────────────────────────────┤
+│  Phase 1: Infrastructure (K8s, Namespaces, Storage, Secrets)    │
+│  Phase 2: Core Layer (Auth, Config, Gateway, Observability)     │
+│  Phase 3: Domain Layer (Order → Pricing → Matching → Execution) │
+│  Phase 4: Smoke Tests (Functional Validation)                    │
+│  Phase 5: Load Tests (Performance Validation)                    │
+│  Phase 6: Go-Live Checklist (Final Validation)                   │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## Phase 1: Infrastructure
 
 ### 1.1 Kubernetes Cluster
 
 ```bash
-# Cluster-Info prüfen
+# Verify cluster access
 kubectl cluster-info
 kubectl get nodes
 
-# Benötigte Kubernetes Version
-kubectl version --short
-# Server Version: v1.28+
+# Expected output: 3+ nodes, Ready status
+```
 
-# Namespaces erstellen
-kubectl apply -f - <<EOF
+### 1.2 Namespaces
+
+```bash
+# Create namespaces
+cat <<EOF | kubectl apply -f -
 apiVersion: v1
 kind: Namespace
 metadata:
   name: core
   labels:
-    name: core
     type: core
-    istio-injection: enabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: domain
   labels:
-    name: domain
     type: domain
-    istio-injection: enabled
 ---
 apiVersion: v1
 kind: Namespace
 metadata:
   name: data
   labels:
-    name: data
     type: data
-    istio-injection: enabled
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+  labels:
+    name: observability
 EOF
+
+# Verify namespaces
+kubectl get namespaces
 ```
 
-### 1.2 Benötigte Tools
+### 1.3 Secrets
 
 ```bash
-# Helm 3.x
-helm version
+# Create JWT signing keys
+kubectl create secret generic jwt-keys -n core \
+  --from-literal=jwt-private-key="$(openssl rand -base64 32)" \
+  --from-literal=jwt-public-key="$(openssl rand -base64 32)"
 
-# kubectl
-kubectl version --client
-
-# Optional: Istio (für mTLS)
-istioctl version
-```
-
-### 1.3 Secrets vorbereiten
-
-```bash
-# Registry Secret
-kubectl create secret docker-registry regcred \
-  --docker-server=your-registry.io \
-  --docker-username=user \
-  --docker-password=password \
-  -n core
-
-# Internal CA für mTLS
-kubectl create secret generic internal-ca \
+# Create mTLS certificates
+kubectl create secret generic internal-ca -n core \
   --from-file=ca.crt=./certs/ca.crt \
-  -n core
+  --from-file=ca.key=./certs/ca.key
 
-# API-Gateway Client Cert
-kubectl create secret tls api-gateway-client-cert \
-  --cert=./certs/gateway-client.crt \
-  --key=./certs/gateway-client.key \
-  -n core
+# Create service-specific certificates
+./scripts/generate-service-certs.sh pricing-service domain
+./scripts/generate-service-certs.sh matching-service domain
+./scripts/generate-service-certs.sh order-service domain
+./scripts/generate-service-certs.sh risk-service domain
+./scripts/generate-service-certs.sh security-config-service core
 
-# Service Tokens
-kubectl create secret generic pricing-service-token \
-  --from-literal=token=srv_pricing_token_xxx \
-  -n domain
+# Create database credentials
+kubectl create secret generic postgres-credentials -n data \
+  --from-literal=username=cargobit \
+  --from-literal=password="$(openssl rand -base64 24)"
+
+# Create Redis credentials
+kubectl create secret generic redis-credentials -n data \
+  --from-literal=password="$(openssl rand -base64 24)"
+
+# Verify secrets
+kubectl get secrets -n core
+kubectl get secrets -n domain
+kubectl get secrets -n data
 ```
 
----
-
-## 2. Phase 1: Data Layer
-
-### 2.1 PostgreSQL
+### 1.4 Storage Infrastructure
 
 ```bash
-# PostgreSQL deployen
-helm install postgres ./helm/data/postgres \
-  -n data \
-  -f ./helm/data/postgres/values-prod.yaml
+# Deploy PostgreSQL
+helm repo add bitnami https://charts.bitnami.com/bitnami
+helm install postgresql bitnami/postgresql -n data -f helm/data/postgresql/values.yaml
 
-# Status prüfen
-kubectl get pods -n data -l app.kubernetes.io/name=postgres
+# Wait for PostgreSQL to be ready
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgresql -n data --timeout=300s
 
-# Datenbanken erstellen
-kubectl exec -n data -it postgres-0 -- psql -U postgres -c "
-CREATE DATABASE pricing;
-CREATE DATABASE orders;
-CREATE DATABASE carriers;
-CREATE DATABASE executions;
-"
+# Deploy Redis
+helm install redis bitnami/redis -n data -f helm/data/redis/values.yaml
 
-# Wait
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=postgres -n data --timeout=300s
-```
+# Wait for Redis to be ready
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=redis -n data --timeout=300s
 
-### 2.2 Kafka/NATS
+# Deploy Kafka
+helm repo add strimzi https://strimzi.io/charts/
+helm install kafka strimzi/strimzi-kafka-operator -n data
+kubectl apply -f kafka-cluster.yaml -n data
 
-```bash
-# Kafka deployen
-helm install kafka ./helm/data/kafka \
-  -n data \
-  -f ./helm/data/kafka/values-prod.yaml
+# Wait for Kafka to be ready
+kubectl wait --for=condition=ready kafka/cargobit-kafka -n data --timeout=600s
 
-# Status prüfen
-kubectl get pods -n data -l app.kubernetes.io/name=kafka
+# Deploy MinIO (S3-compatible storage)
+helm install minio bitnami/minio -n data -f helm/data/minio/values.yaml
 
-# Topics erstellen
-kubectl exec -n data -it kafka-0 -- kafka-topics.sh --create \
-  --topic pricing.calculated \
-  --bootstrap-server localhost:9092
-
-kubectl exec -n data -it kafka-0 -- kafka-topics.sh --create \
-  --topic bid.validated \
-  --bootstrap-server localhost:9092
-
-kubectl exec -n data -it kafka-0 -- kafka-topics.sh --create \
-  --topic fraud.suspected \
-  --bootstrap-server localhost:9092
-
-# Wait
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=kafka -n data --timeout=300s
-```
-
-### 2.3 Redis (Optional)
-
-```bash
-helm install redis ./helm/data/redis \
-  -n data \
-  -f ./helm/data/redis/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=redis -n data --timeout=120s
-```
-
----
-
-## 3. Phase 2: Core Layer
-
-### 3.1 Security-Config-Service
-
-```bash
-# ConfigMap mit Security-Config erstellen
-kubectl create configmap security-config \
-  --from-file=security-config.yaml=./config/security-config.yaml \
-  -n core
-
-# Security-Config-Service deployen
-helm install security-config-service ./helm/core/security-config-service \
-  -n core \
-  -f ./helm/core/security-config-service/values-prod.yaml
-
-# Status prüfen
-kubectl get pods -n core -l app.kubernetes.io/name=security-config-service
-
-# Health Check
-kubectl exec -n core -it deploy/security-config-service -- curl -s http://localhost:3005/health
-
-# Wait
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=security-config-service -n core --timeout=120s
-```
-
-### 3.2 Auth-Service
-
-```bash
-helm install auth-service ./helm/core/auth-service \
-  -n core \
-  -f ./helm/core/auth-service/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=auth-service -n core --timeout=120s
-```
-
-### 3.3 API-Gateway
-
-```bash
-# API-Gateway deployen
-helm install api-gateway ./helm/core/api-gateway \
-  -n core \
-  -f ./helm/core/api-gateway/values-prod.yaml \
-  --set auth.oidc.issuer=https://auth.cargobit.io \
-  --set auth.oidc.audience=cargobit-api \
-  --set mtls.enabled=true
-
-# Status prüfen
-kubectl get pods -n core -l app.kubernetes.io/name=api-gateway
-kubectl get svc -n core api-gateway
-kubectl get ingress -n core
-
-# Health Check
-kubectl exec -n core -it deploy/api-gateway -- curl -s http://localhost:8080/health
-
-# Wait
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=api-gateway -n core --timeout=120s
-```
-
-### 3.4 Monitoring (Optional)
-
-```bash
-# Prometheus Stack
-helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-helm install prometheus prometheus-community/kube-prometheus-stack \
-  -n core \
-  -f ./helm/core/monitoring/values-prod.yaml
-
-# Grafana Dashboards importieren
-kubectl apply -f ./dashboards/ -n core
-```
-
----
-
-## 4. Phase 3: Domain Layer
-
-### 4.1 Pricing-Service
-
-```bash
-# DB Credentials
-kubectl create secret generic pricing-db-credentials \
-  --from-literal=username=pricing \
-  --from-literal=password=$(openssl rand -base64 32) \
-  --from-literal=url="postgresql://pricing:xxx@postgres.data.svc.cluster.local:5432/pricing" \
-  -n domain
-
-# Pricing-Service deployen
-helm install pricing-service ./helm/domain/pricing-service \
-  -n domain \
-  -f ./helm/domain/pricing-service/values-prod.yaml
-
-# Health Check
-kubectl exec -n domain -it deploy/pricing-service -- curl -s http://localhost:3002/health
-kubectl exec -n domain -it deploy/pricing-service -- curl -s http://localhost:3002/ready
-
-# Wait
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=pricing-service -n domain --timeout=120s
-```
-
-### 4.2 Order-Service
-
-```bash
-kubectl create secret generic order-db-credentials \
-  --from-literal=url="postgresql://order:xxx@postgres.data.svc.cluster.local:5432/orders" \
-  -n domain
-
-helm install order-service ./helm/domain/order-service \
-  -n domain \
-  -f ./helm/domain/order-service/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=order-service -n domain --timeout=120s
-```
-
-### 4.3 Matching-Service
-
-```bash
-helm install matching-service ./helm/domain/matching-service \
-  -n domain \
-  -f ./helm/domain/matching-service/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=matching-service -n domain --timeout=120s
-```
-
-### 4.4 Carrier-Service
-
-```bash
-helm install carrier-service ./helm/domain/carrier-service \
-  -n domain \
-  -f ./helm/domain/carrier-service/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=carrier-service -n domain --timeout=120s
-```
-
-### 4.5 Execution-Service
-
-```bash
-helm install execution-service ./helm/domain/execution-service \
-  -n domain \
-  -f ./helm/domain/execution-service/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=execution-service -n domain --timeout=120s
-```
-
-### 4.6 Bidding-Service
-
-```bash
-helm install bidding-service ./helm/domain/bidding-service \
-  -n domain \
-  -f ./helm/domain/bidding-service/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=bidding-service -n domain --timeout=120s
-```
-
-### 4.7 Risk-Service
-
-```bash
-helm install risk-service ./helm/domain/risk-service \
-  -n domain \
-  -f ./helm/domain/risk-service/values-prod.yaml
-
-kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=risk-service -n domain --timeout=120s
-```
-
----
-
-## 5. Verifikation
-
-### 5.1 Alle Services prüfen
-
-```bash
-# Core Namespace
-kubectl get pods -n core
-kubectl get svc -n core
-kubectl get ingress -n core
-
-# Domain Namespace
-kubectl get pods -n domain
-kubectl get svc -n domain
-
-# Data Namespace
+# Verify storage
 kubectl get pods -n data
-kubectl get svc -n data
 ```
 
-### 5.2 Network Policies prüfen
+### Phase 1 Checklist
+
+- [ ] Kubernetes cluster accessible
+- [ ] Namespaces created (core, domain, data, observability)
+- [ ] JWT keys created
+- [ ] mTLS certificates created for all services
+- [ ] PostgreSQL running
+- [ ] Redis running
+- [ ] Kafka running
+- [ ] MinIO running
+
+---
+
+## Phase 2: Core Layer
+
+### 2.1 Observability Stack
 
 ```bash
-# API-Gateway sollte von außen erreichbar sein
-curl -k https://api.cargobit.io/health
+# Deploy Prometheus
+helm install prometheus prometheus-community/prometheus -n observability \
+  -f helm/observability/prometheus/values.yaml
 
-# Security-Config-Service sollte NICHT von außen erreichbar sein
-kubectl run test-pod --rm -it --image=curlimages/curl -- curl http://security-config-service.core.svc.cluster.local:3005/health
+# Deploy Grafana
+helm install grafana grafana/grafana -n observability \
+  -f helm/observability/grafana/values.yaml
+
+# Deploy Loki (logs)
+helm install loki grafana/loki -n observability \
+  -f helm/observability/loki/values.yaml
+
+# Deploy Tempo (tracing)
+helm install tempo grafana/tempo -n observability \
+  -f helm/observability/tempo/values.yaml
+
+# Wait for observability stack
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus -n observability --timeout=300s
+kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=grafana -n observability --timeout=300s
+
+# Import dashboards
+kubectl create configmap grafana-dashboards -n observability \
+  --from-file=./observability/grafana/dashboards/
+
+# Verify observability
+kubectl get pods -n observability
+kubectl port-forward svc/grafana -n observability 3000:80
+# Open http://localhost:3000
 ```
 
-### 5.3 End-to-End Test
+### 2.2 Security-Config-Service
 
 ```bash
-# 1. Token holen
-TOKEN=$(curl -s -X POST https://api.cargobit.io/api/auth/login \
+# Deploy Security-Config-Service
+helm install security-config-service ./helm/core/security-config-service -n core
+
+# Wait for deployment
+kubectl rollout status deployment/security-config-service -n core --timeout=300s
+
+# Verify config service
+kubectl exec -n core deploy/security-config-service -- curl -s localhost:3005/health
+kubectl exec -n core deploy/security-config-service -- curl -s localhost:3005/v1/config/version
+
+# Seed initial config
+kubectl exec -n core deploy/security-config-service -- curl -X POST localhost:3005/v1/config \
+  -H "Content-Type: application/json" -d @./config/initial-security-config.json
+```
+
+### 2.3 Auth-Service
+
+```bash
+# Deploy Auth-Service
+helm install auth-service ./helm/core/auth-service -n core
+
+# Wait for deployment
+kubectl rollout status deployment/auth-service -n core --timeout=300s
+
+# Verify auth service
+kubectl exec -n core deploy/auth-service -- curl -s localhost:3001/health
+```
+
+### 2.4 API-Gateway
+
+```bash
+# Deploy API-Gateway
+helm install api-gateway ./helm/core/api-gateway -n core
+
+# Wait for deployment
+kubectl rollout status deployment/api-gateway -n core --timeout=300s
+
+# Verify gateway
+kubectl exec -n core deploy/api-gateway -- curl -s localhost:8080/health
+
+# Test JWT validation
+curl -X POST https://api.cargobit.io/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"username":"test-carrier","password":"xxx"}' | jq -r '.token')
+  -d '{"apiKey":"test-key"}' # Should return 401 for invalid key
+```
 
-# 2. Pricing Request
-curl -s -X POST https://api.cargobit.io/api/pricing/calculate \
-  -H "Authorization: Bearer $TOKEN" \
+### Phase 2 Checklist
+
+- [ ] Prometheus running and scraping
+- [ ] Grafana accessible with dashboards
+- [ ] Loki receiving logs
+- [ ] Tempo receiving traces
+- [ ] Security-Config-Service healthy
+- [ ] Config version confirmed (2024-01-15-01)
+- [ ] Auth-Service healthy
+- [ ] API-Gateway healthy and routing
+
+---
+
+## Phase 3: Domain Layer
+
+### Deployment Order (Dependency-Based)
+
+```
+1. carrier-service    (no dependencies)
+2. shipper-service    (no dependencies)
+3. order-service      → depends on security-config, auth
+4. pricing-service    → depends on security-config, kafka, redis
+5. bidding-service    → depends on order, pricing
+6. matching-service   → depends on pricing, kafka, security-config
+7. execution-service  → depends on matching, order
+8. risk-service       → depends on security-config, kafka
+```
+
+### 3.1 Carrier-Service
+
+```bash
+helm install carrier-service ./helm/domain/carrier-service -n domain
+kubectl rollout status deployment/carrier-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/carrier-service -- curl -s localhost:3000/health
+```
+
+### 3.2 Shipper-Service
+
+```bash
+helm install shipper-service ./helm/domain/shipper-service -n domain
+kubectl rollout status deployment/shipper-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/shipper-service -- curl -s localhost:3000/health
+```
+
+### 3.3 Order-Service
+
+```bash
+helm install order-service ./helm/domain/order-service -n domain
+kubectl rollout status deployment/order-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/order-service -- curl -s localhost:3000/health
+
+# Check DB connection
+kubectl exec -n domain deploy/order-service -- curl -s localhost:9090/metrics | grep db_pool_active
+```
+
+### 3.4 Pricing-Service
+
+```bash
+helm install pricing-service ./helm/domain/pricing-service -n domain
+kubectl rollout status deployment/pricing-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/pricing-service -- curl -s localhost:3000/health
+kubectl exec -n domain deploy/pricing-service -- curl -s localhost:3000/ready
+
+# Check config connection
+kubectl exec -n domain deploy/pricing-service -- curl -s http://security-config-service.core:3005/v1/config/version
+```
+
+### 3.5 Bidding-Service
+
+```bash
+helm install bidding-service ./helm/domain/bidding-service -n domain
+kubectl rollout status deployment/bidding-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/bidding-service -- curl -s localhost:3000/health
+```
+
+### 3.6 Matching-Service
+
+```bash
+helm install matching-service ./helm/domain/matching-service -n domain
+kubectl rollout status deployment/matching-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/matching-service -- curl -s localhost:3000/health
+
+# Check Kafka consumer group
+kubectl exec -n data kafka-consumer-groups -- bootstrap-server kafka:9092 \
+  --describe --group matching-service
+```
+
+### 3.7 Execution-Service
+
+```bash
+helm install execution-service ./helm/domain/execution-service -n domain
+kubectl rollout status deployment/execution-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/execution-service -- curl -s localhost:3000/health
+```
+
+### 3.8 Risk-Service
+
+```bash
+helm install risk-service ./helm/domain/risk-service -n domain
+kubectl rollout status deployment/risk-service -n domain --timeout=300s
+
+# Verify
+kubectl exec -n domain deploy/risk-service -- curl -s localhost:3000/health
+```
+
+### Phase 3 Checklist
+
+- [ ] Carrier-Service healthy
+- [ ] Shipper-Service healthy
+- [ ] Order-Service healthy
+- [ ] Pricing-Service healthy
+- [ ] Bidding-Service healthy
+- [ ] Matching-Service healthy
+- [ ] Execution-Service healthy
+- [ ] Risk-Service healthy
+- [ ] All services connected to Security-Config
+- [ ] All services connected to Kafka
+- [ ] All services connected to PostgreSQL
+
+---
+
+## Phase 4: Smoke Tests
+
+### 4.1 Pricing Validation
+
+```bash
+# Test bid validation
+curl -X POST https://api.cargobit.io/api/pricing/orders/test-order/bid/validate \
+  -H "Authorization: Bearer $CARRIER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "orderId": "test-001",
-    "distanceKm": 150,
-    "isInternational": false,
-    "transportType": "FTL"
-  }' | jq .
+    "carrierId": "carrier-001",
+    "bidAmount": 1250.00,
+    "currency": "EUR"
+  }'
 
-# 3. Bid Validation
-curl -s -X POST https://api.cargobit.io/api/pricing/orders/test-001/bid/validate \
-  -H "Authorization: Bearer $TOKEN" \
+# Expected: 200 OK with fraud score
+```
+
+### 4.2 Bid Submission
+
+```bash
+# Submit a bid
+curl -X POST https://api.cargobit.io/api/bids \
+  -H "Authorization: Bearer $CARRIER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "carrierId": "carrier-123",
-    "bidPrice": 180
-  }' | jq .
+    "orderId": "order-001",
+    "carrierId": "carrier-001",
+    "amount": 1250.00,
+    "currency": "EUR"
+  }'
+
+# Expected: 201 Created with bid ID
 ```
+
+### 4.3 Matching Flow
+
+```bash
+# Create order
+curl -X POST https://api.cargobit.io/api/orders \
+  -H "Authorization: Bearer $SHIPPER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "pickupLocation": {"lat": 52.52, "lng": 13.405},
+    "deliveryLocation": {"lat": 48.8566, "lng": 2.3522},
+    "cargoType": "PALLET",
+    "weight": 500
+  }'
+
+# Expected: 201 Created with order ID
+
+# Wait for matching (10 seconds)
+sleep 10
+
+# Check matching results
+curl https://api.cargobit.io/api/matching/results/order-001 \
+  -H "Authorization: Bearer $SHIPPER_TOKEN"
+
+# Expected: 200 OK with ranked carriers
+```
+
+### 4.4 Execution Status Update
+
+```bash
+# Update transport status
+curl -X POST https://api.cargobit.io/api/executions/transport-001/status \
+  -H "Authorization: Bearer $CARRIER_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "status": "IN_TRANSIT",
+    "location": {"lat": 50.0, "lng": 10.0}
+  }'
+
+# Expected: 200 OK
+```
+
+### 4.5 Fraud-Score Calculation
+
+```bash
+# Trigger fraud score calculation
+curl -X POST https://api.cargobit.io/api/risk/calculate \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "entityType": "CARRIER",
+    "entityId": "carrier-001"
+  }'
+
+# Expected: 200 OK with risk score
+```
+
+### 4.6 Config Reload
+
+```bash
+# Trigger config reload
+curl -X POST https://api.cargobit.io/internal/config/reload \
+  -H "Authorization: Bearer $SYSTEM_TOKEN"
+
+# Expected: 200 OK
+
+# Verify new version
+curl https://api.cargobit.io/internal/config/version \
+  -H "Authorization: Bearer $SYSTEM_TOKEN"
+
+# Expected: Current version (e.g., 2024-01-15-01)
+```
+
+### Phase 4 Checklist
+
+- [ ] Pricing validation returns fraud score
+- [ ] Bid submission creates bid record
+- [ ] Matching flow produces ranked carriers
+- [ ] Status update works end-to-end
+- [ ] Fraud score calculation works
+- [ ] Config reload works
 
 ---
 
-## 6. Rollback
+## Phase 5: Load Tests
 
-### 6.1 Einzelner Service
+### 5.1 Test Configuration
 
-```bash
-# Helm History
-helm history pricing-service -n domain
-
-# Rollback
-helm rollback pricing-service 1 -n domain
+```yaml
+# load-test-config.yaml
+scenarios:
+  orders:
+    rate: 1000  # orders per minute
+    duration: 10m
+    
+  bids:
+    rate: 5000  # bids per minute
+    duration: 10m
+    
+  status_updates:
+    rate: 2000  # updates per minute
+    duration: 10m
 ```
 
-### 6.2 Kompletter Rollback
+### 5.2 Run Load Tests
 
 ```bash
-# In umgekehrter Reihenfolge
-helm uninstall risk-service -n domain
-helm uninstall bidding-service -n domain
-helm uninstall execution-service -n domain
-helm uninstall carrier-service -n domain
-helm uninstall matching-service -n domain
-helm uninstall order-service -n domain
-helm uninstall pricing-service -n domain
+# Install k6
+brew install k6  # or equivalent
 
-helm uninstall api-gateway -n core
-helm uninstall auth-service -n core
-helm uninstall security-config-service -n core
+# Run order load test
+k6 run --vus 100 --duration 10m ./load-tests/orders.js
 
-helm uninstall redis -n data
-helm uninstall kafka -n data
-helm uninstall postgres -n data
+# Run bid load test
+k6 run --vus 200 --duration 10m ./load-tests/bids.js
+
+# Run status update load test
+k6 run --vus 150 --duration 10m ./load-tests/status-updates.js
+
+# Run fraud score stress test
+k6 run --vus 50 --duration 5m ./load-tests/fraud-scoring.js
+
+# Run gateway rate limit test
+k6 run --vus 300 --duration 5m ./load-tests/gateway-ratelimit.js
 ```
+
+### 5.3 Monitor During Load Tests
+
+```bash
+# Watch pod scaling
+watch kubectl get pods -n domain
+
+# Watch resource usage
+watch kubectl top pods -n domain
+
+# Watch SLO metrics
+curl -s http://prometheus.observability:9090/api/v1/query \
+  --data-urlencode 'query=slo:pricing:availability:5m'
+
+# Watch error rates
+curl -s http://prometheus.observability:9090/api/v1/query \
+  --data-urlencode 'query=sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)'
+```
+
+### Phase 5 Checklist
+
+- [ ] Order load test: 1000/min for 10 min
+- [ ] Bid load test: 5000/min for 10 min
+- [ ] Status update test: 2000/min for 10 min
+- [ ] Fraud score stress test passed
+- [ ] Gateway rate limit test passed
+- [ ] All SLOs maintained during load
+- [ ] HPA scaling worked correctly
 
 ---
 
-## 7. Upgrade
+## Phase 6: Go-Live Checklist
 
-### 7.1 Security-Config Hot-Reload
-
-```bash
-# Config aktualisieren
-kubectl create configmap security-config \
-  --from-file=security-config.yaml=./config/security-config-v2.yaml \
-  -n core \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-# Service reload triggern
-kubectl exec -n core -it deploy/security-config-service -- \
-  curl -X POST http://localhost:3005/config/security/reload \
-  -H "Authorization: Bearer admin_token"
-```
-
-### 7.2 Service Upgrade
+### 6.1 SLO Dashboards
 
 ```bash
-# Pricing-Service auf neue Version upgraden
-helm upgrade pricing-service ./helm/domain/pricing-service \
-  -n domain \
-  -f ./helm/domain/pricing-service/values-prod.yaml \
-  --set image.tag=2.1.0
+# Verify Grafana dashboards are active
+curl -s http://grafana.observability:3000/api/search?query=slo
+
+# Verify SLO recording rules
+curl -s http://prometheus.observability:9090/api/v1/rules | jq '.data.groups[].name' | grep slo
+
+# Take SLO baseline snapshot
+curl -s http://prometheus.observability:9090/api/v1/query \
+  --data-urlencode 'query=slo:pricing:error_budget_remaining:30d' > slo-baseline.json
 ```
+
+### 6.2 Alerting
+
+```bash
+# Verify alert rules are loaded
+curl -s http://prometheus.observability:9090/api/v1/rules | jq '.data.groups[].rules[].name'
+
+# Test alert notification
+curl -X POST http://prometheus.observability:9090/api/v1/alerts \
+  -H "Content-Type: application/json" \
+  -d '[{"labels":{"alertname":"TestAlert","severity":"none"},"annotations":{"summary":"Test alert"}}]'
+
+# Verify Slack/PagerDuty integration
+# Check #platform-alerts channel for test alert
+```
+
+### 6.3 On-Call Rotation
+
+```bash
+# Verify PagerDuty schedule
+# https://yourcompany.pagerduty.com/schedules
+
+# Add on-call to monitoring
+kubectl create configmap on-call-config -n observability \
+  --from-literal=primary="platform-team@example.com" \
+  --from-literal=secondary="backend-team@example.com"
+```
+
+### 6.4 Incident Playbooks
+
+```bash
+# Verify playbooks are accessible
+ls -la playbooks/
+
+# Distribute to team
+# - Upload to Confluence
+# - Pin in Slack channel
+# - Add to PagerDuty runbook links
+```
+
+### 6.5 Config Version Pinned
+
+```bash
+# Pin current config version
+CURRENT_VERSION=$(curl -s http://security-config-service.core:3005/v1/config/version)
+echo "Pinned version: $CURRENT_VERSION"
+
+# Store in configmap
+kubectl create configmap pinned-config-version -n core \
+  --from-literal=version="$CURRENT_VERSION"
+
+# Set rollback target
+kubectl create configmap rollback-config -n core \
+  --from-literal=target-version="$CURRENT_VERSION"
+```
+
+### 6.6 Canary Deployment
+
+```bash
+# Enable canary for pricing-service
+kubectl apply -f - <<EOF
+apiVersion: flagger.app/v1beta3
+kind: Canary
+metadata:
+  name: pricing-service
+  namespace: domain
+spec:
+  targetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: pricing-service
+  progressDeadlineSeconds: 600
+  service:
+    port: 3000
+  analysis:
+    interval: 1m
+    threshold: 5
+    maxWeight: 50
+    stepWeight: 10
+    metrics:
+      - name: request-success-rate
+        thresholdRange:
+          min: 99
+        interval: 1m
+      - name: request-duration
+        thresholdRange:
+          max: 500
+        interval: 1m
+EOF
+
+# Verify canary is active
+kubectl get canary -n domain
+```
+
+### 6.7 Rollback Plan
+
+```bash
+# Create rollback script
+cat > rollback.sh << 'EOF'
+#!/bin/bash
+VERSION=$1
+
+# Rollback pricing-service
+kubectl rollout undo deployment/pricing-service -n domain
+
+# Rollback matching-service
+kubectl rollout undo deployment/matching-service -n domain
+
+# Rollback to previous config
+kubectl exec -n core deploy/security-config-service -- \
+  curl -X POST localhost:3005/v1/config/rollback \
+  -H "Content-Type: application/json" \
+  -d "{\"targetVersion\":\"$VERSION\"}"
+
+echo "Rollback complete"
+EOF
+
+chmod +x rollback.sh
+
+# Store rollback instructions
+kubectl create configmap rollback-instructions -n core \
+  --from-file=rollback.sh=rollback.sh
+```
+
+### Phase 6 Checklist
+
+- [ ] SLO dashboards active and visible
+- [ ] All alert rules loaded and firing to correct channels
+- [ ] On-call rotation defined in PagerDuty
+- [ ] Incident playbooks distributed to team
+- [ ] Config version pinned and documented
+- [ ] Canary deployment enabled for critical services
+- [ ] Rollback plan tested and documented
+- [ ] Rollback script accessible
 
 ---
 
-## 8. Troubleshooting
+## Post-Deployment
 
-### 8.1 Logs
+### Immediate Actions (First Hour)
 
-```bash
-# Pricing-Service Logs
-kubectl logs -n domain -l app.kubernetes.io/name=pricing-service -f
+1. Monitor SLO dashboard for anomalies
+2. Check error rates in Grafana
+3. Verify Kafka consumer lag is stable
+4. Confirm all alerts are flowing correctly
 
-# API-Gateway Logs
-kubectl logs -n core -l app.kubernetes.io/name=api-gateway -f
+### Daily Actions (First Week)
 
-# Security-Config-Service Logs
-kubectl logs -n core -l app.kubernetes.io/name=security-config-service -f
-```
+1. Review SLO performance in daily standup
+2. Check error budget burn rate
+3. Monitor HPA scaling behavior
+4. Review slow queries in database logs
 
-### 8.2 Events
+### Weekly Actions (First Month)
 
-```bash
-kubectl get events -n domain --sort-by='.lastTimestamp'
-kubectl describe pod pricing-service-xxx -n domain
-```
-
-### 8.3 Connectivity Test
-
-```bash
-# Test ob Pricing-Service Security-Config-Service erreicht
-kubectl exec -n domain -it deploy/pricing-service -- \
-  curl -s http://security-config-service.core.svc.cluster.local:3005/health
-
-# Test ob API-Gateway Pricing-Service erreicht
-kubectl exec -n core -it deploy/api-gateway -- \
-  curl -s http://pricing-service.domain.svc.cluster.local:80/health
-```
+1. SLO target review
+2. Error budget status report
+3. Capacity planning review
+4. Incident trend analysis
 
 ---
 
-## 9. Checklist
+## Troubleshooting
 
-### Pre-Deployment
+### Common Issues
 
-- [ ] Kubernetes Cluster erreichbar
-- [ ] Namespaces erstellt (core, domain, data)
-- [ ] Secrets erstellt (regcred, internal-ca, service-tokens)
-- [ ] ConfigMaps vorbereitet (security-config.yaml)
-- [ ] Helm Charts validiert (`helm lint ./helm/**`)
+| Issue | Diagnosis | Resolution |
+|-------|-----------|------------|
+| Service not starting | Check logs, events, configmaps | Verify secrets, config, resources |
+| Database connection fails | Check credentials, network policy | Verify secret, policy allows egress |
+| Kafka consumer lag high | Check consumer performance | Scale consumers, check for slow processing |
+| Config not loading | Check security-config-service | Verify config version, validation |
 
-### Data Layer
+### Emergency Contacts
 
-- [ ] PostgreSQL deployed und running
-- [ ] Datenbanken erstellt (pricing, orders, carriers, executions)
-- [ ] Kafka deployed und running
-- [ ] Topics erstellt (pricing.*, bid.*, fraud.*)
-- [ ] Redis deployed (optional)
-
-### Core Layer
-
-- [ ] Security-Config-Service deployed und running
-- [ ] Auth-Service deployed und running
-- [ ] API-Gateway deployed und running
-- [ ] Ingress/TLS konfiguriert
-- [ ] mTLS aktiviert
-
-### Domain Layer
-
-- [ ] Pricing-Service deployed und running
-- [ ] Order-Service deployed und running
-- [ ] Matching-Service deployed und running
-- [ ] Carrier-Service deployed und running
-- [ ] Execution-Service deployed und running
-- [ ] Bidding-Service deployed und running
-- [ ] Risk-Service deployed und running
-
-### Post-Deployment
-
-- [ ] Health-Checks erfolgreich
-- [ ] End-to-End Tests bestanden
-- [ ] Network-Policies aktiv
-- [ ] Monitoring dashboards erreichbar
-- [ ] Alerts konfiguriert
-
----
-
-*Document Version: 1.0.0 | Last Updated: 2026-04-18*
+| Role | Contact |
+|------|---------|
+| Platform On-Call | pagerduty.com/platform |
+| Backend Lead | backend-lead@example.com |
+| CTO | cto@example.com |

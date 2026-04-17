@@ -1,0 +1,115 @@
+# CargoBit SLO Prometheus Recording Rules
+
+# Pricing-Service
+groups:
+  - name: pricing-slo-recording
+    interval: 1m
+    rules:
+      - record: slo:pricing:availability:5m
+        expr: |
+          sum(rate(http_requests_total{service="pricing-service",status!~"5.."}[5m])) 
+          / sum(rate(http_requests_total{service="pricing-service"}[5m]))
+
+      - record: slo:pricing:error_rate:5m
+        expr: |
+          sum(rate(http_requests_total{service="pricing-service",status=~"5.."}[5m])) 
+          / sum(rate(http_requests_total{service="pricing-service"}[5m]))
+
+      - record: slo:pricing:latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(pricing_validation_duration_seconds_bucket[5m])) by (le)
+          )
+
+      - record: slo:pricing:error_budget_remaining:30d
+        expr: |
+          (sum(rate(http_requests_total{service="pricing-service",status!~"5.."}[30d])) 
+          / sum(rate(http_requests_total{service="pricing-service"}[30d])) - 0.999) 
+          / (1 - 0.999)
+
+  - name: matching-slo-recording
+    interval: 1m
+    rules:
+      - record: slo:matching:availability:5m
+        expr: |
+          sum(rate(matching_operations_total{status="success"}[5m])) 
+          / sum(rate(matching_operations_total[5m]))
+
+      - record: slo:matching:latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(matching_duration_seconds_bucket[5m])) by (le)
+          )
+
+      - record: slo:matching:kafka_lag
+        expr: |
+          sum(kafka_consumer_lag{consumer_group="matching-service"})
+
+      - record: slo:matching:error_budget_remaining:30d
+        expr: |
+          (sum(rate(matching_operations_total{status="success"}[30d])) 
+          / sum(rate(matching_operations_total[30d])) - 0.999) 
+          / (1 - 0.999)
+
+  - name: execution-slo-recording
+    interval: 1m
+    rules:
+      - record: slo:execution:availability:5m
+        expr: |
+          sum(rate(http_requests_total{service="execution-service",status!~"5.."}[5m])) 
+          / sum(rate(http_requests_total{service="execution-service"}[5m]))
+
+      - record: slo:execution:latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(execution_status_update_duration_seconds_bucket[5m])) by (le)
+          )
+
+      - record: slo:execution:pod_success_rate:24h
+        expr: |
+          sum(rate(pod_uploads_total{status="success"}[24h])) 
+          / sum(rate(pod_uploads_total[24h]))
+
+  - name: gateway-slo-recording
+    interval: 1m
+    rules:
+      - record: slo:gateway:availability:5m
+        expr: |
+          sum(rate(http_requests_total{service="api-gateway",status!~"5.."}[5m])) 
+          / sum(rate(http_requests_total{service="api-gateway"}[5m]))
+
+      - record: slo:gateway:auth_latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(jwt_validation_duration_seconds_bucket[5m])) by (le)
+          )
+
+      - record: slo:gateway:rate_limit_false_positive:24h
+        expr: |
+          sum(rate(rate_limit_false_positives_total[24h])) 
+          / sum(rate(http_requests_total{method="POST"}[24h]))
+
+      - record: slo:gateway:error_budget_remaining:30d
+        expr: |
+          (sum(rate(http_requests_total{service="api-gateway",status!~"5.."}[30d])) 
+          / sum(rate(http_requests_total{service="api-gateway"}[30d])) - 0.9999) 
+          / (1 - 0.9999)
+
+  - name: security-config-slo-recording
+    interval: 1m
+    rules:
+      - record: slo:security_config:availability:5m
+        expr: |
+          sum(rate(security_config_fetches_total{result="success"}[5m])) 
+          / sum(rate(security_config_fetches_total[5m]))
+
+      - record: slo:security_config:cache_hit_rate:24h
+        expr: |
+          sum(rate(security_config_cache_hits[24h])) 
+          / sum(rate(security_config_fetches_total[24h]))
+
+      - record: slo:security_config:latency_p95:5m
+        expr: |
+          histogram_quantile(0.95, 
+            sum(rate(security_config_fetch_duration_seconds_bucket[5m])) by (le)
+          )

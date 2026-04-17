@@ -1,0 +1,181 @@
+# CargoBit SLO Alerting Rules
+
+groups:
+  - name: slo-burn-rate-alerts
+    rules:
+      # Pricing-Service SLO Alerts
+      - alert: PricingErrorBudgetBurnFast
+        expr: |
+          (
+            sum(rate(http_requests_total{service="pricing-service",status=~"5.."}[1h]))
+            / sum(rate(http_requests_total{service="pricing-service"}[1h]))
+          ) > (1 - 0.999) * 14.4
+        for: 5m
+        labels:
+          severity: critical
+          service: pricing-service
+        annotations:
+          summary: "Pricing Service burning error budget at 14.4x rate"
+          description: "The pricing service is experiencing errors that will exhaust the monthly error budget in approximately 2 days if not addressed."
+
+      - alert: PricingErrorBudgetBurnSlow
+        expr: |
+          (
+            sum(rate(http_requests_total{service="pricing-service",status=~"5.."}[3d]))
+            / sum(rate(http_requests_total{service="pricing-service"}[3d]))
+          ) > (1 - 0.999) * 2
+        for: 24h
+        labels:
+          severity: warning
+          service: pricing-service
+        annotations:
+          summary: "Pricing Service slowly burning error budget"
+          description: "The pricing service has been burning error budget at 2x rate for the past 3 days."
+
+      - alert: PricingSLOViolation
+        expr: slo:pricing:availability:5m < 0.999
+        for: 5m
+        labels:
+          severity: critical
+          service: pricing-service
+        annotations:
+          summary: "Pricing Service SLO violation"
+          description: "Pricing Service availability is {{ $value | humanizePercentage }}, below the 99.9% SLO target."
+
+      # Matching-Service SLO Alerts
+      - alert: MatchingErrorBudgetBurnFast
+        expr: |
+          (
+            sum(rate(matching_operations_total{status="failed"}[1h]))
+            / sum(rate(matching_operations_total[1h]))
+          ) > (1 - 0.999) * 14.4
+        for: 5m
+        labels:
+          severity: critical
+          service: matching-service
+        annotations:
+          summary: "Matching Service burning error budget at 14.4x rate"
+
+      - alert: MatchingLagCritical
+        expr: slo:matching:kafka_lag > 1000
+        for: 2m
+        labels:
+          severity: critical
+          service: matching-service
+        annotations:
+          summary: "Matching Service Kafka lag critical"
+          description: "Kafka consumer lag is {{ $value }}, exceeding the 1000 event threshold."
+
+      - alert: MatchingLatencySLOViolation
+        expr: slo:matching:latency_p95:5m > 0.5
+        for: 5m
+        labels:
+          severity: warning
+          service: matching-service
+        annotations:
+          summary: "Matching latency P95 exceeds SLO"
+          description: "Matching latency P95 is {{ $value | humanizeDuration }}, exceeding the 500ms SLO."
+
+      # API-Gateway SLO Alerts
+      - alert: GatewayErrorBudgetBurnFast
+        expr: |
+          (
+            sum(rate(http_requests_total{service="api-gateway",status=~"5.."}[1h]))
+            / sum(rate(http_requests_total{service="api-gateway"}[1h]))
+          ) > (1 - 0.9999) * 14.4
+        for: 5m
+        labels:
+          severity: critical
+          service: api-gateway
+        annotations:
+          summary: "API Gateway burning error budget at 14.4x rate"
+
+      - alert: GatewayAuthLatencyHigh
+        expr: slo:gateway:auth_latency_p95:5m > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "Gateway auth latency P95 exceeds 50ms"
+          description: "Auth latency P95 is {{ $value | humanizeDuration }}."
+
+      - alert: GatewayRateLimitFalsePositiveHigh
+        expr: slo:gateway:rate_limit_false_positive:24h > 0.001
+        for: 10m
+        labels:
+          severity: warning
+          service: api-gateway
+        annotations:
+          summary: "Rate limit false positive rate too high"
+          description: "Rate limit false positive rate is {{ $value | humanizePercentage }}, exceeding 0.1% threshold."
+
+      # Execution-Service SLO Alerts
+      - alert: ExecutionErrorBudgetBurn
+        expr: |
+          (
+            sum(rate(http_requests_total{service="execution-service",status=~"5.."}[1h]))
+            / sum(rate(http_requests_total{service="execution-service"}[1h]))
+          ) > (1 - 0.999) * 14.4
+        for: 5m
+        labels:
+          severity: critical
+          service: execution-service
+        annotations:
+          summary: "Execution Service burning error budget at 14.4x rate"
+
+      - alert: ExecutionPODUploadFailures
+        expr: slo:execution:pod_success_rate:24h < 0.995
+        for: 15m
+        labels:
+          severity: warning
+          service: execution-service
+        annotations:
+          summary: "POD upload success rate below 99.5%"
+          description: "POD upload success rate is {{ $value | humanizePercentage }}."
+
+      # Security-Config-Service SLO Alerts
+      - alert: SecurityConfigAvailabilityReduced
+        expr: slo:security_config:availability:5m < 0.9999
+        for: 2m
+        labels:
+          severity: critical
+          service: security-config-service
+        annotations:
+          summary: "Security Config Service availability below 99.99%"
+
+      - alert: SecurityConfigCacheHitRateLow
+        expr: slo:security_config:cache_hit_rate:24h < 0.9
+        for: 30m
+        labels:
+          severity: warning
+          service: security-config-service
+        annotations:
+          summary: "Security Config cache hit rate below 90%"
+          description: "Cache hit rate is {{ $value | humanizePercentage }}. This may indicate config churn or cache issues."
+
+  - name: slo-error-budget-alerts
+    rules:
+      - alert: ErrorBudgetExhausted
+        expr: |
+          slo:pricing:error_budget_remaining:30d < 0 
+          or slo:matching:error_budget_remaining:30d < 0
+          or slo:gateway:error_budget_remaining:30d < 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Error budget exhausted for {{ $labels.service }}"
+          description: "The monthly error budget has been exhausted. All non-essential releases should be frozen."
+
+      - alert: ErrorBudgetCritical
+        expr: |
+          slo:pricing:error_budget_remaining:30d < 0.1 
+          or slo:matching:error_budget_remaining:30d < 0.1
+          or slo:gateway:error_budget_remaining:30d < 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Error budget critical for {{ $labels.service }}"
+          description: "Less than 10% of monthly error budget remaining. Consider freezing non-critical changes."
