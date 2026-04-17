@@ -1,0 +1,15 @@
+apiVersion: v2
+name: security-config-service
+description: CargoBit Security Configuration Service - Centralized security rules and policies
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - cargobit
+  - security
+  - config
+  - rbac
+  - abac
+maintainers:
+  - name: CargoBit Team
+    email: team@cargobit.io

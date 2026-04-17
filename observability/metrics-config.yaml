@@ -1,0 +1,277 @@
+# CargoBit Observability - Prometheus Metrics Configuration
+# Version: 2024-01-15-01
+# Defines all metrics exported by CargoBit services
+
+metrics:
+  # Standard HTTP metrics (all services)
+  http:
+    - name: http_requests_total
+      type: counter
+      description: "Total number of HTTP requests"
+      labels:
+        - service
+        - method
+        - path
+        - status
+      
+    - name: http_request_duration_seconds
+      type: histogram
+      description: "HTTP request duration in seconds"
+      labels:
+        - service
+        - method
+        - path
+      buckets:
+        - 0.001
+        - 0.005
+        - 0.01
+        - 0.025
+        - 0.05
+        - 0.1
+        - 0.25
+        - 0.5
+        - 1
+        - 2.5
+        - 5
+        - 10
+
+  # Kafka consumer metrics
+  kafka:
+    - name: kafka_consumer_lag
+      type: gauge
+      description: "Current lag for Kafka consumer group"
+      labels:
+        - consumer_group
+        - topic
+        - partition
+    
+    - name: kafka_messages_consumed_total
+      type: counter
+      description: "Total messages consumed from Kafka"
+      labels:
+        - consumer_group
+        - topic
+    
+    - name: kafka_consumer_errors_total
+      type: counter
+      description: "Total Kafka consumer errors"
+      labels:
+        - consumer_group
+        - error_type
+
+  # Fraud scoring metrics
+  fraud:
+    - name: fraud_score_total
+      type: gauge
+      description: "Current average fraud score"
+      labels:
+        - service
+        - score_type  # carrier, bid, total
+    
+    - name: fraud_score_calculations_total
+      type: counter
+      description: "Total fraud score calculations"
+      labels:
+        - service
+        - result  # observe, suspect, clear
+    
+    - name: fraud_detection_duration_seconds
+      type: histogram
+      description: "Time spent on fraud detection"
+      labels:
+        - service
+        - detection_type
+      buckets:
+        - 0.001
+        - 0.005
+        - 0.01
+        - 0.025
+        - 0.05
+        - 0.1
+        - 0.25
+        - 0.5
+
+  # Pricing validation metrics
+  pricing:
+    - name: pricing_validation_duration_seconds
+      type: histogram
+      description: "Time spent on pricing validation"
+      labels:
+        - validation_type
+        - result
+      buckets:
+        - 0.001
+        - 0.005
+        - 0.01
+        - 0.025
+        - 0.05
+        - 0.1
+        - 0.25
+        - 0.5
+        - 1
+    
+    - name: pricing_validations_total
+      type: counter
+      description: "Total pricing validations"
+      labels:
+        - result  # valid, invalid, error
+    
+    - name: pricing_bid_rejections_total
+      type: counter
+      description: "Total bid rejections due to pricing"
+      labels:
+        - reason  # dumping, spam, coordination
+
+  # Matching service metrics
+  matching:
+    - name: matching_duration_seconds
+      type: histogram
+      description: "Time spent on matching algorithm"
+      labels:
+        - transport_type
+      buckets:
+        - 0.01
+        - 0.025
+        - 0.05
+        - 0.1
+        - 0.25
+        - 0.5
+        - 1
+        - 2.5
+        - 5
+    
+    - name: matching_operations_total
+      type: counter
+      description: "Total matching operations"
+      labels:
+        - status  # success, failed
+        - transport_type
+    
+    - name: matching_carriers_selected
+      type: histogram
+      description: "Number of carriers selected per match"
+      labels:
+        - transport_type
+      buckets:
+        - 1
+        - 3
+        - 5
+        - 10
+        - 15
+        - 20
+        - 30
+        - 50
+    
+    - name: carrier_score_distribution
+      type: gauge
+      description: "Distribution of carrier scores"
+      labels:
+        - service
+    
+    - name: fraud_penalty_impact
+      type: gauge
+      description: "Impact of fraud penalty on matching scores"
+      labels:
+        - service
+
+  # Gateway metrics
+  gateway:
+    - name: jwt_validation_total
+      type: counter
+      description: "Total JWT validations"
+      labels:
+        - status  # success, failed
+    
+    - name: jwt_failures_total
+      type: counter
+      description: "JWT validation failures by reason"
+      labels:
+        - reason  # expired, invalid_issuer, invalid_audience, missing_claims, invalid_signature, malformed
+    
+    - name: rate_limit_requests_total
+      type: counter
+      description: "Total rate limit checks"
+      labels:
+        - route
+        - method
+        - result  # allowed, limited
+    
+    - name: rate_limit_hits_total
+      type: counter
+      description: "Total rate limit hits"
+      labels:
+        - route
+        - method
+        - key_type  # sub, ip, carrierId, shipperId
+    
+    - name: mtls_handshake_total
+      type: counter
+      description: "Total mTLS handshakes"
+      labels:
+        - status  # success, failed
+        - service
+    
+    - name: mtls_errors_total
+      type: counter
+      description: "mTLS errors by type"
+      labels:
+        - reason  # no_cert, invalid_cert, expired_cert, revoked_cert, untrusted
+    
+    - name: authz_decisions_total
+      type: counter
+      description: "Authorization decisions"
+      labels:
+        - result  # allowed, denied
+        - role
+        - route
+
+  # Security config service metrics
+  security_config:
+    - name: security_config_fetches_total
+      type: counter
+      description: "Total security config fetches"
+      labels:
+        - source  # cache, database
+        - result  # success, error
+    
+    - name: security_config_cache_hits
+      type: counter
+      description: "Security config cache hits"
+      labels:
+        - version
+    
+    - name: security_config_validation_errors_total
+      type: counter
+      description: "Security config validation errors"
+      labels:
+        - error_code
+
+  # Business metrics
+  business:
+    - name: orders_created_total
+      type: counter
+      description: "Total orders created"
+      labels:
+        - transport_type
+        - region
+        - shipper_id
+    
+    - name: bids_submitted_total
+      type: counter
+      description: "Total bids submitted"
+      labels:
+        - carrier_id
+        - order_type
+    
+    - name: transports_completed_total
+      type: counter
+      description: "Total transports completed"
+      labels:
+        - transport_type
+        - region
+    
+    - name: matching_success_rate
+      type: gauge
+      description: "Rate of successful carrier matches"
+      labels:
+        - transport_type

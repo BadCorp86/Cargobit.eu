@@ -1,0 +1,142 @@
+# CargoBit API Gateway - mTLS Configuration
+# Version: 2024-01-15-01
+# Mutual TLS for service-to-service communication
+
+mtls:
+  # Gateway to Domain Services
+  gatewayDownstream:
+    enabled: true
+    description: "API Gateway requires client certificates from domain services"
+    
+    # Server certificate (presented by Gateway)
+    serverCert:
+      secretName: "api-gateway-tls"
+      certPath: "/etc/ssl/certs/gateway/tls.crt"
+      keyPath: "/etc/ssl/certs/gateway/tls.key"
+    
+    # Client CA verification
+    clientAuth:
+      mode: "RequireAndVerifyClientCert"
+      caSecretName: "internal-ca"
+      caPath: "/etc/ssl/certs/internal/ca.crt"
+      crlSecretName: "internal-crl"
+      crlPath: "/etc/ssl/certs/internal/crl.pem"
+    
+    # Allowed services (CN allowlist)
+    allowedClients:
+      - cn: "pricing-service.cargobit.svc.cluster.local"
+        namespace: "domain"
+      - cn: "matching-service.cargobit.svc.cluster.local"
+        namespace: "domain"
+      - cn: "order-service.cargobit.svc.cluster.local"
+        namespace: "domain"
+      - cn: "risk-service.cargobit.svc.cluster.local"
+        namespace: "domain"
+      - cn: "execution-service.cargobit.svc.cluster.local"
+        namespace: "domain"
+      - cn: "notification-service.cargobit.svc.cluster.local"
+        namespace: "domain"
+
+  # Domain Services to Security-Config-Service
+  securityConfigUpstream:
+    enabled: true
+    description: "Domain services must present client certificates to Security-Config-Service"
+    
+    # Client certificate (presented by calling service)
+    clientCert:
+      secretName: "domain-service-client-cert"
+      certPath: "/etc/ssl/client/tls.crt"
+      keyPath: "/etc/ssl/client/tls.key"
+    
+    # Server CA verification
+    serverAuth:
+      caSecretName: "internal-ca"
+      caPath: "/etc/ssl/certs/internal/ca.crt"
+      serverName: "security-config-service.core.svc.cluster.local"
+    
+    # Target service
+    target:
+      service: "security-config-service"
+      namespace: "core"
+      port: 3005
+
+  # Certificate configuration
+  certificates:
+    # Internal CA
+    internalCA:
+      algorithm: "ECDSA"
+      curve: "P256"
+      validityDays: 365
+      organization: "CargoBit Platform"
+      organizationalUnit: "Internal CA"
+    
+    # Service certificates
+    serviceCerts:
+      algorithm: "ECDSA"
+      curve: "P256"
+      validityDays: 90
+      keyUsage:
+        - "digitalSignature"
+        - "keyEncipherment"
+      extendedKeyUsage:
+        - "serverAuth"
+        - "clientAuth"
+    
+    # Automatic rotation
+    rotation:
+      enabled: true
+      checkIntervalHours: 6
+      renewalThresholdDays: 14
+      gracePeriodHours: 24
+      notifyBeforeDays: 30
+
+  # TLS configuration
+  tlsVersions:
+    - "TLS1.3"
+    - "TLS1.2"
+  
+  cipherSuites:
+    # TLS 1.3
+    - "TLS_AES_256_GCM_SHA384"
+    - "TLS_CHACHA20_POLY1305_SHA256"
+    - "TLS_AES_128_GCM_SHA256"
+    # TLS 1.2
+    - "ECDHE-ECDSA-AES256-GCM-SHA384"
+    - "ECDHE-ECDSA-CHACHA20-POLY1305"
+    - "ECDHE-ECDSA-AES128-GCM-SHA256"
+
+  # Validation
+  validation:
+    # Check certificate revocation
+    checkRevocation: true
+    # Verify certificate chain
+    verifyChain: true
+    # Check certificate expiry
+    checkExpiry: true
+    # Reject expired certificates
+    rejectExpired: true
+    # Reject untrusted issuers
+    rejectUntrusted: true
+
+  # Error responses
+  errorResponses:
+    noCertificate:
+      statusCode: 403
+      message: "Client certificate required"
+      code: "MTLS_NO_CERT"
+    invalidCertificate:
+      statusCode: 403
+      message: "Invalid client certificate"
+      code: "MTLS_INVALID_CERT"
+    expiredCertificate:
+      statusCode: 403
+      message: "Client certificate has expired"
+      code: "MTLS_EXPIRED_CERT"
+    revokedCertificate:
+      statusCode: 403
+      message: "Client certificate has been revoked"
+      code: "MTLS_REVOKED_CERT"
+    untrustedIssuer:
+      statusCode: 403
+      message: "Client certificate issuer not trusted"
+      code: "MTLS_UNTRUSTED"

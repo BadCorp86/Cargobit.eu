@@ -1,0 +1,258 @@
+# CargoBit Observability - Tracing Configuration
+# Version: 2024-01-15-01
+# OpenTelemetry tracing with Tempo
+
+tracing:
+  enabled: true
+  serviceName: "{{service-name}}"
+  
+  # OpenTelemetry configuration
+  openTelemetry:
+    # OTLP exporter configuration
+    exporter:
+      type: otlp
+      endpoint: "http://tempo.observability.svc.cluster.local:4318"
+      protocol: http  # http | grpc
+      headers:
+        - name: "X-Service-Name"
+          value: "{{service-name}}"
+      
+      # Batch configuration
+      batch:
+        maxSize: 512
+        scheduleDelay: 5000  # 5 seconds
+        exportTimeout: 30000  # 30 seconds
+    
+    # Propagation format
+    propagation: w3c  # w3c | b3 | jaeger
+    
+    # Sampling configuration
+    sampling:
+      type: probabilistic
+      rate: 1.0  # 100% sampling (reduce in production if needed)
+      
+      # Rules-based sampling
+      rules:
+        - name: "health-checks"
+          match:
+            spanName: "GET /health"
+          sample: false
+        
+        - name: "ready-checks"
+          match:
+            spanName: "GET /ready"
+          sample: false
+        
+        - name: "metrics-endpoint"
+          match:
+            spanName: "GET /metrics"
+          sample: false
+        
+        - name: "errors"
+          match:
+            status: error
+          sample: true
+          rate: 1.0
+        
+        - name: "slow-requests"
+          match:
+            duration: ">1s"
+          sample: true
+          rate: 1.0
+
+  # Key spans for each service
+  spans:
+    pricing-service:
+      - name: "pricing.validation"
+        description: "Pricing validation process"
+        attributes:
+          - validationType
+          - result
+          - fraudScore
+          - bidAmount
+      
+      - name: "pricing.fraud_check"
+        description: "Fraud score calculation"
+        attributes:
+          - carrierId
+          - scoreType
+          - score
+      
+      - name: "pricing.config_fetch"
+        description: "Security config fetch"
+        attributes:
+          - configVersion
+          - cacheHit
+    
+    matching-service:
+      - name: "matching.computation"
+        description: "Matching algorithm execution"
+        attributes:
+          - transportId
+          - transportType
+          - carriersEvaluated
+          - carriersSelected
+      
+      - name: "matching.carrier_score"
+        description: "Individual carrier scoring"
+        attributes:
+          - carrierId
+          - baseScore
+          - fraudPenalty
+          - finalScore
+      
+      - name: "matching.fraud_penalty"
+        description: "Fraud penalty application"
+        attributes:
+          - carrierId
+          - fraudScore
+          - penaltyFactor
+          - penaltyApplied
+    
+    order-service:
+      - name: "order.create"
+        description: "Order creation process"
+        attributes:
+          - orderId
+          - transportType
+          - shipperId
+      
+      - name: "order.status_update"
+        description: "Order status update"
+        attributes:
+          - orderId
+          - previousStatus
+          - newStatus
+      
+      - name: "order.publish_event"
+        description: "Order event publication to Kafka"
+        attributes:
+          - eventType
+          - topic
+    
+    risk-service:
+      - name: "risk.scoring"
+        description: "Risk score calculation"
+        attributes:
+          - entityType
+          - entityId
+          - riskLevel
+          - score
+      
+      - name: "risk.escalation"
+        description: "Risk escalation process"
+        attributes:
+          - ticketId
+          - riskLevel
+          - reason
+    
+    security-config-service:
+      - name: "config.fetch"
+        description: "Security config fetch"
+        attributes:
+          - version
+          - source  # cache | database
+      
+      - name: "config.validation"
+        description: "Config validation"
+        attributes:
+          - version
+          - valid
+          - errors
+
+  # Span attributes standardization
+  attributes:
+    # Standard attributes (always present)
+    standard:
+      - name: service.name
+        type: string
+        description: "Service name"
+      
+      - name: service.version
+        type: string
+        description: "Service version"
+      
+      - name: deployment.environment
+        type: string
+        description: "Deployment environment"
+      
+      - name: user.id
+        type: string
+        description: "User ID from JWT"
+      
+      - name: user.role
+        type: string
+        description: "User role"
+    
+    # HTTP attributes
+    http:
+      - name: http.method
+        type: string
+        description: "HTTP method"
+      
+      - name: http.url
+        type: string
+        description: "Full HTTP URL"
+      
+      - name: http.route
+        type: string
+        description: "Route pattern"
+      
+      - name: http.status_code
+        type: number
+        description: "HTTP response status code"
+      
+      - name: http.request_size
+        type: number
+        description: "Request size in bytes"
+      
+      - name: http.response_size
+        type: number
+        description: "Response size in bytes"
+    
+    # Kafka attributes
+    kafka:
+      - name: messaging.system
+        value: "kafka"
+      
+      - name: messaging.destination
+        type: string
+        description: "Topic name"
+      
+      - name: messaging.operation
+        type: string
+        description: "publish | consume"
+      
+      - name: messaging.message_size
+        type: number
+        description: "Message size in bytes"
+
+  # Correlation with logs
+  correlation:
+    enabled: true
+    # Add trace context to logs
+    injectTraceContext: true
+    # Extract from incoming requests
+    extractFromHeaders:
+      - traceparent
+      - tracestate
+      - X-Trace-Id
+      - X-Span-Id
+
+# Tempo configuration for storage
+tempo:
+  # Retention
+  retention: 168h  # 7 days
+  
+  # Storage backend
+  storage:
+    type: s3
+    s3:
+      bucket: "cargobit-traces"
+      endpoint: "s3.amazonaws.com"
+      region: "eu-central-1"
+  
+  # Query configuration
+  query:
+    maxBytesPerTagValues: 5000000
+    maxSearchDuration: "1h"

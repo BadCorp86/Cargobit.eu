@@ -1,0 +1,100 @@
+# CargoBit API Gateway - JWT Authentication Configuration
+# Version: 2024-01-15-01
+# Compatible with: Kong, NGINX, APIM
+
+jwt:
+  # Issuer validation
+  issuers:
+    - url: "https://auth.yourplatform.com"
+      allowedAlgorithms:
+        - RS256
+        - ES256
+      jwksUri: "https://auth.yourplatform.com/.well-known/jwks.json"
+      cacheTtlSeconds: 3600
+
+  # Audience validation
+  audiences:
+    - "yourplatform-api"
+    - "yourplatform-internal"
+
+  # Required claims
+  requiredClaims:
+    - name: "sub"
+      type: "string"
+      description: "Unique user identifier"
+    - name: "role"
+      type: "string"
+      enum:
+        - SHIPPER
+        - CARRIER
+        - ADMIN
+        - SUPPORT
+        - SYSTEM
+      description: "User role for RBAC"
+    - name: "iat"
+      type: "number"
+      description: "Issued at timestamp"
+    - name: "exp"
+      type: "number"
+      description: "Expiration timestamp"
+
+  # Optional claims
+  optionalClaims:
+    - name: "carrierId"
+      type: "string"
+      description: "Carrier identifier if role=CARRIER"
+    - name: "shipperId"
+      type: "string"
+      description: "Shipper identifier if role=SHIPPER"
+    - name: "permissions"
+      type: "array"
+      description: "Fine-grained permissions"
+    - name: "region"
+      type: "string"
+      description: "User region for routing"
+
+  # Token validation rules
+  validation:
+    # Clock skew tolerance in seconds
+    clockSkewSeconds: 30
+    # Maximum token age in seconds (24 hours)
+    maxTokenAgeSeconds: 86400
+    # Reject expired tokens
+    rejectExpired: true
+    # Reject tokens without required claims
+    rejectMissingClaims: true
+    # Validate issuer match
+    validateIssuer: true
+    # Validate audience match
+    validateAudience: true
+
+  # Reject cases with HTTP status codes
+  rejectResponses:
+    missingToken:
+      statusCode: 401
+      message: "Authentication required"
+      code: "AUTH_MISSING_TOKEN"
+    expiredToken:
+      statusCode: 401
+      message: "Token has expired"
+      code: "AUTH_TOKEN_EXPIRED"
+    invalidIssuer:
+      statusCode: 401
+      message: "Invalid token issuer"
+      code: "AUTH_INVALID_ISSUER"
+    invalidAudience:
+      statusCode: 401
+      message: "Invalid token audience"
+      code: "AUTH_INVALID_AUDIENCE"
+    missingClaims:
+      statusCode: 401
+      message: "Token missing required claims"
+      code: "AUTH_MISSING_CLAIMS"
+    invalidSignature:
+      statusCode: 401
+      message: "Invalid token signature"
+      code: "AUTH_INVALID_SIGNATURE"
+    malformedToken:
+      statusCode: 401
+      message: "Malformed token"
+      code: "AUTH_MALFORMED_TOKEN"

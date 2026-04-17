@@ -994,6 +994,213 @@ Ads Partner (Spedition Schmidt):
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
 
 ---
+Task ID: production-building-blocks
+Agent: Main Agent
+Task: Vier produktreife Bausteine implementieren (Schema-Validation, API-Gateway, Helm-Charts, Observability)
+
+## Work Log:
+
+### A) Security-Config-Service – Schema-Validation (Deep Level)
+
+**A.1 JSON-Schema für komplette Security-Config**
+- Datei: `/schemas/security-config.schema.json` - Bereits vorhanden mit allen Anforderungen
+- Strict Mode: `additionalProperties: false` auf allen Objekten
+- Version-Pattern: `YYYY-MM-DD-NN`
+- Fraud-Weights mit Minimum/Maximum Constraints
+
+**A.2 Cross-Field-Validation (TypeScript)**
+- Datei: `/src/services/security-config-validator.ts` - Bereits vorhanden
+- Implementierte Regeln:
+  1. Carrier fraud weights must sum to 1.0
+  2. Bid fraud weights must sum to 1.0
+  3. Thresholds: observe < suspect
+  4. maxDiscountVsMarket < 0.9
+  5. alphaCarrier deviation warning
+
+### B) API-Gateway-Regeln (konkret)
+
+**B.1 AuthN (JWT)**
+- Datei: `/config/api-gateway/authn-jwt.yaml` - NEU
+- Issuer: `https://auth.yourplatform.com`
+- Audience: `yourplatform-api`
+- Required Claims: sub, role, iat, exp
+- Optional Claims: carrierId, shipperId, permissions, region
+- Reject-Responses mit Status Codes
+
+**B.2 AuthZ (Route-Level)**
+- Datei: `/config/api-gateway/authz-routes.yaml` - NEU
+- Route-basierte RBAC:
+  - `/api/shipper/**` → SHIPPER
+  - `/api/carrier/**` → CARRIER
+  - `/api/admin/**` → ADMIN
+  - `/api/support/**` → SUPPORT
+- Ownership Checks für Mixed-Access Routes
+- Public Endpoints: /health, /ready
+
+**B.3 Rate-Limits**
+- Datei: `/config/api-gateway/rate-limits.yaml` - NEU
+- Konkrete Limits:
+  - POST /orders → 60/min per sub
+  - POST /bids → 120/min per sub
+  - POST /pricing/**/bid/validate → 300/min per sub
+  - POST /executions/**/status → 240/min per sub
+  - POST /auth/login → 10/min per IP
+- Role Multipliers: ADMIN 2x, SUPPORT 1.5x, SYSTEM 10x
+
+**B.4 mTLS Downstream**
+- Datei: `/config/api-gateway/mtls-config.yaml` - NEU
+- Gateway → Domain-Services: Client-Certificate required
+- Domain-Services → Security-Config-Service: Client-Certificate required
+- Certificate Configuration: ECDSA P256, 90 days validity
+- TLS 1.3 + TLS 1.2 mit approved cipher suites
+
+### C) Helm-Chart-Layout (konkret)
+
+**C.1 Matching-Service Helm Chart**
+- Pfad: `/helm/domain/matching-service/`
+- Dateien:
+  - Chart.yaml, values.yaml
+  - templates/deployment.yaml, service.yaml, configmap.yaml
+  - templates/networkpolicy.yaml, hpa.yaml, pdb.yaml, serviceaccount.yaml
+  - templates/_helpers.tpl
+
+**C.2 Order-Service Helm Chart**
+- Pfad: `/helm/domain/order-service/`
+- Gleiche Struktur wie matching-service
+- Database Connection (PostgreSQL)
+
+**C.3 Risk-Service Helm Chart**
+- Pfad: `/helm/domain/risk-service/`
+- Gleiche Struktur
+- Höhere Resource Limits (750m CPU, 1Gi Memory)
+
+**C.4 Security-Config-Service Helm Chart**
+- Pfad: `/helm/core/security-config-service/`
+- 3 Replicas (High Availability)
+- mTLS Server Certificate
+- Caching Configuration
+
+**C.5 NetworkPolicy für alle Services**
+- Ingress: Core + Domain Namespaces, Prometheus Metrics
+- Egress: DNS, Security-Config-Service, Kafka, Redis, PostgreSQL, Tempo
+
+### D) Observability-Setup (Prometheus/Grafana/Tempo)
+
+**D.1 Metrics Configuration**
+- Datei: `/observability/metrics-config.yaml` - NEU
+- Definierte Metrics:
+  - http_requests_total, http_request_duration_seconds
+  - kafka_consumer_lag
+  - fraud_score_total, fraud_detection_duration_seconds
+  - pricing_validation_duration_seconds
+  - matching_duration_seconds
+  - jwt_validation_total, jwt_failures_total
+  - rate_limit_requests_total, rate_limit_hits_total
+  - mtls_handshake_total, mtls_errors_total
+
+**D.2 Logging Configuration**
+- Datei: `/observability/logging-format.yaml` - NEU
+- JSON Log Format:
+  - Required: timestamp, service, correlationId, level, message
+  - Optional: traceId, spanId, userId, carrierId, shipperId, orderId, context, error
+- Sensitive Data Redaction
+- Loki Integration
+
+**D.3 Tracing Configuration**
+- Datei: `/observability/tracing-config.yaml` - NEU
+- OpenTelemetry mit Tempo Backend
+- Key Spans:
+  - pricing.validation, pricing.fraud_check
+  - matching.computation, matching.carrier_score
+  - order.create, order.status_update
+  - risk.scoring, risk.escalation
+  - config.fetch, config.validation
+- Sampling Rules (health checks excluded)
+
+**D.4 Grafana Dashboards**
+- Datei: `/observability/grafana/dashboards/pricing-service.json` - Aktualisiert
+- Datei: `/observability/grafana/dashboards/matching-service.json` - Aktualisiert
+- Datei: `/observability/grafana/dashboards/gateway.json` - Aktualisiert
+- Panels:
+  - Validation Latency (P50, P95, P99)
+  - Fraud Score Distribution
+  - Error Rate
+  - Request Rate by Status
+  - Kafka Consumer Lag
+  - Resource Usage
+  - JWT Validation (Success/Failed)
+  - JWT Failure Reasons
+  - Rate Limit Hits by Route
+  - Upstream Latency
+  - Service Latency Comparison
+  - mTLS Handshakes
+  - mTLS Errors by Type
+
+## Stage Summary:
+
+### Erstellte Dateien:
+**API Gateway Config (4):**
+1. `/config/api-gateway/authn-jwt.yaml`
+2. `/config/api-gateway/authz-routes.yaml`
+3. `/config/api-gateway/rate-limits.yaml`
+4. `/config/api-gateway/mtls-config.yaml`
+
+**Helm Charts (4 Services × 9 Templates = 36 Files):**
+- `/helm/domain/matching-service/` (9 files)
+- `/helm/domain/order-service/` (9 files)
+- `/helm/domain/risk-service/` (9 files)
+- `/helm/core/security-config-service/` (9 files)
+
+**Observability Config (3):**
+1. `/observability/metrics-config.yaml`
+2. `/observability/logging-format.yaml`
+3. `/observability/tracing-config.yaml`
+
+**Grafana Dashboards (3):**
+1. `/observability/grafana/dashboards/pricing-service.json`
+2. `/observability/grafana/dashboards/matching-service.json`
+3. `/observability/grafana/dashboards/gateway.json`
+
+### Architektur-Übersicht:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                         CARGOBIT PLATFORM                        │
+├─────────────────────────────────────────────────────────────────┤
+│  API GATEWAY (Kong/NGINX)                                        │
+│  ├── JWT AuthN (iss, aud, exp, claims)                          │
+│  ├── Route AuthZ (RBAC per path)                                │
+│  ├── Rate Limiting (per route/sub)                              │
+│  └── mTLS (client certificates)                                 │
+├─────────────────────────────────────────────────────────────────┤
+│  DOMAIN SERVICES                              │
+│  ├── pricing-service (validation, fraud-scoring)                │
+│  ├── matching-service (carrier-selection)                       │
+│  ├── order-service (lifecycle)                                  │
+│  └── risk-service (fraud-detection)                             │
+├─────────────────────────────────────────────────────────────────┤
+│  CORE SERVICES                                                   │
+│  └── security-config-service (centralized config)               │
+├─────────────────────────────────────────────────────────────────┤
+│  OBSERVABILITY STACK                                             │
+│  ├── Prometheus (metrics)                                        │
+│  ├── Loki (logs)                                                 │
+│  └── Tempo (tracing)                                             │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### Rate Limits Summary:
+| Route | Limit | Window | Key |
+|-------|-------|--------|-----|
+| POST /orders | 60 | 60s | sub |
+| POST /bids | 120 | 60s | sub |
+| POST /pricing/**/validate | 300 | 60s | sub |
+| POST /executions/**/status | 240 | 60s | sub |
+| POST /auth/login | 10 | 60s | ip |
+| POST /admin/** | 30 | 60s | sub |
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
 Task ID: service-landscape-architecture
 Agent: Main Agent
 Task: Service-Landscape Architektur mit Core Domain Services, Event-Bus, Data Ownership

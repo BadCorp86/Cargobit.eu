@@ -1,0 +1,14 @@
+apiVersion: v2
+name: risk-service
+description: CargoBit Risk Service - Fraud detection and risk scoring
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - cargobit
+  - risk
+  - fraud
+  - security
+maintainers:
+  - name: CargoBit Team
+    email: team@cargobit.io

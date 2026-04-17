@@ -1,0 +1,13 @@
+apiVersion: v2
+name: matching-service
+description: CargoBit Matching Service - Carrier selection and bid ranking
+type: application
+version: 1.0.0
+appVersion: "1.0.0"
+keywords:
+  - cargobit
+  - matching
+  - logistics
+maintainers:
+  - name: CargoBit Team
+    email: team@cargobit.io

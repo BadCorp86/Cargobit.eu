@@ -1,0 +1,117 @@
+# CargoBit API Gateway - Authorization (Route-Level RBAC)
+# Version: 2024-01-15-01
+# Maps routes to required roles
+
+authz:
+  # Route-based role restrictions
+  routes:
+    # Shipper routes
+    - pattern: "/api/shipper/**"
+      methods: ["GET", "POST", "PUT", "DELETE"]
+      requiredRole: "SHIPPER"
+      description: "Shipper management endpoints"
+      exceptions:
+        - pattern: "/api/shipper/public/**"
+          public: true
+
+    # Carrier routes
+    - pattern: "/api/carrier/**"
+      methods: ["GET", "POST", "PUT", "DELETE"]
+      requiredRole: "CARRIER"
+      description: "Carrier management endpoints"
+      exceptions:
+        - pattern: "/api/carrier/public/**"
+          public: true
+
+    # Admin routes
+    - pattern: "/api/admin/**"
+      methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+      requiredRole: "ADMIN"
+      description: "Admin-only endpoints"
+      audit: true
+
+    # Support routes
+    - pattern: "/api/support/**"
+      methods: ["GET", "POST", "PUT"]
+      requiredRole: "SUPPORT"
+      description: "Support team endpoints"
+      audit: true
+
+    # Mixed access routes (role-based logic)
+    - pattern: "/api/orders/**"
+      methods: ["GET", "POST", "PUT"]
+      rolesAllowed: ["SHIPPER", "CARRIER", "ADMIN", "SUPPORT"]
+      description: "Order management - access depends on ownership"
+      ownershipCheck:
+        enabled: true
+        # Shipper can access their own orders
+        # Carrier can access orders assigned to them
+        # Admin/Support can access all orders
+
+    - pattern: "/api/bids/**"
+      methods: ["GET", "POST", "PUT", "DELETE"]
+      rolesAllowed: ["CARRIER", "SHIPPER", "ADMIN"]
+      description: "Bid management endpoints"
+      ownershipCheck:
+        enabled: true
+
+    - pattern: "/api/transports/**"
+      methods: ["GET", "POST", "PUT", "PATCH"]
+      rolesAllowed: ["SHIPPER", "CARRIER", "DRIVER", "ADMIN", "SUPPORT"]
+      description: "Transport management endpoints"
+      ownershipCheck:
+        enabled: true
+
+    # Pricing validation - authenticated users
+    - pattern: "/api/pricing/**"
+      methods: ["GET", "POST"]
+      authenticated: true
+      description: "Pricing service endpoints"
+
+    # Matching service
+    - pattern: "/api/matching/**"
+      methods: ["GET", "POST"]
+      rolesAllowed: ["SHIPPER", "CARRIER", "ADMIN"]
+      description: "Matching service endpoints"
+
+    # Risk management
+    - pattern: "/api/risk/**"
+      methods: ["GET", "POST", "PUT"]
+      rolesAllowed: ["ADMIN", "SUPPORT"]
+      description: "Risk management endpoints"
+      audit: true
+
+    # Health checks - public
+    - pattern: "/health"
+      public: true
+      description: "Health check endpoint"
+
+    - pattern: "/ready"
+      public: true
+      description: "Readiness check endpoint"
+
+    # Internal service-to-service
+    - pattern: "/internal/**"
+      requiredRole: "SYSTEM"
+      description: "Internal service communication"
+      mtlsRequired: true
+
+  # Default policy for unmatched routes
+  defaultPolicy:
+    authenticated: true
+    requiredRole: null  # Any authenticated user
+
+  # Reject responses
+  rejectResponses:
+    forbidden:
+      statusCode: 403
+      message: "Access denied"
+      code: "AUTHZ_FORBIDDEN"
+    insufficientRole:
+      statusCode: 403
+      message: "Insufficient role permissions"
+      code: "AUTHZ_INSUFFICIENT_ROLE"
+    ownershipViolation:
+      statusCode: 403
+      message: "You do not have access to this resource"
+      code: "AUTHZ_OWNERSHIP_VIOLATION"

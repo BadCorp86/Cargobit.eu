@@ -1,0 +1,138 @@
+# CargoBit API Gateway - Rate Limiting Configuration
+# Version: 2024-01-15-01
+# Production-ready rate limits per endpoint
+
+rateLimits:
+  # Global defaults
+  defaults:
+    windowSeconds: 60
+    keyStrategy: "sub"  # Rate limit by user ID
+    headers:
+      enabled: true
+      exposeHeaders:
+        - "X-RateLimit-Limit"
+        - "X-RateLimit-Remaining"
+        - "X-RateLimit-Reset"
+      retryAfter: true
+
+  # Route-specific rate limits
+  routes:
+    # Orders - 60 requests per minute
+    - route: "POST /orders"
+      limit: 60
+      windowSeconds: 60
+      key: "sub"
+      burstLimit: 10
+      description: "Order creation rate limit"
+      onExceeded:
+        statusCode: 429
+        message: "Too many order requests. Please slow down."
+        code: "RATE_LIMIT_ORDERS"
+
+    # Order read operations - higher limit
+    - route: "GET /orders/**"
+      limit: 300
+      windowSeconds: 60
+      key: "sub"
+      description: "Order query rate limit"
+
+    # Bids - 120 requests per minute
+    - route: "POST /bids"
+      limit: 120
+      windowSeconds: 60
+      key: "sub"
+      burstLimit: 20
+      description: "Bid submission rate limit"
+      onExceeded:
+        statusCode: 429
+        message: "Too many bid submissions. Please slow down."
+        code: "RATE_LIMIT_BIDS"
+
+    # Bid validation (pricing) - 300 requests per minute
+    - route: "POST /pricing/**/bid/validate"
+      limit: 300
+      windowSeconds: 60
+      key: "sub"
+      description: "Pricing validation rate limit"
+
+    # Execution status updates - 240 requests per minute
+    - route: "POST /executions/**/status"
+      limit: 240
+      windowSeconds: 60
+      key: "sub"
+      description: "Execution status update rate limit"
+
+    # Matching operations
+    - route: "POST /matching/**"
+      limit: 120
+      windowSeconds: 60
+      key: "sub"
+      description: "Matching operation rate limit"
+
+    # Risk operations (support/admin)
+    - route: "POST /risk/**"
+      limit: 180
+      windowSeconds: 60
+      key: "sub"
+      description: "Risk operation rate limit"
+
+    # Admin operations - stricter limits
+    - route: "POST /admin/**"
+      limit: 30
+      windowSeconds: 60
+      key: "sub"
+      audit: true
+      description: "Admin operation rate limit"
+
+    # Authentication endpoints - IP-based
+    - route: "POST /auth/login"
+      limit: 10
+      windowSeconds: 60
+      key: "ip"
+      description: "Login rate limit per IP"
+      onExceeded:
+        statusCode: 429
+        message: "Too many login attempts. Try again later."
+        code: "RATE_LIMIT_LOGIN"
+
+    - route: "POST /auth/refresh"
+      limit: 20
+      windowSeconds: 60
+      key: "sub"
+      description: "Token refresh rate limit"
+
+    # Public endpoints
+    - route: "GET /health"
+      limit: 1000
+      windowSeconds: 60
+      key: "ip"
+      public: true
+
+    - route: "GET /ready"
+      limit: 1000
+      windowSeconds: 60
+      key: "ip"
+      public: true
+
+  # Role-based adjustments
+  roleMultipliers:
+    ADMIN: 2.0      # Admins get 2x rate limit
+    SUPPORT: 1.5    # Support gets 1.5x rate limit
+    SYSTEM: 10.0    # Internal services get 10x rate limit
+    SHIPPER: 1.0    # Default
+    CARRIER: 1.0    # Default
+
+  # Storage configuration
+  storage:
+    type: "redis"
+    host: "${REDIS_HOST}"
+    port: 6379
+    passwordSecret: "redis-password"
+    database: 0
+    keyPrefix: "cargobit:ratelimit:"
+
+  # Monitoring
+  monitoring:
+    enabled: true
+    metricsPrefix: "cargobit_rate_limit"
+    alertThreshold: 80  # Alert when 80% of limit reached
