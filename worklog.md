@@ -1189,12 +1189,117 @@ Score' = Score · (1 - 0.5·Ftotal)
 | 0.3 - 0.6 | beobachten | Flag + Penalty |
 | ≥ 0.6 | fraud_suspected | No Auto-Match, Manual Review |
 
-### Dateien:
-1. `/config/security-config.yaml` - Zentrale Config (YAML)
-2. `/src/services/security-config.service.ts` - Config Loader
-3. `/src/services/fraud-score-calculator.ts` - Fc, Fb, Ftotal
-4. `/src/services/matching.service.ts` - Matching + Fraud Penalty
-5. `/src/types/access-control.ts` - RBAC/ABAC Matrix
-6. `/docs/epics-security-fraud.md` - Epics & Tickets
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
+Task ID: config-driven-security-fraud
+Agent: Main Agent
+Task: Config-Driven Security Architecture - RBAC/ABAC und Fraud-Scoring als YAML-Konfiguration
+
+## Work Log:
+
+### 1. Fraud Event Types Erweiterung
+- Datei: `/src/types/events.ts` - Erweitert
+- Neue Topics:
+  - `FRAUD_SUSPECTED: 'fraud.suspected'` - Bei Ftotal >= 0.6
+  - `FRAUD_FLAGGED: 'fraud.flagged'` - Bei Observation Level
+- Neue Payloads:
+  - `FraudSuspectedPayload` - Vollständige Fraud-Analyse mit Breakdown
+  - `FraudFlaggedPayload` - Flag-Daten mit Manual-Review-Status
+- Type Guards: `isFraudEvent()`
+
+### 2. Authorization Check API Endpoint
+- Datei: `/src/app/api/authz/check/route.ts` - NEU
+- Zentraler Endpoint für RBAC + ABAC Prüfung
+- POST /api/authz/check:
+  - Request: `{ subject, action, resource, context? }`
+  - Response: `{ allowed, reason?, matchedRule?, configVersion }`
+- GET /api/authz/check: Health Check
+- Header: `X-Config-Version`, `Cache-Control: no-store`
+
+### 3. Config-Driven Fraud Scoring Service
+- Datei: `/src/services/fraud-scoring.service.ts` - NEU
+- Liest alle Parameter aus `security-config.yaml`
+- Formeln implementiert:
+  - Carrier-Fraud-Score: `Fc = w1·Ccancel + w2·Cdispute + w3·CnoShow + w4·Cpattern`
+  - Bid-Fraud-Score: `Fb = v1·Bdumping + v2·Bspam + v3·Bcoordination`
+  - Total Score: `Ftotal = α·Fc + (1-α)·Fb`
+  - Penalty: `Score' = Score · (1 - β·Ftotal)`
+- Features:
+  - Config-driven Weights und Thresholds
+  - Event Emission (fraud.suspected, fraud.flagged)
+  - Audit Logging
+  - Recommendations Generator
+
+### 4. Matching Service Integration
+- Datei: `/src/services/matching.service.ts` - Aktualisiert
+- Nutzung von `FraudScoringService` statt hardcoded `FraudScoreCalculator`
+- Config-driven Thresholds:
+  - `fraudConfig.carrierScore.thresholds.observe` (0.3)
+  - `fraudConfig.carrierScore.thresholds.suspect` (0.6)
+  - `fraudConfig.matching.capSuspectedScore` (30)
+
+### 5. Security Config YAML Struktur
+- Datei: `/config/security-config.yaml` - Existiert, validiert
+- RBAC Section: Rollen mit `can`/`cannot` Listen
+- ABAC Section: Regeln mit `appliesTo` und `condition`
+- Fraud Section: Alle Gewichte und Thresholds konfigurierbar
+- Rate Limits: Per Endpoint konfigurierbar
+- Audit & Retention: Events und Policies
+
+## Stage Summary:
+
+### Implementierte Dateien:
+1. `/src/types/events.ts` - Fraud Event Types
+2. `/src/app/api/authz/check/route.ts` - Authorization API
+3. `/src/services/fraud-scoring.service.ts` - Config-driven Fraud Service
+4. `/src/services/matching.service.ts` - Aktualisiert für Config-Integration
+
+### API Endpoints:
+```
+POST /api/authz/check
+  Request:  { subject: {id, role}, action, resource }
+  Response: { allowed, reason, matchedRule, configVersion }
+
+GET /api/authz/check
+  Response: { status, configVersion, rolesConfigured, abacRulesConfigured }
+```
+
+### Config Structure (YAML):
+```yaml
+fraud:
+  carrierScore:
+    weights: { cancelRate: 0.3, disputeRate: 0.3, noShowRate: 0.2, patternScore: 0.2 }
+    thresholds: { observe: 0.3, suspect: 0.6 }
+  bidScore:
+    weights: { dumping: 0.5, spam: 0.3, coordination: 0.2 }
+    dumping: { maxDiscountVsMarket: 0.35 }
+    spam: { maxBidsPerOrderPerHour: 20 }
+    coordination: { similarityWindowMinutes: 5, similarityThreshold: 0.95 }
+  totalScore:
+    alphaCarrier: 0.6
+    penaltyFactor: 0.5
+  matching:
+    applyPenalty: true
+    capSuspectedScore: 30
+    excludeFromAutoMatch: true
+  events:
+    emitFraudSuspected: true
+    auditAllScores: true
+```
+
+### Fraud Score Berechnung:
+```
+Beispiel: Carrier mit 20% Storno, 10% Disputes, 5% No-Show
+Fc = 0.3×0.4 + 0.3×0.33 + 0.2×0.25 + 0.2×0 = 0.229
+
+Bid mit 30% unter Market, 15 Bids/Stunde, 2 ähnliche Bids
+Fb = 0.5×0.86 + 0.3×0.5 + 0.2×0.3 = 0.66
+
+Ftotal = 0.6×0.229 + 0.4×0.66 = 0.40 → BEOBACHTEN
+
+Matching Score = 85
+Score' = 85 × (1 - 0.5×0.40) = 85 × 0.80 = 68
+```
 
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT

@@ -54,6 +54,10 @@ export const CORE_TOPICS = {
   RISK_UPDATED: 'risk.updated',
   RISK_LEVEL_CHANGED: 'risk.level_changed',
 
+  // Fraud domain
+  FRAUD_SUSPECTED: 'fraud.suspected',
+  FRAUD_FLAGGED: 'fraud.flagged',
+
   // Audit domain
   AUDIT_RECORD_CREATED: 'audit.record_created',
 
@@ -631,6 +635,92 @@ export type RiskUpdatedEvent = BaseEvent<typeof CORE_TOPICS.RISK_UPDATED, RiskUp
 export type RiskLevelChangedEvent = BaseEvent<typeof CORE_TOPICS.RISK_LEVEL_CHANGED, RiskLevelChangedPayload>;
 
 // =============================================================================
+// FRAUD EVENTS
+// =============================================================================
+
+export interface FraudSuspectedPayload {
+  /** ID of the entity flagged for fraud */
+  entityId: string;
+  
+  /** Type of entity (carrier, bid, order) */
+  entityType: 'carrier' | 'bid' | 'order';
+  
+  /** Carrier ID associated with fraud */
+  carrierId: string;
+  
+  /** Bid ID if applicable */
+  bidId?: string;
+  
+  /** Order ID if applicable */
+  orderId?: string;
+  
+  // Fraud Scores
+  carrierFraudScore: number;
+  bidFraudScore: number;
+  totalFraudScore: number;
+  
+  // Level
+  fraudLevel: 'unauffaellig' | 'beobachten' | 'fraud_suspected';
+  
+  // Breakdown
+  breakdown: {
+    carrier: {
+      cancelRate: number;
+      disputeRate: number;
+      noShowRate: number;
+      patternScore: number;
+    };
+    bid: {
+      dumpingScore: number;
+      spamScore: number;
+      coordinationScore: number;
+    };
+  };
+  
+  // Recommendations
+  recommendations: string[];
+  
+  // Config Version
+  configVersion: string;
+  
+  // Timestamp
+  detectedAt: string;
+  
+  // Correlation
+  correlationId: string;
+}
+
+export interface FraudFlaggedPayload {
+  /** ID of the flagged entity */
+  entityId: string;
+  entityType: 'carrier' | 'bid' | 'order';
+  carrierId: string;
+  
+  // Fraud Score
+  totalFraudScore: number;
+  fraudLevel: 'unauffaellig' | 'beobachten' | 'fraud_suspected';
+  
+  // Flag reason
+  flagReason: string;
+  
+  // Manual review
+  requiresManualReview: boolean;
+  
+  // Actions taken
+  actionsTaken: string[];
+  
+  // Config Version
+  configVersion: string;
+  
+  // Timestamp
+  flaggedAt: string;
+  correlationId: string;
+}
+
+export type FraudSuspectedEvent = BaseEvent<typeof CORE_TOPICS.FRAUD_SUSPECTED, FraudSuspectedPayload>;
+export type FraudFlaggedEvent = BaseEvent<typeof CORE_TOPICS.FRAUD_FLAGGED, FraudFlaggedPayload>;
+
+// =============================================================================
 // AUDIT EVENTS
 // =============================================================================
 
@@ -793,6 +883,8 @@ export type CargoBitEvent =
   | CarrierProfileUpdatedEvent
   | RiskUpdatedEvent
   | RiskLevelChangedEvent
+  | FraudSuspectedEvent
+  | FraudFlaggedEvent
   | AuditRecordCreatedEvent
   | NotificationSentEvent;
 
@@ -826,6 +918,10 @@ export function isCarrierEvent(event: CargoBitEvent): event is CarrierStatsUpdat
 
 export function isRiskEvent(event: CargoBitEvent): event is RiskUpdatedEvent | RiskLevelChangedEvent {
   return event.topic.startsWith('risk.');
+}
+
+export function isFraudEvent(event: CargoBitEvent): event is FraudSuspectedEvent | FraudFlaggedEvent {
+  return event.topic.startsWith('fraud.');
 }
 
 // =============================================================================

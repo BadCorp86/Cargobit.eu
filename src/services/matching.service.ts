@@ -18,12 +18,12 @@ import {
   MatchingResult
 } from '@/types/transport';
 import {
-  FraudScoreCalculator,
-  DEFAULT_FRAUD_WEIGHTS,
-  CarrierFraudFactors,
-  BidFraudFactors,
-  FraudScoreResult
-} from './fraud-score-calculator';
+  FraudScoringService,
+  FraudAnalysisResult,
+  CarrierStats,
+  BidContext,
+} from './fraud-scoring.service';
+import { SecurityConfigService } from './security-config.service';
 
 // ============================================
 // MAIN MATCHING FUNCTION
@@ -104,11 +104,17 @@ export const DEFAULT_MATCHING_WEIGHTS: MatchingScoreWeights = {
  * 
  * Applies fraud penalty to matching scores:
  * Score' = Score · (1 - β·Ftotal)
+ * 
+ * Uses config-driven fraud parameters from security-config.yaml
  */
 export async function findMatchingDrivers(input: MatchingInput): Promise<MatchedDriver[]> {
   console.log(`[Matching] Finding drivers for transport ${input.transportId}`);
   
-  const fraudCalculator = new FraudScoreCalculator();
+  // Use config-driven fraud scoring service
+  const fraudService = new FraudScoringService();
+  const securityConfig = SecurityConfigService.getInstance();
+  const fraudConfig = securityConfig.getFraudConfig();
+  
   const matches: MatchedDriver[] = [];
   
   // Step 1: Find available drivers with correct vehicle type
@@ -119,17 +125,17 @@ export async function findMatchingDrivers(input: MatchingInput): Promise<Matched
   for (const driver of candidateDrivers) {
     const score = await scoreDriver(driver, input);
     if (score.matchScore > 0) {
-      // Step 2a: Apply Fraud Score Penalty
-      const fraudAnalysis = await analyzeDriverFraud(driver, fraudCalculator);
+      // Step 2a: Apply Fraud Score Penalty (config-driven)
+      const fraudAnalysis = await analyzeDriverFraud(driver, input, fraudService);
       
       if (fraudAnalysis) {
-        score.fraudScore = fraudAnalysis.totalScore;
-        score.fraudLevel = fraudAnalysis.level;
+        score.fraudScore = fraudAnalysis.totalFraudScore;
+        score.fraudLevel = fraudAnalysis.fraudLevel;
         
         // Apply penalty: Score' = Score · (1 - β·Ftotal)
-        const penaltyResult = fraudCalculator.applyFraudPenalty(
+        const penaltyResult = fraudService.applyFraudPenalty(
           score.matchScore,
-          fraudAnalysis.totalScore
+          fraudAnalysis.totalFraudScore
         );
         
         score.fraudPenalty = penaltyResult.penaltyPercent;
@@ -138,10 +144,13 @@ export async function findMatchingDrivers(input: MatchingInput): Promise<Matched
         // If fraud suspected, do not auto-match
         if (fraudAnalysis.fraudSuspected) {
           score.matchReasons.push('⚠️ FRAUD SUSPECTED - Manual review required');
-          // Cap score to prevent auto-matching
-          score.adjustedScore = Math.min(score.adjustedScore, 30);
-        } else if (fraudAnalysis.totalScore >= 0.3) {
-          score.matchReasons.push(`⚠️ Elevated fraud risk (${fraudAnalysis.level})`);
+          // Cap score to prevent auto-matching (use config value)
+          score.adjustedScore = Math.min(
+            score.adjustedScore, 
+            fraudConfig.matching.capSuspectedScore
+          );
+        } else if (fraudAnalysis.totalFraudScore >= fraudConfig.carrierScore.thresholds.observe) {
+          score.matchReasons.push(`⚠️ Elevated fraud risk (${fraudAnalysis.fraudLevel})`);
         }
       }
       
@@ -164,25 +173,45 @@ export async function findMatchingDrivers(input: MatchingInput): Promise<Matched
 
 async function analyzeDriverFraud(
   driver: any,
-  calculator: FraudScoreCalculator
-): Promise<FraudScoreResult | null> {
+  input: MatchingInput,
+  fraudService: FraudScoringService
+): Promise<FraudAnalysisResult | null> {
   try {
-    // Get carrier fraud factors from driver statistics
-    const carrierFactors: CarrierFraudFactors = {
-      cancelRate: normalizeRate(driver.cancelRate || 0),
-      disputeRate: normalizeRate(driver.disputeRate || 0),
-      noShowRate: normalizeRate(driver.noShowRate || 0),
-      patternScore: calculateDriverPatternScore(driver),
+    // Build carrier stats from driver data
+    const carrierStats: CarrierStats = {
+      carrierId: driver.id,
+      cancelRatePercent: driver.cancelRate || 0,
+      disputeRatePercent: driver.disputeRate || 0,
+      noShowRatePercent: driver.noShowRate || 0,
+      winsJustAboveFloorRate: driver.winsJustAboveFloorRate || 0,
+      rotationPatternScore: driver.rotationPatternScore || 0,
+      sameRegionWinRate: driver.sameRegionWinRate || 0,
+      avgMarginOverFloor: driver.avgMarginOverFloor || 0.15,
+      periodDays: 90,
     };
     
-    // Get bid fraud factors (would be calculated from recent bids)
-    const bidFactors: BidFraudFactors = {
-      dumpingScore: driver.recentDumpingScore || 0,
-      spamScore: driver.recentSpamScore || 0,
-      coordinationScore: driver.recentCoordinationScore || 0,
+    // Build bid context (would normally come from actual bid data)
+    const bidContext: BidContext = {
+      bidId: `bid_${driver.id}_${Date.now()}`,
+      orderId: input.transportId,
+      carrierId: driver.id,
+      bidPrice: driver.lastBidPrice || 0,
+      startPrice: driver.startPrice || 100,
+      minPrice: driver.minPrice || 80,
+      marketPrice: driver.marketPrice || 95,
+      bidsLastMinute: driver.bidsLastMinute || 0,
+      bidsLastHour: driver.bidsLastHour || 0,
+      bidsLastDay: driver.bidsLastDay || 0,
+      similarBidsCount: driver.similarBidsCount || 0,
+      similarBidsTimeWindow: [],
+      priceVariance: driver.priceVariance || 0.1,
+      uniqueCarriersWithSimilarBids: driver.uniqueCarriersWithSimilarBids || 0,
     };
     
-    return calculator.analyzeFraud(carrierFactors, bidFactors);
+    // Perform config-driven fraud analysis
+    const correlationId = `match_${input.transportId}_${Date.now()}`;
+    return await fraudService.analyzeBidFraud(carrierStats, bidContext, correlationId);
+    
   } catch (error) {
     console.error('[Matching] Error analyzing fraud for driver:', error);
     return null;
@@ -193,25 +222,6 @@ function normalizeRate(rate: number): number {
   // Normalize to [0, 1] range
   // Assuming rates are percentages (0-100)
   return Math.min(Math.max(rate / 100, 0), 1);
-}
-
-function calculateDriverPatternScore(driver: any): number {
-  let patternScore = 0;
-  
-  // Check for suspicious patterns
-  if (driver.winsJustAboveFloorRate && driver.winsJustAboveFloorRate > 0.3) {
-    patternScore += driver.winsJustAboveFloorRate * 0.4;
-  }
-  
-  if (driver.rotationPatternScore && driver.rotationPatternScore > 0.5) {
-    patternScore += driver.rotationPatternScore * 0.3;
-  }
-  
-  if (driver.sameRegionWinRate && driver.sameRegionWinRate > 0.5) {
-    patternScore += (driver.sameRegionWinRate - 0.5) * 0.3;
-  }
-  
-  return Math.min(patternScore, 1);
 }
 
 // ============================================
