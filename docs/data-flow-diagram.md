@@ -1,707 +1,647 @@
-# CargoBit Data Flow Diagram (DFD)
+# Data Flow Diagram (DFD)
 
-> **Version:** 1.0.0  
-> **Status:** Production-Ready  
-> **Last Updated:** 2026-04-18  
-> **Owner:** Security Architecture Team  
-> **Methodology:** Level-0 and Level-1 DFD
-
----
-
-## L.1 Level-0 Overview (Context Diagram)
-
-### System Context
-
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          LEVEL-0 CONTEXT DIAGRAM                                     │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│                                                                                      │
-│     ┌─────────────────┐                          ┌─────────────────┐               │
-│     │                 │                          │                 │               │
-│     │   SHIPPER APP   │                          │  CARRIER APP    │               │
-│     │   (External)    │                          │   (External)    │               │
-│     │                 │                          │                 │               │
-│     │  • Create Order │                          │  • Submit Bids  │               │
-│     │  • Accept Offer │                          │  • Update Status│               │
-│     │  • Track Status │                          │  • Upload POD   │               │
-│     │                 │                          │                 │               │
-│     └────────┬────────┘                          └────────┬────────┘               │
-│              │                                            │                          │
-│              │ HTTPS + JWT                                │ HTTPS + JWT             │
-│              │                                            │                          │
-│              ▼                                            ▼                          │
-│     ┌───────────────────────────────────────────────────────────────────────────┐   │
-│     │                                                                           │   │
-│     │                                                                           │   │
-│     │                        CARGOBIT PLATFORM                                  │   │
-│     │                                                                           │   │
-│     │    ┌─────────────────────────────────────────────────────────────────┐    │   │
-│     │    │                                                                 │    │   │
-│     │    │   API Gateway → Domain Services → Matching → Execution         │    │   │
-│     │    │                                                                 │    │   │
-│     │    └─────────────────────────────────────────────────────────────────┘    │   │
-│     │                                                                           │   │
-│     └───────────────────────────────────────────────────────────────────────────┘   │
-│              ▲                                            ▲                          │
-│              │                                            │                          │
-│              │ mTLS + Service Auth                        │                          │
-│              │                                            │                          │
-│     ┌────────┴────────┐                          ┌────────┴────────┐               │
-│     │                 │                          │                 │               │
-│     │  DRIVER APP     │                          │   ADMIN PORTAL  │               │
-│     │   (External)    │                          │   (External)    │               │
-│     │                 │                          │                 │               │
-│     │  • Accept Jobs  │                          │  • Config Mgmt  │               │
-│     │  • Update Status│                          │  • User Mgmt    │               │
-│     │  • Upload POD   │                          │  • Audit Review │               │
-│     │                 │                          │                 │               │
-│     └─────────────────┘                          └─────────────────┘               │
-│                                                                                      │
-│                                                                                      │
-│     ┌─────────────────┐                          ┌─────────────────┐               │
-│     │                 │                          │                 │               │
-│     │ PARTNER APIs    │                          │  EXTERNAL AUTH  │               │
-│     │   (External)    │                          │   (External)    │               │
-│     │                 │                          │                 │               │
-│     │  • Insurance    │                          │  • Keycloak     │               │
-│     │  • Advertising  │                          │  • OAuth2       │               │
-│     │                 │                          │                 │               │
-│     └─────────────────┘                          └─────────────────┘               │
-│                                                                                      │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+**CargoBit Transport Platform**  
+**Version:** 1.0  
+**Classification:** Internal – Architecture Team  
+**Last Updated:** 2025-01-15
 
 ---
 
-## L.2 Level-1 DFD (Detailed Data Flow)
+## 1. Overview
 
-### Complete System Data Flow
+This document provides a comprehensive Data Flow Diagram (DFD) for the CargoBit Transport Platform. The DFD visualizes how data moves through the system, identifies trust boundaries, and documents data transformations at each processing step. This analysis supports security reviews, compliance audits, and system documentation.
+
+### DFD Levels
+
+| Level | Scope | Purpose |
+|-------|-------|---------|
+| Level-0 | Context Diagram | System boundary and external entities |
+| Level-1 | Main Processes | Core data flows and transformations |
+| Level-2 | Detailed Processes | Sub-process details where needed |
+
+---
+
+## 2. Level-0: Context Diagram
+
+The Level-0 DFD shows the CargoBit Platform as a single process with its external entities and data flows.
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          LEVEL-1 DATA FLOW DIAGRAM                                   │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  EXTERNAL ENTITIES                                                                   │
-│  ═════════════════                                                                   │
-│                                                                                      │
-│  ┌────────────────────────┐              ┌────────────────────────┐                │
-│  │     SHIPPER / CARRIER  │              │      DRIVER APP        │                │
-│  │         APPS           │              │                        │                │
-│  │                        │              │  • Mobile Client       │                │
-│  │  • Web Client          │              │  • GPS Tracking        │                │
-│  │  • Mobile Client       │              │  • Offline Support     │                │
-│  └───────────┬────────────┘              └───────────┬────────────┘                │
-│              │                                       │                              │
-│              │ HTTPS + JWT (TLS 1.3)                 │ HTTPS + JWT (TLS 1.3)       │
-│              │                                       │                              │
-│              ▼                                       ▼                              │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                          TRUST BOUNDARY 1 (Internet)                          │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                              │
-│                                      ▼                                              │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                                                                               │  │
-│  │  ┌─────────────────────────────────────────────────────────────────────┐     │  │
-│  │  │                        API GATEWAY (P1)                              │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Process:                                                            │     │  │
-│  │  │  • JWT Validation (iss, aud, exp, sub)                              │     │  │
-│  │  │  • Role extraction from token                                        │     │  │
-│  │  │  • Rate Limiting (per user, per IP)                                 │     │  │
-│  │  │  • WAF rule evaluation                                              │     │  │
-│  │  │  • Request/Response logging                                         │     │  │
-│  │  │  • mTLS downstream                                                  │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Data In:                                                           │     │  │
-│  │  │  • HTTP Request (method, path, headers, body)                       │     │  │
-│  │  │  • JWT Token                                                        │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Data Out:                                                          │     │  │
-│  │  │  • Authenticated request to services                                │     │  │
-│  │  │  • Audit event (request logged)                                     │     │  │
-│  │  │                                                                      │     │  │
-│  │  └─────────────────────────────────────────────────────────────────────┘     │  │
-│  │                                                                               │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                              │
-│                                      │ mTLS (Service Mesh)                          │
-│                                      ▼                                              │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                          TRUST BOUNDARY 2 (DMZ)                               │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                              │
-│              ┌───────────────────────┼───────────────────────┐                     │
-│              │                       │                       │                     │
-│              ▼                       ▼                       ▼                     │
-│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐                │
-│  │ ORDER SERVICE   │    │ PRICING SERVICE │    │ BIDDING SERVICE │                │
-│  │     (P2)        │    │     (P3)        │    │     (P4)        │                │
-│  │                 │    │                 │    │                 │                │
-│  │ Process:        │    │ Process:        │    │ Process:        │                │
-│  │ • Create order  │    │ • Calc price    │    │ • Validate bid  │                │
-│  │ • Update status │    │ • Fraud score   │    │ • Check limits  │                │
-│  │ • Store order   │    │ • Audit log     │    │ • Audit log     │                │
-│  │                 │    │                 │    │                 │                │
-│  │ Data In:        │    │ Data In:        │    │ Data In:        │                │
-│  │ • Order details │    │ • Order data    │    │ • Bid data      │                │
-│  │ • User context  │    │ • Carrier score │    │ • Carrier ID    │                │
-│  │                 │    │ • Config vers   │    │ • Fraud config  │                │
-│  │ Data Out:       │    │                 │    │                 │                │
-│  │ • Order event   │    │ Data Out:       │    │ Data Out:       │                │
-│  │ • Audit event   │    │ • Price calc    │    │ • Bid validated │                │
-│  │                 │    │ • Fraud score   │    │ • Fraud check   │                │
-│  └────────┬────────┘    │ • Audit event   │    │ • Audit event   │                │
-│           │             └────────┬────────┘    └────────┬────────┘                │
-│           │                      │                      │                          │
-│           │                      │                      │                          │
-│           ▼                      ▼                      ▼                          │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                                                                               │  │
-│  │                        KAFKA / NATS EVENT BROKER (D1)                        │  │
-│  │                                                                               │  │
-│  │  Topics:                                                                      │  │
-│  │  • order.created        → Order events                                       │  │
-│  │  • pricing.calculated   → Pricing results                                    │  │
-│  │  • bid.validated        → Validated bids                                     │  │
-│  │  • matching.completed   → Match results                                      │  │
-│  │  • execution.status     → Status updates                                     │  │
-│  │  • fraud.detected       → Fraud alerts                                       │  │
-│  │  • audit.events         → Audit trail                                        │  │
-│  │                                                                               │  │
-│  │  Security:                                                                    │  │
-│  │  • ACLs per service                                                          │  │
-│  │  • mTLS for all connections                                                  │  │
-│  │  • Message signing                                                           │  │
-│  │                                                                               │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                              │
-│                                      │ Events (bid.validated)                       │
-│                                      ▼                                              │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                                                                               │  │
-│  │  ┌─────────────────────────────────────────────────────────────────────┐     │  │
-│  │  │                     MATCHING SERVICE (P5)                            │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Process:                                                            │     │  │
-│  │  │  1. Consume bid.validated events                                    │     │  │
-│  │  │  2. Calculate matching score                                        │     │  │
-│  │  │  3. Apply fraud penalty                                             │     │  │
-│  │  │  4. Rank bids by score                                              │     │  │
-│  │  │  5. Select best bid                                                 │     │  │
-│  │  │  6. Emit matching.completed event                                   │     │  │
-│  │  │  7. Write audit log                                                 │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Data In:                                                           │     │  │
-│  │  │  • bid.validated event (carrierId, bidAmount, fraudScore)          │     │  │
-│  │  │  • Fraud config (weights, thresholds)                               │     │  │
-│  │  │  • Carrier score history                                            │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Data Out:                                                          │     │  │
-│  │  │  • matching.completed event                                         │     │  │
-│  │  │    { transportId, carrierId, score, fraudPenaltyApplied }           │     │  │
-│  │  │  • Audit: MATCHING_COMPLETED                                        │     │  │
-│  │  │                                                                      │     │  │
-│  │  └─────────────────────────────────────────────────────────────────────┘     │  │
-│  │                                                                               │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                              │
-│                                      │ matching.completed                           │
-│                                      ▼                                              │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                                                                               │  │
-│  │  ┌─────────────────────────────────────────────────────────────────────┐     │  │
-│  │  │                    EXECUTION SERVICE (P6)                            │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Process:                                                            │     │  │
-│  │  │  1. Consume matching.completed events                               │     │  │
-│  │  │  2. Assign driver to transport                                      │     │  │
-│  │  │  3. Track execution status                                          │     │  │
-│  │  │  4. Handle POD uploads                                              │     │  │
-│  │  │  5. Emit status update events                                       │     │  │
-│  │  │  6. Write audit log                                                 │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Data In:                                                           │     │  │
-│  │  │  • matching.completed event                                         │     │  │
-│  │  │  • Driver location (GPS)                                            │     │  │
-│  │  │  • POD upload (image, signature)                                    │     │  │
-│  │  │                                                                      │     │  │
-│  │  │  Data Out:                                                          │     │  │
-│  │  │  • execution.status.changed event                                   │     │  │
-│  │  │  • Notification to shipper/carrier                                  │     │  │
-│  │  │  • Audit: EXECUTION_STATUS_CHANGED                                  │     │  │
-│  │  │                                                                      │     │  │
-│  │  └─────────────────────────────────────────────────────────────────────┘     │  │
-│  │                                                                               │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                              │
-│                                      │ audit.events                                 │
-│                                      ▼                                              │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                          TRUST BOUNDARY 4 (Data)                              │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                      │                                              │
-│                                      ▼                                              │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │                                                                               │  │
-│  │                         DATA STORES                                           │  │
-│  │                                                                               │  │
-│  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐              │  │
-│  │  │  PostgreSQL     │  │  Elasticsearch  │  │     Redis       │              │  │
-│  │  │  (D2)           │  │  (D3)           │  │     (D4)        │              │  │
-│  │  │                 │  │                 │  │                 │              │  │
-│  │  │  • Orders       │  │  • Audit Logs   │  │  • Cache        │              │  │
-│  │  │  • Bids         │  │  • Search       │  │  • Rate Limits  │              │  │
-│  │  │  • Transports   │  │  • Analytics    │  │  • Sessions     │              │  │
-│  │  │  • Users        │  │  • WORM Storage │  │                 │              │  │
-│  │  │  • Carriers     │  │                 │  │                 │              │  │
-│  │  └─────────────────┘  └─────────────────┘  └─────────────────┘              │  │
-│  │                                                                               │  │
-│  │  ┌─────────────────┐  ┌─────────────────┐                                   │  │
-│  │  │  Security       │  │   S3/MinIO      │                                   │  │
-│  │  │  Config Store   │  │   (D6)          │                                   │  │
-│  │  │  (D5)           │  │                 │                                   │  │
-│  │  │                 │  │  • POD Images   │                                   │  │
-│  │  │  • RBAC Rules   │  │  • Documents    │                                   │  │
-│  │  │  • ABAC Rules   │  │  • Signatures   │                                   │  │
-│  │  │  • Fraud Config │  │                 │                                   │  │
-│  │  │  • Rate Limits  │  │                 │                                   │  │
-│  │  └─────────────────┘  └─────────────────┘                                   │  │
-│  │                                                                               │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│   ┌─────────────┐                                                          │
+│   │   Shipper   │                                                          │
+│   │  (External) │                                                          │
+│   └──────┬──────┘                                                          │
+│          │                                                                  │
+│          │ Orders, Quotes, Tracking                                        │
+│          ▼                                                                  │
+│   ┌──────────────────────────────────────────────────────────────────┐    │
+│   │                                                                  │    │
+│   │                     CARGOBIT TRANSPORT PLATFORM                  │    │
+│   │                           (Process 0)                            │    │
+│   │                                                                  │    │
+│   │  ┌─────────────────────────────────────────────────────────┐   │    │
+│   │  │ • Order Management                                       │   │    │
+│   │  │ • Pricing & Fraud Detection                             │   │    │
+│   │  │ • Carrier Matching                                       │   │    │
+│   │  │ • Execution & Tracking                                   │   │    │
+│   │  │ • Notifications                                          │   │    │
+│   │  └─────────────────────────────────────────────────────────┘   │    │
+│   │                                                                  │    │
+│   └──────────────────────────────┬───────────────────────────────────┘    │
+│                                  │                                          │
+│          ┌───────────────────────┼───────────────────────┐                │
+│          │                       │                       │                 │
+│          ▼                       ▼                       ▼                 │
+│   ┌─────────────┐        ┌─────────────┐        ┌─────────────┐          │
+│   │   Carrier   │        │   Payment   │        │   External  │          │
+│   │  (External) │        │  Provider   │        │    Maps     │          │
+│   └─────────────┘        │  (External) │        │  (External) │          │
+│                          └─────────────┘        └─────────────┘          │
+│                                                                             │
+│   Data Flows:                                                               │
+│   ──────────                                                                │
+│   Shipper → Platform: Orders, Quote Requests, Tracking Queries             │
+│   Platform → Shipper: Quotes, Order Confirmations, Status Updates          │
+│   Carrier → Platform: Bids, Availability, Location Updates                 │
+│   Platform → Carrier: Match Requests, Shipment Details, Payments           │
+│   Platform → Payment: Payment Requests, Refunds                            │
+│   Payment → Platform: Payment Confirmations, Failures                      │
+│   Platform → Maps: Geocoding, Route Optimization                           │
+│   Maps → Platform: Coordinates, Distance, ETA                              │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+### External Entities
+
+| Entity | Type | Description | Trust Level |
+|--------|------|-------------|-------------|
+| Shipper | Human/User | Business customers creating shipments | Untrusted (Authenticated) |
+| Carrier | Human/User | Transportation providers accepting loads | Untrusted (Authenticated) |
+| Payment Provider | System | External payment processing (Stripe, etc.) | Trusted (mTLS) |
+| Maps Service | System | External geocoding and routing (Google Maps, etc.) | Trusted (API Key) |
+| Admin User | Human | Platform administrators | Trusted (MFA, Privileged) |
+
+---
+
+## 3. Level-1: Main Data Flow Diagram
+
+The Level-1 DFD breaks down the platform into its core processes and shows data flow between them.
+
+```
+                                    EXTERNAL ENTITIES
+                                    ─────────────────
+    
+    ┌──────────┐                                      ┌──────────┐
+    │ Shipper  │                                      │ Carrier  │
+    │  (E1)    │                                      │  (E2)    │
+    └────┬─────┘                                      └────┬─────┘
+         │                                                  │
+         │ 1. Create Order                                  │ 14. Submit Bid
+         │ 2. Request Quote                                 │ 15. Update Location
+         │ 3. Track Shipment                                │ 16. Confirm Pickup/Delivery
+         │                                                  │
+         ▼                                                  ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │                         TRUST BOUNDARY 1                            │
+    │                        (Internet / WAF / DDoS)                      │
+    └──────────────────────────────┬──────────────────────────────────────┘
+                                   │
+                                   ▼
+    ┌─────────────────────────────────────────────────────────────────────┐
+    │                                                                     │
+    │   ┌─────────────────────────────────────────────────────────────┐  │
+    │   │                    API GATEWAY (P1)                         │  │
+    │   │                                                             │  │
+    │   │  • JWT Validation      • Rate Limiting                     │  │
+    │   │  • RBAC Authorization  • Request Routing                    │  │
+    │   │  • Input Validation    • Audit Logging                      │  │
+    │   └──────────────────────────┬──────────────────────────────────┘  │
+    │                              │                                     │
+    │         ┌────────────────────┼────────────────────┐                │
+    │         │                    │                    │                │
+    │         ▼                    ▼                    ▼                │
+    │   ┌───────────┐       ┌───────────┐       ┌───────────┐          │
+    │   │   Auth    │       │ Security  │       │  Audit    │          │
+    │   │  Service  │       │  Config   │       │   Log     │          │
+    │   │  (P2)     │       │ Service   │       │  Store    │          │
+    │   └───────────┘       │  (P3)     │       │  (D8)     │          │
+    │         │             └───────────┘       └───────────┘          │
+    │         │                   │                   ▲                 │
+    │         │ 4. Validate       │ 5. Get Config     │ 17. Log Events  │
+    │         │    Token          │    Rules          │                 │
+    │         │                   │                   │                 │
+    │   ┌─────────────────────────────────────────────────────────────┐ │
+    │   │              TRUST BOUNDARY 2                               │ │
+    │   │         (Service Mesh / mTLS / NetworkPolicies)             │ │
+    │   └──────────────────────────┬──────────────────────────────────┘ │
+    │                              │                                    │
+    │         ┌────────────────────┼────────────────────┐               │
+    │         │                    │                    │               │
+    │         ▼                    ▼                    ▼               │
+    │   ┌───────────┐       ┌───────────┐       ┌───────────┐         │
+    │   │  Order    │       │  Pricing  │       │   Risk    │         │
+    │   │  Service  │       │  Service  │       │  Service  │         │
+    │   │  (P4)     │       │  (P5)     │       │  (P6)     │         │
+    │   └─────┬─────┘       └─────┬─────┘       └───────────┘         │
+    │         │                   │                                    │
+    │         │ 6. Create         │ 7. Calculate Price                 │
+    │         │    Order          │    + Fraud Score                   │
+    │         │                   │                                    │
+    │         │             ┌─────┴─────┐                              │
+    │         │             │           │                              │
+    │         │             ▼           ▼                              │
+    │         │      ┌───────────────────────┐                         │
+    │         │      │       Kafka (D1)      │                         │
+    │         │      │   Event Streaming     │                         │
+    │         │      └───────────┬───────────┘                         │
+    │         │                  │                                     │
+    │         │         8. Order │Created Event                        │
+    │         │                  │                                     │
+    │         │                  ▼                                     │
+    │         │          ┌───────────┐                                 │
+    │         │          │ Matching  │                                 │
+    │         │          │ Service   │                                 │
+    │         │          │  (P7)     │                                 │
+    │         │          └─────┬─────┘                                 │
+    │         │                │                                       │
+    │         │       9. Match │Created Event                          │
+    │         │                │                                       │
+    │         │                ▼                                       │
+    │         │         ┌───────────┐                                  │
+    │         │         │ Execution │                                  │
+    │         │         │ Service   │                                  │
+    │         │         │  (P8)     │                                  │
+    │         │         └─────┬─────┘                                  │
+    │         │               │                                        │
+    │         │      10. Status│Update Event                           │
+    │         │               │                                        │
+    │         │               ▼                                        │
+    │         │        ┌───────────┐                                   │
+    │         │        │Notification│                                  │
+    │         │        │ Service   │                                  │
+    │         │        │  (P9)     │                                  │
+    │         │        └───────────┘                                   │
+    │         │                                                        │
+    │         └────────────────────────────────────────────────────────┤
+    │                                                                  │
+    │                    DATA STORES                                   │
+    │                    ────────────                                  │
+    │                                                                  │
+    │   ┌─────┐   ┌─────┐   ┌─────┐   ┌─────┐   ┌─────┐   ┌─────┐   │
+    │   │ D2  │   │ D3  │   │ D4  │   │ D5  │   │ D6  │   │ D7  │   │
+    │   │Order│   │Price│   │Bid  │   │Match│   │Exec │   │Risk │   │
+    │   │ DB  │   │ DB  │   │ DB  │   │ DB  │   │ DB  │   │ DB  │   │
+    │   └─────┘   └─────┘   └─────┘   └─────┘   └─────┘   └─────┘   │
+    │                                                                  │
+    └─────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## L.3 Data Flow Details by Process
+## 4. Process Descriptions
 
-### P1: API Gateway Processing
+### P1: API Gateway
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          P1: API GATEWAY DATA FLOW                                   │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │                                                                               │   │
-│  │   External Request                                                           │   │
-│  │   ────────────────                                                           │   │
-│  │   POST /api/bids/validate                                                   │   │
-│  │   Headers:                                                                   │   │
-│  │     Authorization: Bearer eyJhbGciOiJSUzI1NiIs...                           │   │
-│  │     X-Request-ID: req-abc-123                                               │   │
-│  │     Content-Type: application/json                                          │   │
-│  │   Body:                                                                      │   │
-│  │     { "transportId": "tr_123", "amount": 1500, "carrierId": "c_456" }      │   │
-│  │                                                                               │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   ┌──────────────────────────────────────────────────────────────────────┐  │   │
-│  │   │                     PROCESSING STEPS                                  │  │   │
-│  │   └──────────────────────────────────────────────────────────────────────┘  │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 1: TLS Termination                                                   │   │
-│  │   ─────────────────────────                                                 │   │
-│  │   • Verify TLS 1.3 connection                                               │   │
-│  │   • Check certificate validity                                              │   │
-│  │   • Extract client IP for logging                                          │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 2: Rate Limiting                                                     │   │
-│  │   ─────────────────────                                                     │   │
-│  │   • Check Redis: rate_limit:user:u_123                                     │   │
-│  │   • Increment counter                                                       │   │
-│  │   • If exceeded: Return 429 Too Many Requests                              │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 3: JWT Validation                                                    │   │
-│  │   ──────────────────────                                                    │   │
-│  │   • Extract token from Authorization header                                 │   │
-│  │   • Verify signature with JWKS public key                                  │   │
-│  │   • Validate claims:                                                        │   │
-│  │     - iss: https://auth.cargobit.com ✓                                     │   │
-│  │     - aud: cargobit-api ✓                                                  │   │
-│  │     - exp: > now() ✓                                                       │   │
-│  │     - iat: <= now() ✓                                                      │   │
-│  │   • Extract: sub="u_123", role="DISPATCHER", companyId="c_456"            │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 4: Authorization Check                                               │   │
-│  │   ───────────────────────────                                               │   │
-│  │   • Route: /api/bids/* → allowed roles: [DISPATCHER]                       │   │
-│  │   • User role: DISPATCHER ✓                                                │   │
-│  │   • If denied: Return 403 Forbidden                                        │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 5: WAF Inspection                                                    │   │
-│  │   ──────────────────────                                                    │   │
-│  │   • Check for SQL injection patterns                                       │   │
-│  │   • Check for XSS patterns                                                 │   │
-│  │   • Validate request size                                                  │   │
-│  │   • If threat detected: Return 403 + Log security event                    │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 6: Forward to Service                                                │   │
-│  │   ───────────────────────────                                               │   │
-│  │   • mTLS connection to bidding-service.domain.svc:8080                     │   │
-│  │   • Headers added:                                                          │   │
-│  │     X-User-ID: u_123                                                       │   │
-│  │     X-User-Role: DISPATCHER                                                │   │
-│  │     X-Company-ID: c_456                                                    │   │
-│  │     X-Request-ID: req-abc-123                                              │   │
-│  │                                                                               │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                      │
-│  Data Stores Accessed:                                                              │
-│  • Redis (D4) - Rate limit counters                                                 │
-│  • JWKS Cache - Public keys for JWT validation                                      │
-│                                                                                      │
-│  Audit Log Written:                                                                 │
-│  • Timestamp, Request-ID, Method, Path, User-ID, IP, Result                         │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+**Purpose:** Single entry point for all external API requests, providing authentication, authorization, and routing.
 
-### P3: Pricing Service Data Flow
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P1.1 | Receive Request | HTTP Request | Validated Request | TLS, WAF |
+| P1.2 | JWT Validation | JWT Token | User Context | Signature verification, expiration check |
+| P1.3 | RBAC Check | User Context, Endpoint | Access Decision | Role-based authorization |
+| P1.4 | Rate Limiting | Client ID, Request | Allow/Deny | Token bucket algorithm |
+| P1.5 | Request Routing | Validated Request | Service Request | Service mesh routing |
+| P1.6 | Audit Logging | Request Context | Audit Entry | WORM storage, correlation ID |
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          P3: PRICING SERVICE DATA FLOW                               │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │                                                                               │   │
-│  │   Input Event: order.created                                                 │   │
-│  │   ────────────────────────────                                               │   │
-│  │   {                                                                          │   │
-│  │     "eventId": "evt-123",                                                   │   │
-│  │     "eventType": "order.created",                                           │   │
-│  │     "timestamp": "2026-04-18T10:30:00Z",                                    │   │
-│  │     "data": {                                                                │   │
-│  │       "orderId": "ord_789",                                                 │   │
-│  │       "shipperId": "s_001",                                                 │   │
-│  │       "route": { "from": "Berlin", "to": "Munich" },                        │   │
-│  │       "cargo": { "weight": 5000, "type": "general" },                       │   │
-│  │       "requirements": { "hazmat": false, "temperature": null }              │   │
-│  │     }                                                                        │   │
-│  │   }                                                                          │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   ┌──────────────────────────────────────────────────────────────────────┐  │   │
-│  │   │                     PROCESSING STEPS                                  │  │   │
-│  │   └──────────────────────────────────────────────────────────────────────┘  │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 1: Load Security Config                                              │   │
-│  │   ─────────────────────────────                                             │   │
-│  │   • Check local cache for config version                                    │   │
-│  │   • If stale: Fetch from Security-Config-Service                           │   │
-│  │   • Current config: v2026-04-18-01                                         │   │
-│  │   • Contains: fraud weights, thresholds, rate limits                       │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 2: Calculate Base Price                                              │   │
-│  │   ────────────────────────────                                              │   │
-│  │   • Distance: Berlin → Munich = 585 km                                     │   │
-│  │   • Base rate: €1.50/km                                                    │   │
-│  │   • Weight factor: 5000kg = 1.2x                                           │   │
-│  │   • Base price: 585 × 1.50 × 1.2 = €1053                                   │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 3: Fraud Score Calculation                                           │   │
-│  │   ─────────────────────────────                                             │   │
-│  │   • Load carrier risk score from Risk Service                              │   │
-│  │   • Calculate transaction risk:                                             │   │
-│  │     - Amount: €1053 (medium) → +5                                          │   │
-│  │     - Route: domestic → +0                                                 │   │
-│  │     - Cargo type: general → +0                                             │   │
-│  │   • Combined score: User(15) × 0.4 + Company(10) × 0.3 + TX(5) × 0.3       │   │
-│  │   • Result: 6 + 3 + 1.5 = 10.5 → GREEN                                     │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 4: Store Price Calculation                                           │   │
-│  │   ─────────────────────────────                                             │   │
-│  │   • Insert into pricing_calculations table                                  │   │
-│  │   • Store: orderId, basePrice, fraudScore, configVersion                   │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 5: Emit pricing.calculated Event                                     │   │
-│  │   ─────────────────────────────────────                                     │   │
-│  │   {                                                                          │   │
-│  │     "eventId": "evt-124",                                                   │   │
-│  │     "eventType": "pricing.calculated",                                      │   │
-│  │     "timestamp": "2026-04-18T10:30:01Z",                                    │   │
-│  │     "data": {                                                                │   │
-│  │       "orderId": "ord_789",                                                 │   │
-│  │       "basePrice": 1053,                                                    │   │
-│  │       "fraudScore": 10.5,                                                   │   │
-│  │       "fraudLevel": "GREEN",                                                │   │
-│  │       "configVersion": "v2026-04-18-01"                                    │   │
-│  │     }                                                                        │   │
-│  │   }                                                                          │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 6: Write Audit Log                                                   │   │
-│  │   ─────────────────────────                                                 │   │
-│  │   • Event: PRICING_CALCULATED                                              │   │
-│  │   • Fields: orderId, price, fraudScore, configVersion, timestamp           │   │
-│  │                                                                               │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                      │
-│  Data Stores Accessed:                                                              │
-│  • PostgreSQL (D2) - Pricing calculations                                           │
-│  • Security Config Cache - Fraud config                                             │
-│  • Kafka (D1) - Events in/out                                                       │
-│  • Elasticsearch (D3) - Audit logs                                                  │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+### P2: Auth Service
+
+**Purpose:** Identity management, token issuance, and session handling.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P2.1 | Authenticate | Credentials | Auth Result | MFA, brute force protection |
+| P2.2 | Issue Token | User Identity | JWT Token | RS256 signing, short expiry |
+| P2.3 | Refresh Token | Refresh Token | New Access Token | Token rotation, binding |
+| P2.4 | Logout | Token ID | Token Blacklisted | Redis blacklist |
+
+### P3: Security Config Service
+
+**Purpose:** Centralized security configuration management.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P3.1 | Get Config | Config Key | Config Value | mTLS, caching |
+| P3.2 | Update Config | Config Change | Updated Config | 4-eyes approval, signing |
+| P3.3 | Validate Config | Config Data | Validation Result | Schema validation |
+
+### P4: Order Service
+
+**Purpose:** Order lifecycle management.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P4.1 | Create Order | Order Data | Order ID | Input validation, tenant isolation |
+| P4.2 | Validate Order | Order Data | Validation Result | Schema validation, business rules |
+| P4.3 | Publish Event | Order Created | Kafka Event | Event signing |
+| P4.4 | Update Status | Status Change | Updated Order | State machine validation |
+
+### P5: Pricing Service
+
+**Purpose:** Dynamic pricing calculation and fraud detection.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P5.1 | Calculate Price | Order Details | Price Quote | Server-side calculation |
+| P5.2 | Apply Discounts | Quote, Rules | Final Price | Rule validation |
+| P5.3 | Fraud Score | Order Context | Fraud Score | ML model, thresholds |
+| P5.4 | Risk Alert | High Score | Alert Event | Threshold-based alerts |
+
+### P6: Risk Service
+
+**Purpose:** Risk assessment and mitigation for orders and carriers.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P6.1 | Assess Risk | Order/Carrier Data | Risk Score | ML model |
+| P6.2 | Flag Suspicious | Risk Score | Flag Event | Threshold-based |
+| P6.3 | Generate Report | Risk Data | Risk Report | Data aggregation |
+
+### P7: Matching Service
+
+**Purpose:** Match shipments with available carriers.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P7.1 | Find Carriers | Order, Location | Carrier List | Geographic query |
+| P7.2 | Score Matches | Carriers, Order | Ranked List | Scoring algorithm |
+| P7.3 | Send Match Request | Carrier, Order | Match Request | Rate limiting |
+| P7.4 | Confirm Match | Carrier Response | Match Confirmed | Idempotency check |
+
+### P8: Execution Service
+
+**Purpose:** Track and manage shipment execution.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P8.1 | Track Shipment | Location Update | Tracking Record | Carrier verification |
+| P8.2 | Update Status | Status Event | Updated Execution | State validation |
+| P8.3 | Handle Exception | Exception Event | Resolution Action | Escalation rules |
+| P8.4 | Complete Shipment | Delivery Confirmation | Final Status | POD verification |
+
+### P9: Notification Service
+
+**Purpose:** Send notifications to users and external systems.
+
+| ID | Process Step | Input | Output | Security Controls |
+|----|--------------|-------|--------|-------------------|
+| P9.1 | Queue Notification | Event | Notification Task | Priority queuing |
+| P9.2 | Send Email | Email Data | Email Sent | Template validation |
+| P9.3 | Send SMS | SMS Data | SMS Sent | Rate limiting |
+| P9.4 | Send Push | Push Data | Push Sent | Device verification |
+
+---
+
+## 5. Data Store Descriptions
+
+### D1: Kafka (Event Streaming)
+
+| Attribute | Value |
+|-----------|-------|
+| Type | Message Broker |
+| Technology | Apache Kafka |
+| Data Classification | Internal |
+| Retention | 7 days (default), 30 days (audit topics) |
+| Encryption | At rest (AES-256), In transit (TLS) |
+| Access Control | ACLs per service, Schema Registry |
+
+**Topics:**
+| Topic | Producer | Consumer | Purpose |
+|-------|----------|----------|---------|
+| `orders.created` | Order Service | Pricing, Matching | New order events |
+| `orders.updated` | Order Service | Notification, Execution | Order status changes |
+| `pricing.calculated` | Pricing Service | Order, Risk | Price quotes |
+| `matches.created` | Matching Service | Execution, Carrier | Match events |
+| `execution.updated` | Execution Service | Notification, Order | Tracking updates |
+| `audit.events` | All Services | Audit Log Store | Compliance audit trail |
+
+### D2: Order Database
+
+| Attribute | Value |
+|-----------|-------|
+| Type | Relational Database |
+| Technology | PostgreSQL |
+| Data Classification | Confidential |
+| Encryption | At rest (AES-256), In transit (TLS) |
+| Access Control | Service account, Row-level security |
+| Backup | Daily, 30-day retention |
+
+**Schema (Simplified):**
+```sql
+CREATE TABLE orders (
+    id UUID PRIMARY KEY,
+    shipper_id UUID NOT NULL,
+    status VARCHAR(50) NOT NULL,
+    origin JSONB NOT NULL,
+    destination JSONB NOT NULL,
+    price DECIMAL(10,2),
+    fraud_score DECIMAL(3,2),
+    created_at TIMESTAMP NOT NULL,
+    updated_at TIMESTAMP NOT NULL
+);
 ```
 
-### P5: Matching Service Data Flow
+### D3: Pricing Database
 
+| Attribute | Value |
+|-----------|-------|
+| Type | Relational Database |
+| Technology | PostgreSQL |
+| Data Classification | Confidential |
+| Encryption | At rest (AES-256), In transit (TLS) |
+| Access Control | Service account only |
+
+**Key Tables:**
+- `price_quotes` - Quote history and calculations
+- `pricing_rules` - Dynamic pricing configuration
+- `discount_codes` - Valid discount codes and usage
+
+### D4: Bidding Database
+
+| Attribute | Value |
+|-----------|-------|
+| Type | Relational Database |
+| Technology | PostgreSQL |
+| Data Classification | Confidential |
+| Encryption | At rest (AES-256), In transit (TLS) |
+
+**Key Tables:**
+- `bids` - Carrier bid submissions
+- `bid_history` - Historical bid data for analytics
+- `carrier_preferences` - Carrier matching preferences
+
+### D5: Matching Database
+
+| Attribute | Value |
+|-----------|-------|
+| Type | Relational Database |
+| Technology | PostgreSQL |
+| Data Classification | Confidential |
+| Encryption | At rest (AES-256), In transit (TLS) |
+
+**Key Tables:**
+- `matches` - Confirmed matches
+- `match_scores` - Scoring history
+- `carrier_availability` - Real-time availability
+
+### D6: Execution Database
+
+| Attribute | Value |
+|-----------|-------|
+| Type | Relational Database |
+| Technology | PostgreSQL |
+| Data Classification | Confidential |
+| Encryption | At rest (AES-256), In transit (TLS) |
+
+**Key Tables:**
+- `executions` - Shipment execution records
+- `tracking_events` - Location and status history
+- `proof_of_delivery` - POD documents
+
+### D7: Risk Database
+
+| Attribute | Value |
+|-----------|-------|
+| Type | Relational Database |
+| Technology | PostgreSQL |
+| Data Classification | Confidential |
+| Encryption | At rest (AES-256), In transit (TLS) |
+
+**Key Tables:**
+- `risk_assessments` - Risk score history
+- `flagged_entities` - Flagged shippers/carriers
+- `fraud_patterns` - Known fraud patterns
+
+### D8: Audit Log Store
+
+| Attribute | Value |
+|-----------|-------|
+| Type | Object Storage |
+| Technology | S3 with Object Lock |
+| Data Classification | Critical / Compliance |
+| Retention | 7 years (compliance requirement) |
+| Encryption | At rest (KMS), In transit (TLS) |
+| Immutability | WORM (Write Once Read Many) |
+
+**Structure:**
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          P5: MATCHING SERVICE DATA FLOW                              │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌──────────────────────────────────────────────────────────────────────────────┐   │
-│  │                                                                               │   │
-│  │   Input: Multiple bid.validated Events                                       │   │
-│  │   ─────────────────────────────────────                                       │   │
-│  │   Event 1: { carrierId: "c_001", bid: 980, fraudScore: 12 }                 │   │
-│  │   Event 2: { carrierId: "c_002", bid: 1050, fraudScore: 25 }                │   │
-│  │   Event 3: { carrierId: "c_003", bid: 950, fraudScore: 45 }                 │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   ┌──────────────────────────────────────────────────────────────────────┐  │   │
-│  │   │                     MATCHING ALGORITHM                                │  │   │
-│  │   └──────────────────────────────────────────────────────────────────────┘  │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 1: Load Fraud Config                                                  │   │
-│  │   ─────────────────────────────                                              │   │
-│  │   • Weights: carrierScore=0.6, bidScore=0.4                                 │   │
-│  │   • Penalty factor: 0.5 for fraudScore > 30                                 │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 2: Calculate Matching Score for Each Bid                              │   │
-│  │   ─────────────────────────────────────────────                              │   │
-│  │                                                                               │   │
-│  │   Carrier c_001:                                                             │   │
-│  │   • Bid price: 980 (best price)                                             │   │
-│  │   • Fraud score: 12 (GREEN)                                                 │   │
-│  │   • Carrier rating: 4.8/5                                                   │   │
-│  │   • Matching score: 0.6 × (1 - 12/100) + 0.4 × priceScore = 0.53 + 0.4      │   │
-│  │   • Final: 0.93 (no penalty)                                                │   │
-│  │                                                                               │   │
-│  │   Carrier c_002:                                                             │   │
-│  │   • Bid price: 1050                                                         │   │
-│  │   • Fraud score: 25 (GREEN/YELLOW boundary)                                 │   │
-│  │   • Carrier rating: 4.5/5                                                   │   │
-│  │   • Matching score: 0.6 × (1 - 25/100) + 0.3 × priceScore = 0.45 + 0.3      │   │
-│  │   • Final: 0.75                                                              │   │
-│  │                                                                               │   │
-│  │   Carrier c_003:                                                             │   │
-│  │   • Bid price: 950 (lowest)                                                 │   │
-│  │   • Fraud score: 45 (YELLOW)                                                │   │
-│  │   • Carrier rating: 3.9/5                                                   │   │
-│  │   • Base matching score: 0.6 × (1 - 45/100) + 0.4 × priceScore              │   │
-│  │   • Fraud penalty applied: score × 0.5                                      │   │
-│  │   • Final: 0.33 (penalized)                                                 │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 3: Rank and Select                                                    │   │
-│  │   ────────────────────────                                                   │   │
-│  │   1. c_001: 0.93 ✓ SELECTED                                                 │   │
-│  │   2. c_002: 0.75                                                            │   │
-│  │   3. c_003: 0.33 (fraud penalty)                                            │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 4: Emit matching.completed Event                                      │   │
-│  │   ──────────────────────────────────────                                     │   │
-│  │   {                                                                          │   │
-│  │     "eventId": "evt-125",                                                   │   │
-│  │     "eventType": "matching.completed",                                       │   │
-│  │     "timestamp": "2026-04-18T10:31:00Z",                                    │   │
-│  │     "data": {                                                                │   │
-│  │       "orderId": "ord_789",                                                 │   │
-│  │       "selectedCarrierId": "c_001",                                         │   │
-│  │       "winningBid": 980,                                                     │   │
-│  │       "matchingScore": 0.93,                                                 │   │
-│  │       "fraudPenaltyApplied": [],                                            │   │
-│  │       "allBids": [                                                           │   │
-│  │         { "carrierId": "c_001", "score": 0.93, "status": "SELECTED" },      │   │
-│  │         { "carrierId": "c_002", "score": 0.75, "status": "REJECTED" },      │   │
-│  │         { "carrierId": "c_003", "score": 0.33, "status": "REJECTED",        │   │
-│  │           "penaltyReason": "FRAUD_PENALTY" }                                 │   │
-│  │       ],                                                                     │   │
-│  │       "configVersion": "v2026-04-18-01"                                     │   │
-│  │     }                                                                        │   │
-│  │   }                                                                          │   │
-│  │                            │                                                 │   │
-│  │                            ▼                                                 │   │
-│  │                                                                               │   │
-│  │   Step 5: Write Audit Log                                                    │   │
-│  │   ────────────────────────                                                   │   │
-│  │   • Event: MATCHING_COMPLETED                                               │   │
-│  │   • Full bid ranking stored                                                 │   │
-│  │   • Fraud penalties documented                                               │   │
-│  │                                                                               │   │
-│  └──────────────────────────────────────────────────────────────────────────────┘   │
-│                                                                                      │
-│  Data Stores Accessed:                                                              │
-│  • PostgreSQL (D2) - Matching results                                               │
-│  • Kafka (D1) - Events in/out                                                       │
-│  • Elasticsearch (D3) - Audit logs                                                  │
-│  • Security Config Cache - Fraud config                                             │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+s3://audit-logs/
+├── year=2025/
+│   ├── month=01/
+│   │   ├── day=15/
+│   │   │   ├── api-gateway-20250115.jsonl.gz
+│   │   │   ├── order-service-20250115.jsonl.gz
+│   │   │   └── ...
 ```
 
 ---
 
-## L.4 Data Stores Summary
+## 6. Trust Boundaries
+
+### Trust Boundary 1: External Network
+
+**Location:** Between external entities and API Gateway
+
+| Control | Implementation |
+|---------|----------------|
+| Encryption | TLS 1.2+ mandatory |
+| DDoS Protection | Cloudflare / WAF |
+| Authentication | JWT required for all endpoints |
+| Rate Limiting | Per IP and per user |
+| Input Validation | WAF rules, schema validation |
+
+### Trust Boundary 2: Service Mesh
+
+**Location:** Between services within the cluster
+
+| Control | Implementation |
+|---------|----------------|
+| Encryption | mTLS (Istio / Linkerd) |
+| Authentication | Service identity (SPIFFE) |
+| Authorization | NetworkPolicies, Service RBAC |
+| Observability | Distributed tracing, metrics |
+
+### Trust Boundary 3: Data Layer
+
+**Location:** Between services and databases
+
+| Control | Implementation |
+|---------|----------------|
+| Encryption | TLS to database, encryption at rest |
+| Authentication | Service accounts, certificate auth |
+| Authorization | Least privilege, schema separation |
+| Auditing | Query logging, data access audit |
+
+---
+
+## 7. Data Flow Details
+
+### Flow 1: Order Creation
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          DATA STORES SUMMARY                                         │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ D1: KAFKA / NATS EVENT BROKER                                                 │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Type: Event Stream                                                            │  │
-│  │ Topics: order.created, pricing.calculated, bid.validated, matching.completed │  │
-│  │ Retention: 7 days (events), 30 days (audit)                                   │  │
-│  │ Security: ACLs, mTLS, Message Signing                                         │  │
-│  │ Access: All domain services (read/write per ACL)                              │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ D2: POSTGRESQL (PRIMARY DATABASE)                                             │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Type: Relational Database                                                     │  │
-│  │ Schema: Orders, Bids, Transports, Users, Companies, Carriers, Vehicles       │  │
-│  │ Retention: Indefinite (with archival)                                         │  │
-│  │ Security: TLS, Row-Level Security, Encryption at Rest                         │  │
-│  │ Access: Domain services via connection pool                                   │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ D3: ELASTICSEARCH (AUDIT LOG STORE)                                           │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Type: Search Engine + Log Store                                               │  │
-│  │ Indices: audit-events-*, security-events-*, analytics-*                      │  │
-│  │ Retention: 5 years (audit), 2 years (analytics)                               │  │
-│  │ Security: WORM mode, Hash chain, RBAC                                         │  │
-│  │ Access: Audit service (write), Admin/Compliance (read)                        │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ D4: REDIS (CACHE & RATE LIMITS)                                               │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Type: In-Memory Cache                                                         │  │
-│  │ Keys: rate_limit:*, session:*, cache:*, config:*                             │  │
-│  │ Retention: Varies (seconds to hours)                                          │  │
-│  │ Security: TLS, AUTH, ACL                                                      │  │
-│  │ Access: API Gateway (rate limits), Services (cache)                           │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ D5: SECURITY CONFIG STORE (Git/S3)                                            │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Type: Versioned Configuration                                                 │  │
-│  │ Content: RBAC rules, ABAC policies, Fraud config, Rate limits                │  │
-│  │ Retention: Indefinite (versioned)                                             │  │
-│  │ Security: Signed commits, 4-eyes approval, Audit trail                        │  │
-│  │ Access: Security-Config-Service (read), Admin UI (write with approval)        │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ D6: S3 / MINIO (DOCUMENT STORAGE)                                             │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Type: Object Storage                                                          │  │
-│  │ Content: POD images, Signatures, KYC documents, Vehicle documents            │  │
-│  │ Retention: 7 years (legal documents), 1 year (POD images)                     │  │
-│  │ Security: Encryption at rest, Presigned URLs, Access logging                 │  │
-│  │ Access: Execution Service (write), Admin/Compliance (read)                    │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
+Shipper → API Gateway → Order Service → Pricing Service → Kafka → Matching Service
+
+1. Shipper sends POST /api/v1/orders
+   - Data: {origin, destination, cargo_details}
+   - Headers: Authorization: Bearer <JWT>
+   
+2. API Gateway validates:
+   - JWT signature and expiration
+   - User has "shipper" role
+   - Rate limit not exceeded
+   - Request size within limits
+   
+3. Order Service creates order:
+   - Validates input schema
+   - Creates order with status "pending"
+   - Stores in Order DB (D2)
+   - Publishes "orders.created" event to Kafka
+   
+4. Pricing Service calculates:
+   - Consumes "orders.created" event
+   - Calculates base price
+   - Applies dynamic pricing rules
+   - Calculates fraud score
+   - Publishes "pricing.calculated" event
+   
+5. Matching Service initiates:
+   - Consumes "pricing.calculated" event
+   - Queries available carriers
+   - Scores and ranks carriers
+   - Sends match requests
+```
+
+### Flow 2: Carrier Matching
+
+```
+Carrier → API Gateway → Matching Service → Execution Service → Notification Service
+
+1. Carrier sends GET /api/v1/matches/available
+   - Headers: Authorization: Bearer <JWT>
+   
+2. API Gateway validates:
+   - Carrier authentication
+   - "carrier" role present
+   
+3. Matching Service returns available matches:
+   - Queries matches near carrier location
+   - Filters by carrier preferences
+   - Returns ranked list
+   
+4. Carrier accepts match:
+   - POST /api/v1/matches/{id}/accept
+   - Matching Service updates status
+   - Publishes "matches.created" event
+   
+5. Execution Service:
+   - Creates execution record
+   - Initializes tracking
+   - Publishes "execution.updated" event
+   
+6. Notification Service:
+   - Notifies shipper of match
+   - Sends carrier contact details
+```
+
+### Flow 3: Shipment Tracking
+
+```
+Carrier → API Gateway → Execution Service → Kafka → Notification Service → Shipper
+
+1. Carrier sends location update:
+   - POST /api/v1/tracking/location
+   - Data: {latitude, longitude, timestamp}
+   
+2. API Gateway validates:
+   - Carrier authentication
+   - Location data validity
+   - Rate limit (10 updates/min)
+   
+3. Execution Service:
+   - Validates against route
+   - Stores tracking event (D6)
+   - Publishes "execution.updated" event
+   
+4. Notification Service:
+   - Determines notification rules
+   - Sends push notification to shipper
+   - Updates real-time dashboard
 ```
 
 ---
 
-## L.5 Trust Boundary Crossing Summary
+## 8. Security Annotations
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────────┐
-│                          TRUST BOUNDARY CROSSINGS                                    │
-├─────────────────────────────────────────────────────────────────────────────────────┤
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ BOUNDARY 1: INTERNET → API GATEWAY                                            │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Data Crossing: HTTP Requests, JWT Tokens                                      │  │
-│  │ Protection: TLS 1.3, WAF, DDoS Protection, Rate Limiting                      │  │
-│  │ Validation: JWT signature, Claims, Token revocation check                     │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ BOUNDARY 2: API GATEWAY → DOMAIN SERVICES                                     │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Data Crossing: Internal HTTP, Service JWTs                                    │  │
-│  │ Protection: mTLS, NetworkPolicies, Service Mesh                               │  │
-│  │ Validation: Service identity, Request signing                                 │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ BOUNDARY 3: DOMAIN SERVICES → CORE SERVICES                                   │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Data Crossing: Config requests, Auth tokens                                   │  │
-│  │ Protection: mTLS, Service JWT, RBAC                                           │  │
-│  │ Validation: Service permissions, Rate limits                                  │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-│  ┌───────────────────────────────────────────────────────────────────────────────┐  │
-│  │ BOUNDARY 4: SERVICES → DATA STORES                                            │  │
-│  ├───────────────────────────────────────────────────────────────────────────────┤  │
-│  │ Data Crossing: SQL queries, Events, Documents                                 │  │
-│  │ Protection: TLS, Encryption at Rest, Private Network                          │  │
-│  │ Validation: Connection auth, Query logging, Access control                    │  │
-│  └───────────────────────────────────────────────────────────────────────────────┘  │
-│                                                                                      │
-└─────────────────────────────────────────────────────────────────────────────────────┘
-```
+### Sensitive Data in Transit
+
+| Data Type | Flow | Protection |
+|-----------|------|------------|
+| Credentials | Shipper → Gateway | TLS, MFA |
+| JWT Tokens | All flows | Short-lived, RS256 |
+| Payment Data | Platform → Payment Provider | PCI-DSS compliant |
+| PII | All internal flows | Encrypted, minimal logging |
+| Location Data | Carrier → Execution | TLS, pseudonymization option |
+
+### Data Transformation Points
+
+| Point | Input | Output | Transformation |
+|-------|-------|--------|----------------|
+| API Gateway | Raw request | Sanitized request | Header stripping, input sanitization |
+| Pricing Service | Order details | Price + Fraud Score | ML inference, rule application |
+| Matching Service | Order + Carriers | Ranked matches | Scoring algorithm |
+| Audit Log Store | Events | Compressed logs | PII scrubbing, compression |
 
 ---
 
-**Document Status:** ✅ Production-Ready  
-**Next Review:** 2026-07-18  
-**Approval:** Security Architecture Team
+## 9. Compliance Mapping
+
+### ISO 27001
+
+| Control | DFD Coverage |
+|---------|--------------|
+| A.8.2.1 (Classification) | Data stores labeled with classification |
+| A.9.4.1 (Access Restriction) | Trust boundaries with access controls |
+| A.10.1.1 (Encryption) | TLS/mTLS on all data flows |
+| A.12.4.1 (Event Logging) | All events flow to Audit Log Store |
+| A.13.1.1 (Network Controls) | Trust boundaries documented |
+
+### SOC2
+
+| Trust Service Criteria | DFD Coverage |
+|------------------------|--------------|
+| CC6.1 (Logical Access) | Authentication at all entry points |
+| CC6.6 (Transmission) | Encryption on all data flows |
+| CC6.7 (Protection) | Data classification per store |
+| CC7.2 (Monitoring) | Observability on all processes |
+| CC8.1 (Change Management) | Config service for changes |
+
+---
+
+## 10. Document Control
+
+| Attribute | Value |
+|-----------|-------|
+| Owner | Architecture Team |
+| Reviewers | Security Team, DevOps Team |
+| Version | 1.0 |
+| Last Updated | 2025-01-15 |
+| Next Review | 2025-04-15 |
+
+---
+
+**Related Documents:**
+- Security Architecture Diagram
+- STRIDE Threat Model
+- Compliance Mapping
+- Network Architecture
