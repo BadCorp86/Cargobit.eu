@@ -1,0 +1,312 @@
+# =============================================================================
+# CargoBit ML Inference - ArgoCD Application (Classic Deployment)
+# =============================================================================
+# Standard ArgoCD Application for ML Inference Service
+# GitOps-based deployment with auto-sync and self-heal
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: ml-inference
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+  annotations:
+    notifications.argoproj.io/subscribe.on-sync-failed.slack: ml-platform-alerts
+    notifications.argoproj.io/subscribe.on-health-degraded.slack: ml-platform-alerts
+spec:
+  project: ml-platform
+  
+  source:
+    repoURL: https://github.com/cargobit/ml-infra.git
+    targetRevision: main
+    path: ml-pipeline/kubernetes
+    
+    # Kustomize overlay selection
+    kustomize:
+      namePrefix: prod-
+      patches:
+        - target:
+            kind: Deployment
+            name: ml-inference
+          patch: |-
+            - op: replace
+              path: /spec/replicas
+              value: 3
+  
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: ml-serving
+  
+  syncPolicy:
+    # Automated sync
+    automated:
+      prune: true
+      selfHeal: true
+    
+    # Sync options
+    syncOptions:
+      - CreateNamespace=true
+      - PruneLast=true
+      - ApplyOutOfSyncOnly=true
+      - ServerSideApply=true
+    
+    # Retry on failure
+    retry:
+      limit: 5
+      backoff:
+        duration: 5s
+        factor: 2
+        maxDuration: 3m
+  
+  # Ignore HPA-managed replicas
+  ignoreDifferences:
+    - group: apps
+      kind: Deployment
+      jsonPointers:
+        - /spec/replicas
+  
+  # Health checks
+  health:
+    check:
+      - kind: Deployment
+        name: ml-inference
+        namespace: ml-serving
+        ready: true
+
+---
+# =============================================================================
+# ArgoCD Application - ML Inference Canary (Argo Rollouts)
+# =============================================================================
+# Canary deployment using Argo Rollouts for progressive delivery
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: ml-inference-rollout
+  namespace: ml-serving
+  labels:
+    app: ml-inference
+    version: v1
+spec:
+  replicas: 6
+  
+  # Revision history for rollbacks
+  revisionHistoryLimit: 10
+  
+  # Selector
+  selector:
+    matchLabels:
+      app: ml-inference
+  
+  # Canary strategy
+  strategy:
+    canary:
+      # Stable service (receives production traffic)
+      stableService: ml-inference-stable
+      
+      # Canary service (receives canary traffic)
+      canaryService: ml-inference-canary
+      
+      # Traffic routing (via Istio/NGINX)
+      trafficRouting:
+        nginx:
+          stableIngress: ml-inference-ingress
+          annotationPrefix: nginx.ingress.kubernetes.io
+      
+      # Canary steps
+      steps:
+        # Step 1: 10% traffic, wait 5 minutes
+        - setWeight: 10
+        - pause:
+            duration: 5m
+        
+        # Step 2: 25% traffic, wait 10 minutes
+        - setWeight: 25
+        - pause:
+            duration: 10m
+        
+        # Step 3: 50% traffic, wait 20 minutes
+        - setWeight: 50
+        - pause:
+            duration: 20m
+        
+        # Step 4: Manual approval for full promotion
+        - pause: {}
+      
+      # Analysis during canary
+      analysis:
+        startingStep: 1
+        templates:
+          - templateName: ml-inference-analysis
+        
+        # Rollback if analysis fails
+        args:
+          - name: service
+            value: ml-inference-canary
+  
+  # Pod template
+  template:
+    metadata:
+      labels:
+        app: ml-inference
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8000"
+    spec:
+      serviceAccountName: ml-inference-sa
+      
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: ml-inference
+                topologyKey: kubernetes.io/hostname
+      
+      containers:
+        - name: ml-inference
+          image: cargobit/ml-inference:{{ .Values.image.tag }}
+          imagePullPolicy: IfNotPresent
+          
+          ports:
+            - containerPort: 8000
+              name: http
+          
+          resources:
+            requests:
+              cpu: "300m"
+              memory: "512Mi"
+            limits:
+              cpu: "800m"
+              memory: "1Gi"
+          
+          env:
+            - name: MODEL_BUCKET
+              valueFrom:
+                configMapKeyRef:
+                  name: ml-inference-config
+                  key: model_bucket
+            - name: REGISTRY_DB_CONN
+              valueFrom:
+                secretKeyRef:
+                  name: ml-inference-secrets
+                  key: warehouse_conn
+            - name: CANARY_SHARE
+              valueFrom:
+                configMapKeyRef:
+                  name: ml-inference-config
+                  key: canary_share
+          
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+          
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+
+---
+# =============================================================================
+# Services for Canary and Stable
+# =============================================================================
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-inference-stable
+  namespace: ml-serving
+  labels:
+    app: ml-inference
+    rollouts-pod-template-hash: stable
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: ml-inference
+    rollouts-pod-template-hash: stable
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-inference-canary
+  namespace: ml-serving
+  labels:
+    app: ml-inference
+    rollouts-pod-template-hash: canary
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: ml-inference
+    rollouts-pod-template-hash: canary
+
+---
+# =============================================================================
+# Analysis Template for Canary
+# =============================================================================
+
+apiVersion: argoproj.io/v1alpha1
+kind: AnalysisTemplate
+metadata:
+  name: ml-inference-analysis
+  namespace: ml-serving
+spec:
+  args:
+    - name: service
+  metrics:
+    # P95 Latency Check
+    - name: p95-latency
+      interval: 1m
+      count: 5
+      successCondition: result[0] <= 0.05  # 50ms
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            histogram_quantile(0.95,
+              sum(rate(ml_inference_request_latency_seconds_bucket{service="{{args.service}}"}[1m])) by (le)
+            )
+    
+    # Error Rate Check
+    - name: error-rate
+      interval: 1m
+      count: 5
+      successCondition: result[0] <= 0.01  # 1%
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            sum(rate(ml_inference_requests_total{service="{{args.service}}",status!~"2.."}[1m]))
+            /
+            sum(rate(ml_inference_requests_total{service="{{args.service}}"}[1m]))
+    
+    # Acceptance Rate Check (business metric)
+    - name: acceptance-rate
+      interval: 2m
+      count: 3
+      successCondition: result[0] >= 0.70  # 70% acceptance
+      provider:
+        prometheus:
+          address: http://prometheus.monitoring.svc.cluster.local:9090
+          query: |
+            avg(ml_suggestion_acceptance_rate{service="{{args.service}}"})

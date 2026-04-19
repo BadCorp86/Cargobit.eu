@@ -1,0 +1,271 @@
+# =============================================================================
+# CargoBit ML Pipeline - Training Workflow
+# =============================================================================
+# Triggers: Manual, Daily schedule (03:00 UTC)
+# Steps: Train, Validate, Upload artifacts, Update registry
+# =============================================================================
+
+name: Train ML Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      data_version:
+        description: 'Training data version (YYYYMMDD)'
+        required: false
+        default: 'latest'
+      auto_promote:
+        description: 'Auto-promote if metrics pass'
+        required: false
+        default: 'false'
+        type: boolean
+  
+  schedule:
+    - cron: "0 3 * * *"   # Daily at 03:00 UTC
+
+env:
+  PYTHON_VERSION: "3.11"
+  AWS_REGION: eu-central-1
+  S3_BUCKET: ${{ secrets.ML_MODELS_BUCKET }}
+  DB_CONNECTION: ${{ secrets.ML_REGISTRY_DB }}
+
+jobs:
+  # ===========================================================================
+  # TRAINING JOB
+  # ===========================================================================
+  train:
+    runs-on: ubuntu-latest
+    outputs:
+      model_version: ${{ steps.train.outputs.version }}
+      metrics: ${{ steps.train.outputs.metrics }}
+      passed_validation: ${{ steps.validate.outputs.passed }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r ml-pipeline/requirements.txt
+          pip install lightgbm shap mlflow boto3 psycopg2-binary pandas numpy scikit-learn
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Download training data
+        run: |
+          DATA_VERSION="${{ github.event.inputs.data_version || 'latest' }}"
+          aws s3 cp s3://${{ env.S3_BUCKET }}/training-data/${DATA_VERSION}.parquet ./training_data.parquet
+          echo "Downloaded training data: ${DATA_VERSION}.parquet"
+      
+      - name: Train model
+        id: train
+        run: |
+          python ml-pipeline/training/train_with_shap.py \
+            --data training_data.parquet \
+            --config ml-pipeline/config/training_config.json \
+            --output-dir ./output \
+            --metrics-file metrics.json
+          
+          # Extract outputs
+          VERSION=$(cat output/version.txt)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "metrics=$(cat metrics.json | jq -c '.')" >> $GITHUB_OUTPUT
+          
+          echo "### Model Version: $VERSION" >> $GITHUB_STEP_SUMMARY
+          cat metrics.json | jq '.' >> $GITHUB_STEP_SUMMARY
+      
+      - name: Upload model artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ steps.train.outputs.version }}
+          path: output/
+          retention-days: 30
+      
+      - name: Upload metrics
+        uses: actions/upload-artifact@v4
+        with:
+          name: metrics-${{ steps.train.outputs.version }}
+          path: metrics.json
+      
+      - name: Upload to S3
+        run: |
+          VERSION=${{ steps.train.outputs.version }}
+          aws s3 sync output/$VERSION s3://${{ env.S3_BUCKET }}/models/$VERSION/
+          aws s3 cp metrics.json s3://${{ env.S3_BUCKET }}/models/$VERSION/metrics.json
+          echo "Model uploaded to s3://${{ env.S3_BUCKET }}/models/$VERSION/"
+
+  # ===========================================================================
+  # VALIDATION JOB
+  # ===========================================================================
+  validate:
+    needs: train
+    runs-on: ubuntu-latest
+    outputs:
+      passed: ${{ steps.validate.outputs.passed }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: pip install jq bc
+      
+      - name: Download metrics
+        uses: actions/download-artifact@v4
+        with:
+          name: metrics-${{ needs.train.outputs.model_version }}
+      
+      - name: Validate model metrics
+        id: validate
+        run: |
+          METRICS='${{ needs.train.outputs.metrics }}'
+          
+          # Extract metrics
+          AUC=$(echo "$METRICS" | jq -r '.cv_auc_mean')
+          AUC_STD=$(echo "$METRICS" | jq -r '.cv_auc_std')
+          LOGLOSS=$(echo "$METRICS" | jq -r '.cv_logloss_mean')
+          
+          echo "## Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          # Validation thresholds
+          PASSED=true
+          
+          # AUC check (>= 0.65)
+          if (( $(echo "$AUC >= 0.65" | bc -l) )); then
+            echo "| AUC | $AUC | >= 0.65 | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| AUC | $AUC | >= 0.65 | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+            PASSED=false
+          fi
+          
+          # LogLoss check (<= 0.5)
+          if (( $(echo "$LOGLOSS <= 0.5" | bc -l) )); then
+            echo "| LogLoss | $LOGLOSS | <= 0.5 | ✅ Pass |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| LogLoss | $LOGLOSS | <= 0.5 | ❌ Fail |" >> $GITHUB_STEP_SUMMARY
+            PASSED=false
+          fi
+          
+          echo "passed=$PASSED" >> $GITHUB_OUTPUT
+          
+          if [ "$PASSED" = true ]; then
+            echo "✅ Model passed validation"
+          else
+            echo "❌ Model failed validation"
+            exit 1
+          fi
+      
+      - name: Upload validation result
+        uses: actions/upload-artifact@v4
+        with:
+          name: validation-result
+          path: validation.json
+
+  # ===========================================================================
+  # REGISTRY UPDATE JOB
+  # ===========================================================================
+  register:
+    needs: [train, validate]
+    if: needs.validate.outputs.passed == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: pip install psycopg2-binary
+      
+      - name: Update Model Registry
+        env:
+          DB_CONNECTION: ${{ secrets.ML_REGISTRY_DB }}
+        run: |
+          python ml-pipeline/scripts/update_registry.py \
+            --version ${{ needs.train.outputs.model_version }} \
+            --metrics '${{ needs.train.outputs.metrics }}' \
+            --model-path "s3://${{ env.S3_BUCKET }}/models/${{ needs.train.outputs.model_version }}" \
+            --status CANDIDATE
+      
+      - name: Create Git tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "model-${{ needs.train.outputs.model_version }}" -m "Model version ${{ needs.train.outputs.model_version }}"
+          git push origin "model-${{ needs.train.outputs.model_version }}" || true
+
+  # ===========================================================================
+  # NOTIFICATION JOB
+  # ===========================================================================
+  notify:
+    needs: [train, validate, register]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🤖 ML Training Pipeline Completed"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n`${{ needs.train.outputs.model_version }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Status:*\n${{ needs.validate.outputs.passed == 'true' && '✅ Passed' || '❌ Failed' }}"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Deploy Canary"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/workflows/deploy.yml"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

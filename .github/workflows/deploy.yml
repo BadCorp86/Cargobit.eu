@@ -1,0 +1,269 @@
+# =============================================================================
+# CargoBit ML Pipeline - Deployment Workflow
+# =============================================================================
+# Triggers: Manual, After training workflow
+# Steps: Download model, Upload to S3, Activate canary
+# =============================================================================
+
+name: Deploy ML Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      model_version:
+        description: 'Model version to deploy'
+        required: true
+        default: 'latest'
+      canary_share:
+        description: 'Canary traffic share (0-100)'
+        required: false
+        default: '10'
+  
+  workflow_run:
+    workflows: ["Train ML Model"]
+    types: [completed]
+    branches: [main]
+
+env:
+  AWS_REGION: eu-central-1
+  S3_BUCKET: ${{ secrets.ML_MODELS_BUCKET }}
+  KUBE_NAMESPACE: ml-serving
+
+jobs:
+  # ===========================================================================
+  # PREPARE JOB
+  # ===========================================================================
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.resolve.outputs.version }}
+      canary_share: ${{ steps.resolve.outputs.canary_share }}
+    
+    steps:
+      - name: Resolve model version
+        id: resolve
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            # Get version from previous workflow
+            VERSION=${{ github.event.workflow_run.conclusion == 'success' && 'latest' || '' }}
+          else
+            VERSION="${{ github.event.inputs.model_version }}"
+          fi
+          
+          # Resolve 'latest' to actual version
+          if [ "$VERSION" = "latest" ]; then
+            # Query registry for latest CANDIDATE
+            VERSION=$(python -c "
+              import psycopg2
+              import os
+              conn = psycopg2.connect(os.environ['DB_CONNECTION'])
+              cur = conn.cursor()
+              cur.execute('SELECT version FROM ml_model_registry WHERE status = \\'CANDIDATE\\' ORDER BY created_at DESC LIMIT 1')
+              result = cur.fetchone()
+              print(result[0] if result else '')
+            ")
+          fi
+          
+          CANARY_SHARE="${{ github.event.inputs.canary_share || '10' }}"
+          
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "canary_share=$CANARY_SHARE" >> $GITHUB_OUTPUT
+          
+          echo "### Deployment Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "- Model Version: $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- Canary Share: $CANARY_SHARE%" >> $GITHUB_STEP_SUMMARY
+
+  # ===========================================================================
+  # DEPLOY JOB
+  # ===========================================================================
+  deploy:
+    needs: prepare
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Download model artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: model-${{ needs.prepare.outputs.version }}
+          path: ./model
+        continue-on-error: true
+      
+      - name: Verify model in S3
+        run: |
+          VERSION=${{ needs.prepare.outputs.version }}
+          
+          # Check if model exists in S3
+          aws s3 ls s3://${{ env.S3_BUCKET }}/models/$VERSION/ || {
+            echo "Model not found in S3, checking artifacts..."
+            aws s3 sync ./model s3://${{ env.S3_BUCKET }}/models/$VERSION/
+          }
+          
+          echo "Model verified at s3://${{ env.S3_BUCKET }}/models/$VERSION/"
+      
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Set Kubernetes context
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      
+      - name: Update ConfigMap with canary version
+        run: |
+          VERSION=${{ needs.prepare.outputs.version }}
+          CANARY_SHARE=$(echo "scale=2; ${{ needs.prepare.outputs.canary_share }} / 100" | bc)
+          
+          kubectl patch configmap ml-inference-config \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --type merge \
+            -p "{\"data\":{\"canary_version\":\"$VERSION\",\"canary_share\":\"$CANARY_SHARE\"}}"
+          
+          echo "Updated ConfigMap: canary_version=$VERSION, canary_share=$CANARY_SHARE"
+      
+      - name: Restart deployment to pick up new config
+        run: |
+          kubectl rollout restart deployment/ml-inference \
+            --namespace ${{ env.KUBE_NAMESPACE }}
+          
+          kubectl rollout status deployment/ml-inference \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --timeout=300s
+      
+      - name: Verify deployment
+        run: |
+          # Wait for pods to be ready
+          kubectl wait --for=condition=ready pod -l app=ml-inference \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --timeout=120s
+          
+          # Health check
+          kubectl exec -n ${{ env.KUBE_NAMESPACE }} deployment/ml-inference -- \
+            curl -sf http://localhost:8000/health || exit 1
+          
+          echo "✅ Deployment successful"
+
+  # ===========================================================================
+  # MONITOR JOB (Start monitoring period)
+  # ===========================================================================
+  monitor:
+    needs: [prepare, deploy]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Start canary monitoring
+        run: |
+          VERSION=${{ needs.prepare.outputs.version }}
+          
+          echo "## Canary Deployment Started" >> $GITHUB_STEP_SUMMARY
+          echo "- Model Version: $VERSION" >> $GITHUB_STEP_SUMMARY
+          echo "- Canary Share: ${{ needs.prepare.outputs.canary_share }}%" >> $GITHUB_STEP_SUMMARY
+          echo "- Monitoring period: 1 hour" >> $GITHUB_STEP_SUMMARY
+          
+          # In production, this would trigger a monitoring job
+          # that evaluates metrics after the monitoring period
+      
+      - name: Create monitoring issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Canary Monitoring: Model ${{ needs.prepare.outputs.version }}`,
+              body: `
+            ## Canary Deployment Active
+            
+            - **Model Version:** ${{ needs.prepare.outputs.version }}
+            - **Canary Share:** ${{ needs.prepare.outputs.canary_share }}%
+            - **Started:** ${new Date().toISOString()}
+            
+            ### Next Steps
+            1. Monitor metrics for 1 hour
+            2. Evaluate canary performance
+            3. Promote or rollback via workflow
+            
+            ### Metrics to Check
+            - Acceptance Rate
+            - P95 Latency
+            - Error Rate
+            - Business KPIs
+              `,
+              labels: ['canary', 'ml-model']
+            })
+
+  # ===========================================================================
+  # NOTIFICATION JOB
+  # ===========================================================================
+  notify:
+    needs: [prepare, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🚀 ML Model Deployed to Canary"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Version:*\n`${{ needs.prepare.outputs.version }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Canary Share:*\n${{ needs.prepare.outputs.canary_share }}%"
+                    }
+                  ]
+                },
+                {
+                  "type": "actions",
+                  "elements": [
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Promote"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/workflows/promote.yml"
+                    },
+                    {
+                      "type": "button",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Rollback"
+                      },
+                      "url": "${{ github.server_url }}/${{ github.repository }}/actions/workflows/rollback.yml"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK

@@ -1,0 +1,205 @@
+# =============================================================================
+# CargoBit ML Pipeline - Rollback Workflow
+# =============================================================================
+# Triggers: Manual
+# Steps: Rollback canary, Disable canary traffic, Restore previous active
+# =============================================================================
+
+name: Rollback Canary Model
+
+on:
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: 'Rollback reason'
+        required: true
+        default: 'Manual rollback'
+
+env:
+  KUBE_NAMESPACE: ml-serving
+
+jobs:
+  # ===========================================================================
+  # ROLLBACK JOB
+  # ===========================================================================
+  rollback:
+    runs-on: ubuntu-latest
+    outputs:
+      rolled_back_version: ${{ steps.rollback.outputs.version }}
+      active_version: ${{ steps.active.outputs.version }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      
+      - name: Install dependencies
+        run: pip install psycopg2-binary
+      
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v3
+        with:
+          version: 'v1.28.0'
+      
+      - name: Set Kubernetes context
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      
+      - name: Get current versions
+        id: active
+        env:
+          DB_CONNECTION: ${{ secrets.ML_REGISTRY_DB }}
+        run: |
+          # Get current active version
+          ACTIVE=$(python -c "
+            import psycopg2
+            import os
+            conn = psycopg2.connect(os.environ['DB_CONNECTION'])
+            cur = conn.cursor()
+            cur.execute('SELECT version FROM ml_model_registry WHERE status = \\'ACTIVE\\' ORDER BY created_at DESC LIMIT 1')
+            result = cur.fetchone()
+            print(result[0] if result else '')
+          ")
+          
+          # Get canary version
+          CANARY=$(kubectl get configmap ml-inference-config \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            -o jsonpath='{.data.canary_version}')
+          
+          echo "active_version=$ACTIVE" >> $GITHUB_OUTPUT
+          echo "canary_version=$CANARY" >> $GITHUB_OUTPUT
+          
+          echo "Current active: $ACTIVE"
+          echo "Current canary: $CANARY"
+      
+      - name: Rollback canary in registry
+        id: rollback
+        env:
+          DB_CONNECTION: ${{ secrets.ML_REGISTRY_DB }}
+        run: |
+          CANARY="${{ steps.active.outputs.canary_version }}"
+          
+          if [ -n "$CANARY" ]; then
+            python ml-pipeline/scripts/rollback_model.py \
+              --version "$CANARY" \
+              --reason "${{ github.event.inputs.reason }}"
+            
+            echo "version=$CANARY" >> $GITHUB_OUTPUT
+          else
+            echo "No canary version found"
+            echo "version=" >> $GITHUB_OUTPUT
+          fi
+      
+      - name: Disable canary traffic
+        run: |
+          kubectl patch configmap ml-inference-config \
+            --namespace ${{ env.KUBE_NAMESPACE }} \
+            --type merge \
+            -p '{"data":{"canary_share":"0","canary_version":""}}'
+          
+          echo "Canary traffic disabled"
+      
+      - name: Invalidate cache and reload
+        run: |
+          kubectl exec -n ${{ env.KUBE_NAMESPACE }} deployment/ml-inference -- \
+            curl -X POST http://localhost:8000/model/invalidate-cache || true
+          
+          kubectl exec -n ${{ env.KUBE_NAMESPACE }} deployment/ml-inference -- \
+            curl -X POST http://localhost:8000/model/reload || true
+      
+      - name: Verify rollback
+        run: |
+          sleep 10
+          
+          CURRENT_VERSION=$(kubectl exec -n ${{ env.KUBE_NAMESPACE }} deployment/ml-inference -- \
+            curl -s http://localhost:8000/model/info | jq -r '.version')
+          
+          echo "Current model version: $CURRENT_VERSION"
+          echo "Active version: ${{ steps.active.outputs.active_version }}"
+          
+          echo "✅ Rollback completed"
+
+  # ===========================================================================
+  # CREATE INCIDENT
+  # ===========================================================================
+  incident:
+    needs: rollback
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Create incident issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `[ROLLBACK] Model ${{ needs.rollback.outputs.rolled_back_version }}`,
+              body: `
+            ## Rollback Details
+            
+            - **Rolled Back Version:** ${{ needs.rollback.outputs.rolled_back_version }}
+            - **Restored Active:** ${{ needs.rollback.outputs.active_version }}
+            - **Reason:** ${{ github.event.inputs.reason }}
+            - **Time:** ${new Date().toISOString()}
+            - **Triggered by:** ${{ github.actor }}
+            
+            ### Action Required
+            - [ ] Investigate root cause
+            - [ ] Update training pipeline if needed
+            - [ ] Review metrics and thresholds
+              `,
+              labels: ['rollback', 'incident', 'ml-model']
+            })
+
+  # ===========================================================================
+  # NOTIFICATION JOB
+  # ===========================================================================
+  notify:
+    needs: rollback
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Send Slack notification
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "header",
+                  "text": {
+                    "type": "plain_text",
+                    "text": "🔄 ML Model Rolled Back"
+                  }
+                },
+                {
+                  "type": "section",
+                  "fields": [
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Rolled Back:*\n`${{ needs.rollback.outputs.rolled_back_version }}`"
+                    },
+                    {
+                      "type": "mrkdwn",
+                      "text": "*Restored Active:*\n`${{ needs.rollback.outputs.active_version }}`"
+                    }
+                  ]
+                },
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*Reason:* ${{ github.event.inputs.reason }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
