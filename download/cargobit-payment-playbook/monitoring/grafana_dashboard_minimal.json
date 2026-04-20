@@ -1,0 +1,52 @@
+{
+  "annotations": { "list": [] },
+  "panels": [
+    {
+      "type": "graph",
+      "title": "Webhook 5xx Errors (5m)",
+      "targets": [{ "expr": "increase(http_server_requests_total{job=\"webhook\",status=~\"5..\"}[5m])", "refId": "A" }],
+      "id": 1,
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 }
+    },
+    {
+      "type": "graph",
+      "title": "Stripe Events Processed per Minute",
+      "targets": [{ "expr": "rate(stripe_events_processed_total[1m])", "refId": "B" }],
+      "id": 2,
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 }
+    },
+    {
+      "type": "stat",
+      "title": "Reconciliation Diffs",
+      "targets": [{ "expr": "sum(payment_refund_diffs_total)", "refId": "C" }],
+      "id": 3,
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Unprocessed Events",
+      "targets": [{ "expr": "count(stripe_events_processed{processed=\"false\"})", "refId": "D" }],
+      "id": 4,
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Payments (1h)",
+      "targets": [{ "expr": "sum(increase(payment_created_total[1h]))", "refId": "E" }],
+      "id": 5,
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 8 }
+    },
+    {
+      "type": "stat",
+      "title": "Refunds (1h)",
+      "targets": [{ "expr": "sum(increase(refund_created_total[1h]))", "refId": "F" }],
+      "id": 6,
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 8 }
+    }
+  ],
+  "title": "Payments Webhook Overview",
+  "uid": "payments-webhook",
+  "schemaVersion": 27,
+  "version": 1,
+  "refresh": "30s"
+}

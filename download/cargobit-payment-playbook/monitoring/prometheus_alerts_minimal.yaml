@@ -1,0 +1,36 @@
+# =============================================================================
+# Prometheus Alert Rules YAML
+# =============================================================================
+# Zweck: Alerts für kritische Fehler
+# Hinweis: http_server_requests_total, audit_events_total, payment_refund_diffs_total
+# müssen als Metriken in App instrumentiert sein
+
+groups:
+- name: stripe_webhook.rules
+  rules:
+  - alert: StripeWebhookHighErrorRate
+    expr: increase(http_server_requests_total{job="webhook",status=~"5.."}[5m]) > 5
+    for: 2m
+    labels:
+      severity: critical
+    annotations:
+      summary: "Stripe webhook 5xx spike"
+      description: "Mehr als 5 Webhook 5xx Antworten in 5 Minuten."
+
+  - alert: StripeOrphanedEventsHigh
+    expr: increase(audit_events_total{event_type="payment.orphaned_payment_intent"}[1h]) > 10
+    for: 10m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Viele orphaned payment_intent Events"
+      description: "Mehr als 10 orphaned payment_intent Events in 1 Stunde."
+
+  - alert: ReconciliationDiffsDetected
+    expr: sum(payment_refund_diffs_total) > 0
+    for: 30m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Reconciliation Diffs erkannt"
+      description: "Es gibt Differenzen zwischen Stripe und lokaler DB bei Refunds."

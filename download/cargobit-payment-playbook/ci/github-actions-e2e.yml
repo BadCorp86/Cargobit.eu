@@ -1,0 +1,41 @@
+# .github/workflows/e2e-postman.yml
+name: E2E Postman Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  postman-e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      - name: Install Newman
+        run: npm install -g newman
+      - name: Run Newman
+        env:
+          BASE_URL: ${{ secrets.STAGING_BASE_URL }}
+          ADMIN_JWT: ${{ secrets.STAGING_ADMIN_JWT }}
+          STRIPE_TEST_SECRET: ${{ secrets.STAGING_STRIPE_WEBHOOK_SECRET }}
+        run: |
+          # generate environment file from secrets
+          cat > postman_env_staging.json <<EOF
+          {
+            "values": [
+              {"key":"base_url","value":"${BASE_URL}"},
+              {"key":"admin_jwt","value":"${ADMIN_JWT}"},
+              {"key":"stripe_test_secret","value":"${STRIPE_TEST_SECRET}"}
+            ]
+          }
+          EOF
+          ./ci/newman-run.sh
+      - name: Upload JUnit Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: newman-report
+          path: reports/newman-results.xml
