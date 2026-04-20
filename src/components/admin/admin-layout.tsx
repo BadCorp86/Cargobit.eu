@@ -156,14 +156,26 @@ function Sidebar({ user, collapsed, onToggle }: {
             <span className="font-semibold text-lg">CargoBit</span>
           </Link>
         )}
-        <button 
-          onClick={onToggle}
-          className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          <svg className={`w-5 h-5 transition-transform ${collapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Back to Main Site Link */}
+          <Link
+            href="/"
+            className="p-2 rounded-lg hover:bg-gray-800 transition-colors text-gray-400 hover:text-white"
+            title="Zur Hauptseite"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+            </svg>
+          </Link>
+          <button 
+            onClick={onToggle}
+            className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+          >
+            <svg className={`w-5 h-5 transition-transform ${collapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Navigation */}

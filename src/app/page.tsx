@@ -199,7 +199,14 @@ export default function Home() {
     return (
       <>
         <Toaster position="top-right" richColors />
-        <Dashboard onLogout={handleLogout} onNewTransport={handleNewTransport} />
+        <Dashboard 
+          onLogout={handleLogout} 
+          onNewTransport={handleNewTransport} 
+          onBack={() => {
+            logout();
+            toast.success('Zurück zur Startseite');
+          }}
+        />
         <TransportForm
           open={showTransportForm}
           onOpenChange={setShowTransportForm}
