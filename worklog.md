@@ -2460,3 +2460,138 @@ Task: API-DTOs + OpenAPI-Spec für alle Admin-Endpoints
 ```
 
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
+Task ID: payment-wallet-tests-2.2-2.3
+Agent: Main Agent
+Task: Tests und Integrationen für Task 2.2-2.3 implementieren (Wallet, Webhook, Reconciliation)
+
+## Work Log:
+
+### 1. Test-Infrastruktur eingerichtet
+- Jest-Konfiguration erstellt (`jest.config.ts`)
+- Jest-Setup mit Mock-Umgebungsvariablen (`jest.setup.ts`)
+- Test-Dependencies installiert:
+  - jest@29.7.0
+  - jest-environment-node@29.7.0
+  - ts-jest@29.4.9
+  - ts-node@10.9.2
+  - @types/jest@29.5.14
+  - jest-junit@16.0.0
+
+### 2. Mock-Infrastruktur erstellt
+- Datei: `/__tests__/mocks/prisma.ts` - NEU
+- Vollständiger Mock für Prisma Client mit:
+  - Payment Operations (findUnique, findFirst, findMany, update, create, count)
+  - Wallet Operations (findFirst, create, update)
+  - WalletTransaction Operations
+  - StripeEvent Operations
+  - StripeRefund Operations
+  - Refund Operations
+  - Notification Operations
+  - Transport Operations
+  - PaymentAuditEvent Operations
+  - Transaction Support ($transaction)
+
+### 3. Unit Tests: Wallet Service (28 Tests)
+- Datei: `/__tests__/services/wallet.service.test.ts` - NEU
+- Getestete Funktionen:
+  - Helper Functions (centsToEuros, eurosToCents)
+  - getOrCreateWallet
+  - creditWallet (mit Idempotenz)
+  - debitWallet (mit Idempotenz)
+  - reverseCredit
+  - getWalletBalance
+  - getWalletTransactions (Pagination, Filter)
+  - hasSufficientBalance
+  - Transactional Integrity
+
+### 4. Unit Tests: Stripe Webhook Service (26 Tests)
+- Datei: `/__tests__/services/stripe-webhook.service.test.ts` - NEU
+- Getestete Funktionen:
+  - dispatchStripeEvent (Event Routing)
+  - handlePaymentIntentSucceeded (Payment Success Flow)
+  - handlePaymentIntentFailed (Payment Failure Flow)
+  - handleChargeRefunded (Refund Processing)
+  - Idempotency Protection
+  - Error Handling
+
+### 5. Unit Tests: Refund Reconciliation Service (21 Tests)
+- Datei: `/__tests__/services/refund-reconciliation.service.test.ts` - NEU
+- Getestete Funktionen:
+  - reconcilePayment (Single Payment)
+  - reconcileAllRecent (Batch)
+  - findDiscrepancies
+  - getReconciliationStats
+  - Wallet Integration
+  - Stripe API Mocking
+
+### 6. Integration Tests: Webhook API (11 Tests)
+- Datei: `/__tests__/integration/webhook.integration.test.ts` - NEU
+- Getestete Endpunkte:
+  - POST /api/stripe/webhook
+  - Signature Verification
+  - Event Processing
+  - Error Handling
+  - Idempotency
+
+### 7. Integration Tests: Admin Payments API (18 Tests)
+- Datei: `/__tests__/integration/admin-payments.integration.test.ts` - NEU
+- Getestete Endpunkte:
+  - GET /api/admin/payments (List)
+  - GET /api/admin/payments/:id (Details)
+  - POST /api/admin/payments/:id/refund
+  - POST /api/admin/payments/reconcile (Batch)
+  - GET /api/admin/payments/reconcile (Stats)
+  - Audit Trail
+
+### 8. Package.json Updates
+- Neue Scripts:
+  - `test`: Jest ausführen
+  - `test:watch`: Jest Watch Mode
+  - `test:coverage`: Coverage Report
+  - `test:ci`: CI-optimierte Tests
+
+## Stage Summary:
+
+### Test-Ergebnisse:
+```
+Test Suites: 5 passed, 5 total
+Tests:       104 passed, 104 total
+```
+
+### Test-Coverage:
+| Service | Tests | Coverage |
+|---------|-------|----------|
+| Wallet Service | 28 | Full |
+| Stripe Webhook Service | 26 | Full |
+| Refund Reconciliation Service | 21 | Full |
+| Webhook API Integration | 11 | Full |
+| Admin Payments API Integration | 18 | Full |
+
+### Erstellte Dateien:
+1. `/jest.config.ts` - Jest Konfiguration
+2. `/jest.setup.ts` - Jest Setup
+3. `/__tests__/mocks/prisma.ts` - Prisma Mock
+4. `/__tests__/services/wallet.service.test.ts` - Wallet Tests
+5. `/__tests__/services/stripe-webhook.service.test.ts` - Webhook Tests
+6. `/__tests__/services/refund-reconciliation.service.test.ts` - Reconciliation Tests
+7. `/__tests__/integration/webhook.integration.test.ts` - Webhook Integration
+8. `/__tests__/integration/admin-payments.integration.test.ts` - Admin API Integration
+
+### Test-Befehle:
+```bash
+# Alle Tests
+bun run test
+
+# Watch Mode
+bun run test:watch
+
+# Coverage Report
+bun run test:coverage
+
+# Einzelne Test-Suite
+npx jest --testPathPattern="wallet.service"
+```
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
