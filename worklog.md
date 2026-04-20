@@ -2595,3 +2595,93 @@ npx jest --testPathPattern="wallet.service"
 ```
 
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
+Task ID: payment-testing-task-2.2-2.3
+Agent: Main Agent
+Task: Postman Collection und zusätzliche Tests für Task 2.2-2.3 implementieren
+
+## Work Log:
+
+### 1. Postman Collection gespeichert
+- Datei: `/home/z/my-project/download/postman_collection_payments_e2e.json` - NEU
+- Vollständige Postman Collection v2.1 für E2E Payments & Refunds
+- 9 Requests:
+  1. Create Job (mock) - POST /jobs
+  2. Confirm Job / Create PaymentIntent - POST /booking/confirm
+  3. Simulate Stripe Webhook: payment_intent.succeeded
+  4. GET /admin/payments - verify payment exists
+  5. POST /admin/jobs/:jobId/refund - trigger refund
+  6. Simulate Stripe Webhook: charge.refunded
+  7. GET /admin/payments/:id - verify refunded_cents
+  8. POST /admin/payments/:id/reconcile - manual reconcile
+  9. Duplicate Webhook Replay - idempotency check
+- Test-Scripts für alle Requests
+- Environment Variables: base_url, admin_jwt, stripe_test_secret, etc.
+
+### 2. Bestehende Test-Infrastruktur analysiert
+- Unit Tests bereits vollständig:
+  - `/__tests__/services/wallet.service.test.ts` (577 Zeilen)
+  - `/__tests__/services/stripe-webhook.service.test.ts` (1008 Zeilen)
+  - `/__tests__/services/refund-reconciliation.service.test.ts` (988 Zeilen)
+- Integration Tests vorhanden:
+  - `/__tests__/integration/webhook.integration.test.ts` (262 Zeilen)
+  - `/__tests__/integration/admin-payments.integration.test.ts` (673 Zeilen)
+- E2E Tests vorhanden:
+  - `/__tests__/e2e/payment-flow.e2e.test.ts` (803 Zeilen)
+- Concurrency Tests vorhanden:
+  - `/__tests__/concurrency/concurrent-operations.test.ts` (447 Zeilen)
+- Test Fixtures:
+  - `/__tests__/fixtures/test-fixtures.ts` (493 Zeilen)
+- Mocks:
+  - `/__tests__/mocks/prisma.ts` (561 Zeilen)
+  - `/__tests__/mocks/stripe-mock.ts` (416 Zeilen)
+
+### 3. Edge-Case Tests implementiert
+- Datei: `/__tests__/edge-cases/payment-edge-cases.test.ts` - NEU
+- Test-Szenarien:
+  - Duplicate Webhook Replay (Idempotency) - korrespondiert mit Postman Request 9
+  - Error Recovery Tests
+  - Wallet Insufficient Balance Tests
+  - Reconciliation Edge Cases (Rate Limiting, Old Reconciliations)
+  - Currency Handling
+  - Metadata Handling (Missing, Large)
+  - Payment Status Transitions
+  - Orphaned Records Tests
+  - Zero Amount Tests
+
+## Stage Summary:
+
+### Test Coverage Übersicht:
+| Test-Datei | Typ | Zeilen | Coverage |
+|------------|-----|--------|----------|
+| wallet.service.test.ts | Unit | 577 | Wallet CRUD, Idempotency |
+| stripe-webhook.service.test.ts | Unit | 1008 | Webhook Processing |
+| refund-reconciliation.service.test.ts | Unit | 988 | Reconciliation |
+| webhook.integration.test.ts | Integration | 262 | API Layer |
+| admin-payments.integration.test.ts | Integration | 673 | Admin API |
+| payment-flow.e2e.test.ts | E2E | 803 | Full Lifecycle |
+| concurrent-operations.test.ts | Concurrency | 447 | Race Conditions |
+| payment-edge-cases.test.ts | Edge Cases | ~650 | Boundary Conditions |
+
+### Postman Collection Features:
+- 9 sequenzielle Requests für vollständigen Payment-Flow
+- Test-Scripts mit Assertions
+- Environment Variable Management
+- Idempotency-Test (Request 9)
+- Ready-to-use für Staging-Tests
+
+### Alignments mit Postman Collection:
+| Postman Request | Jest Test Coverage |
+|-----------------|-------------------|
+| 1) Create Job | e2e: Complete Payment Lifecycle |
+| 2) Confirm Job / PaymentIntent | e2e: Payment → Success |
+| 3) payment_intent.succeeded webhook | webhook.service.test.ts |
+| 4) GET /admin/payments | admin-payments.integration.test.ts |
+| 5) POST refund | e2e: Full/Partial Refund |
+| 6) charge.refunded webhook | webhook.service.test.ts |
+| 7) GET /admin/payments/:id | admin-payments.integration.test.ts |
+| 8) POST reconcile | reconciliation.service.test.ts |
+| 9) Duplicate Webhook Replay | payment-edge-cases.test.ts |
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
