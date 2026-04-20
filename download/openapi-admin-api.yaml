@@ -1,0 +1,1257 @@
+openapi: 3.1.0
+info:
+  title: CargoBit Admin API
+  version: 1.0.0
+  description: |
+    Admin API for CargoBit Transport Platform.
+    
+    ## Authentication
+    All endpoints require Bearer JWT token obtained via the two-step login process.
+    
+    ## Roles
+    - **ADMIN**: Full access to all endpoints
+    - **FINANCE**: Payments, Refunds, Payouts access
+    - **SUPPORT**: Disputes, Jobs, User management (no direct payouts/refunds)
+    
+    ## Rate Limits
+    - Default: 100 requests per 10 seconds
+    - Sensitive actions: 20 requests per 10 seconds
+
+servers:
+  - url: /api/admin
+    description: Admin API endpoint
+
+tags:
+  - name: Auth
+    description: Admin authentication endpoints
+  - name: Payments
+    description: Payment management (ADMIN, FINANCE)
+  - name: Refunds
+    description: Refund operations (ADMIN, FINANCE)
+  - name: Disputes
+    description: Dispute management (ADMIN, SUPPORT)
+  - name: AdminUsers
+    description: Admin user management (ADMIN only)
+
+paths:
+  # ============================================
+  # AUTHENTICATION
+  # ============================================
+  
+  /auth/login-step1:
+    post:
+      tags: [Auth]
+      summary: Admin login step 1
+      description: Verify email and password. Returns whether 2FA is required.
+      operationId: adminLoginStep1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginStep1Request'
+      responses:
+        '200':
+          description: Login step 1 successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLoginStep1Response'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/login-step2:
+    post:
+      tags: [Auth]
+      summary: Admin login step 2 (2FA)
+      description: Verify 2FA code and return JWT token.
+      operationId: adminLoginStep2
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminLoginStep2Request'
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminLoginTokenResponse'
+          headers:
+            Set-Cookie:
+              description: HTTP-only session cookie
+              schema:
+                type: string
+        '401':
+          description: Invalid 2FA code
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout admin
+      description: Invalidate current session.
+      operationId: adminLogout
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: logged_out
+
+  /auth/2fa/setup:
+    post:
+      tags: [Auth]
+      summary: Setup 2FA for admin
+      description: Generate TOTP secret and QR code URL.
+      operationId: admin2faSetup
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 2FA setup data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TwoFactorSetupResponse'
+
+  /auth/2fa/enable:
+    post:
+      tags: [Auth]
+      summary: Enable 2FA
+      description: Enable 2FA after verification.
+      operationId: admin2faEnable
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: 6-digit TOTP code
+      responses:
+        '200':
+          description: 2FA enabled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: enabled
+
+  # ============================================
+  # PAYMENTS
+  # ============================================
+
+  /payments:
+    get:
+      tags: [Payments]
+      summary: List all payments
+      description: Get paginated list of payments. ADMIN and FINANCE roles only.
+      operationId: listPayments
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by payment status
+          schema:
+            type: string
+            enum: [pending, succeeded, partial_refunded, refunded, failed]
+        - name: shipperId
+          in: query
+          description: Filter by shipper ID
+          schema:
+            type: string
+            format: uuid
+        - name: jobId
+          in: query
+          description: Filter by job ID
+          schema:
+            type: string
+            format: uuid
+        - name: from
+          in: query
+          description: Filter from date
+          schema:
+            type: string
+            format: date-time
+        - name: to
+          in: query
+          description: Filter to date
+          schema:
+            type: string
+            format: date-time
+        - name: limit
+          in: query
+          description: Number of results per page
+          schema:
+            type: integer
+            default: 100
+            maximum: 500
+        - name: offset
+          in: query
+          description: Offset for pagination
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Payment list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentListResponse'
+        '403':
+          description: Forbidden - Insufficient role
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /payments/{paymentId}:
+    get:
+      tags: [Payments]
+      summary: Get payment details
+      description: Get detailed payment info with refunds, wallet transactions, and audit trail.
+      operationId: getPayment
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: paymentId
+          in: path
+          required: true
+          description: Payment ID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Payment detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentDetailDTO'
+        '404':
+          description: Payment not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================
+  # REFUNDS
+  # ============================================
+
+  /refund:
+    post:
+      tags: [Refunds]
+      summary: Create a refund
+      description: Process a refund for a job payment. ADMIN and FINANCE roles only.
+      operationId: createRefund
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefundRequest'
+      responses:
+        '200':
+          description: Refund initiated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundResponse'
+        '400':
+          description: Invalid refund request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - SUPPORT role cannot create refunds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags: [Refunds]
+      summary: Get refund calculation
+      description: Calculate refund amounts for a job.
+      operationId: getRefundCalculation
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: jobId
+          in: query
+          required: true
+          description: Job ID to calculate refund for
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Refund calculation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RefundCalculationResponse'
+        '404':
+          description: No payment found for job
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================
+  # DISPUTES
+  # ============================================
+
+  /disputes:
+    get:
+      tags: [Disputes]
+      summary: List all disputes
+      description: Get paginated list of disputes. ADMIN, FINANCE, and SUPPORT roles.
+      operationId: listDisputes
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          description: Filter by dispute status
+          schema:
+            type: string
+            enum: [open, in_progress, resolved, closed]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Dispute list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeListResponse'
+
+  /disputes/{disputeId}:
+    get:
+      tags: [Disputes]
+      summary: Get dispute details
+      description: Get detailed dispute info with messages and timeline.
+      operationId: getDispute
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: disputeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Dispute detail
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeDetailDTO'
+        '404':
+          description: Dispute not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /disputes/{disputeId}/resolve:
+    post:
+      tags: [Disputes]
+      summary: Resolve a dispute
+      description: Resolve dispute with action (refund_full, refund_partial, reject).
+      operationId: resolveDispute
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: disputeId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResolveDisputeRequest'
+      responses:
+        '200':
+          description: Dispute resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DisputeDetailDTO'
+        '400':
+          description: Invalid resolution request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Forbidden - SUPPORT cannot issue refunds
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================
+  # ADMIN USERS
+  # ============================================
+
+  /users:
+    get:
+      tags: [AdminUsers]
+      summary: List admin users
+      description: Get list of all admin users. ADMIN role only.
+      operationId: listAdminUsers
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Admin user list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AdminUserDTO'
+        '403':
+          description: Forbidden - ADMIN role required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags: [AdminUsers]
+      summary: Create admin user
+      description: Create a new admin user. ADMIN role only.
+      operationId: createAdminUser
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateAdminUserRequest'
+      responses:
+        '201':
+          description: Admin user created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDTO'
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already exists
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /users/{userId}:
+    patch:
+      tags: [AdminUsers]
+      summary: Update admin user
+      description: Update admin user role or status. ADMIN role only.
+      operationId: updateAdminUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateAdminUserRequest'
+      responses:
+        '200':
+          description: Admin user updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserDTO'
+        '404':
+          description: Admin user not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    delete:
+      tags: [AdminUsers]
+      summary: Deactivate admin user
+      description: Deactivate an admin user. ADMIN role only.
+      operationId: deactivateAdminUser
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Admin user deactivated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: deactivated
+
+components:
+  # ============================================
+  # SECURITY SCHEMES
+  # ============================================
+  
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token from admin login
+
+  # ============================================
+  # SCHEMAS
+  # ============================================
+
+  schemas:
+    # ----------------------------------------
+    # AUTH DTOs
+    # ----------------------------------------
+    
+    AdminLoginStep1Request:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Admin email address
+        password:
+          type: string
+          format: password
+          description: Admin password
+
+    AdminLoginStep1Response:
+      type: object
+      required: [requires_2fa, email]
+      properties:
+        requires_2fa:
+          type: boolean
+          description: Whether 2FA is required for this user
+        email:
+          type: string
+          format: email
+          description: Email for step 2
+
+    AdminLoginStep2Request:
+      type: object
+      required: [email, code]
+      properties:
+        email:
+          type: string
+          format: email
+          description: Admin email address
+        code:
+          type: string
+          description: 6-digit 2FA code or backup code
+          minLength: 6
+          maxLength: 8
+
+    AdminLoginTokenResponse:
+      type: object
+      required: [access_token, token_type, expires_in, admin]
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        token_type:
+          type: string
+          enum: [bearer]
+        expires_in:
+          type: integer
+          description: Token expiry in seconds
+          example: 28800
+        admin:
+          $ref: '#/components/schemas/AdminUserDTO'
+
+    TwoFactorSetupResponse:
+      type: object
+      required: [secret, qr_code_url, backup_codes]
+      properties:
+        secret:
+          type: string
+          description: TOTP secret
+        qr_code_url:
+          type: string
+          description: otpauth:// URL for QR code
+        backup_codes:
+          type: array
+          items:
+            type: string
+          description: List of backup codes
+
+    # ----------------------------------------
+    # PAYMENT DTOs
+    # ----------------------------------------
+
+    PaymentSummaryDTO:
+      type: object
+      required:
+        - id
+        - job_id
+        - shipper_id
+        - payment_intent_id
+        - amount_cents
+        - currency
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        job_id:
+          type: string
+          format: uuid
+        bid_id:
+          type: string
+          format: uuid
+        shipper_id:
+          type: string
+          format: uuid
+        shipper_name:
+          type: string
+        shipper_email:
+          type: string
+          format: email
+        transporter_id:
+          type: string
+          format: uuid
+        transporter_name:
+          type: string
+        payment_intent_id:
+          type: string
+          description: Stripe PaymentIntent ID
+        charge_id:
+          type: string
+          nullable: true
+          description: Stripe Charge ID
+        amount_cents:
+          type: integer
+          description: Total amount in cents
+          example: 12000
+        amount_eur:
+          type: number
+          format: float
+          description: Amount in EUR
+          example: 120.00
+        currency:
+          type: string
+          default: EUR
+        platform_fee_cents:
+          type: integer
+          description: Platform fee in cents
+        transporter_amount_cents:
+          type: integer
+          description: Transporter amount in cents
+        refunded_cents:
+          type: integer
+          description: Already refunded amount in cents
+        status:
+          type: string
+          enum: [PENDING, SUCCEEDED, PARTIAL_REFUNDED, REFUNDED, FAILED]
+        payment_type:
+          type: string
+          enum: [CARD, BANK_TRANSFER, WALLET]
+        created_at:
+          type: string
+          format: date-time
+        succeeded_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PaymentListResponse:
+      type: object
+      required: [items, total, limit, offset, has_more]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentSummaryDTO'
+        total:
+          type: integer
+          description: Total number of payments matching filter
+        limit:
+          type: integer
+          description: Number of results per page
+        offset:
+          type: integer
+          description: Current offset
+        has_more:
+          type: boolean
+          description: Whether more results exist
+
+    PaymentDetailDTO:
+      type: object
+      required:
+        - id
+        - job_id
+        - payment_intent_id
+        - amount_cents
+        - currency
+        - status
+        - shipper
+        - refunds
+        - wallet_transactions
+        - audit_trail
+      properties:
+        id:
+          type: string
+          format: uuid
+        job_id:
+          type: string
+          format: uuid
+        bid_id:
+          type: string
+          format: uuid
+        payment_intent_id:
+          type: string
+        charge_id:
+          type: string
+          nullable: true
+        amount_cents:
+          type: integer
+        amount_eur:
+          type: number
+        currency:
+          type: string
+        platform_fee_cents:
+          type: integer
+        platform_fee_eur:
+          type: number
+        transporter_amount_cents:
+          type: integer
+        transporter_amount_eur:
+          type: number
+        refunded_cents:
+          type: integer
+        refunded_eur:
+          type: number
+        status:
+          type: string
+        payment_type:
+          type: string
+        stripe_customer_id:
+          type: string
+          nullable: true
+        shipper:
+          type: object
+          required: [id, name, email]
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+        transporter:
+          type: object
+          nullable: true
+          properties:
+            id:
+              type: string
+            name:
+              type: string
+            email:
+              type: string
+        job_status:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        succeeded_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_at:
+          type: string
+          format: date-time
+          nullable: true
+        failed_reason:
+          type: string
+          nullable: true
+        refunds:
+          type: array
+          items:
+            $ref: '#/components/schemas/RefundDTO'
+        wallet_transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/WalletTransactionDTO'
+        audit_trail:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEntryDTO'
+
+    RefundDTO:
+      type: object
+      required:
+        - id
+        - refund_id
+        - amount_cents
+        - refund_type
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        refund_id:
+          type: string
+          description: Stripe Refund ID
+        amount_cents:
+          type: integer
+        amount_eur:
+          type: number
+        shipper_refund_cents:
+          type: integer
+        shipper_refund_eur:
+          type: number
+        platform_fee_refund_cents:
+          type: integer
+        platform_fee_refund_eur:
+          type: number
+        transporter_debit_cents:
+          type: integer
+        transporter_debit_eur:
+          type: number
+        refund_type:
+          type: string
+          enum: [FULL, PARTIAL, PLATFORM_FEE_ONLY]
+        status:
+          type: string
+          enum: [PENDING, PROCESSED, FAILED]
+        reason:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        processed_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    WalletTransactionDTO:
+      type: object
+      required:
+        - id
+        - wallet_owner_type
+        - type
+        - amount
+        - currency
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        wallet_owner_type:
+          type: string
+          enum: [platform, transporter, shipper, company]
+        wallet_owner_id:
+          type: string
+        type:
+          type: string
+          enum: [DEPOSIT, PAYOUT, FEE, COMMISSION, PAYMENT_IN, PAYMENT_OUT, REFUND]
+        amount:
+          type: number
+        currency:
+          type: string
+        description:
+          type: string
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    AuditEntryDTO:
+      type: object
+      required:
+        - id
+        - action
+        - entity_type
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        action:
+          type: string
+        entity_type:
+          type: string
+        entity_id:
+          type: string
+          nullable: true
+        data_after:
+          type: object
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    # ----------------------------------------
+    # REFUND DTOs
+    # ----------------------------------------
+
+    RefundRequest:
+      type: object
+      required: [jobId, type, reason]
+      properties:
+        jobId:
+          type: string
+          format: uuid
+          description: Job ID to refund
+        type:
+          type: string
+          enum: [full, partial, platform_fee_only]
+          description: Type of refund
+        amountEur:
+          type: number
+          description: Amount for partial refund (EUR)
+          nullable: true
+        reason:
+          type: string
+          minLength: 10
+          description: Reason for refund
+
+    RefundResponse:
+      type: object
+      required: [status, refund_id, amount_cents]
+      properties:
+        status:
+          type: string
+          example: refund_initiated
+        refund_id:
+          type: string
+          format: uuid
+        stripe_refund_id:
+          type: string
+          description: Stripe Refund ID
+        amount_cents:
+          type: integer
+        amount_eur:
+          type: number
+        currency:
+          type: string
+        refund_status:
+          type: string
+        processed_by:
+          type: object
+          properties:
+            id:
+              type: string
+            email:
+              type: string
+            role:
+              type: string
+
+    RefundCalculationResponse:
+      type: object
+      required:
+        - job_id
+        - total_paid_eur
+        - platform_fee_eur
+        - transporter_amount_eur
+        - max_refundable_eur
+      properties:
+        job_id:
+          type: string
+          format: uuid
+        payment_status:
+          type: string
+        total_paid_eur:
+          type: number
+        platform_fee_eur:
+          type: number
+        transporter_amount_eur:
+          type: number
+        already_refunded_eur:
+          type: number
+        max_refundable_eur:
+          type: number
+        breakdown_cents:
+          type: object
+          properties:
+            total_paid_cents:
+              type: integer
+            platform_fee_cents:
+              type: integer
+            transporter_amount_cents:
+              type: integer
+            already_refunded_cents:
+              type: integer
+            max_refundable_cents:
+              type: integer
+
+    # ----------------------------------------
+    # DISPUTE DTOs
+    # ----------------------------------------
+
+    DisputeSummaryDTO:
+      type: object
+      required:
+        - id
+        - job_id
+        - created_by
+        - reason
+        - status
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        job_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        status:
+          type: string
+          enum: [OPEN, IN_PROGRESS, RESOLVED, CLOSED]
+        created_at:
+          type: string
+          format: date-time
+
+    DisputeListResponse:
+      type: object
+      required: [items, total]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/DisputeSummaryDTO'
+        total:
+          type: integer
+
+    DisputeDetailDTO:
+      type: object
+      required:
+        - id
+        - job_id
+        - created_by
+        - reason
+        - status
+        - created_at
+        - messages
+      properties:
+        id:
+          type: string
+          format: uuid
+        job_id:
+          type: string
+          format: uuid
+        created_by:
+          type: string
+          format: uuid
+        reason:
+          type: string
+        status:
+          type: string
+        resolution:
+          type: string
+          nullable: true
+        refund_amount_cents:
+          type: integer
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+        resolved_at:
+          type: string
+          format: date-time
+          nullable: true
+        messages:
+          type: array
+          items:
+            type: object
+            required: [sender, message, created_at]
+            properties:
+              id:
+                type: string
+              sender:
+                type: string
+                description: "admin, support, or user"
+              sender_id:
+                type: string
+              message:
+                type: string
+              created_at:
+                type: string
+                format: date-time
+
+    ResolveDisputeRequest:
+      type: object
+      required: [action, resolution]
+      properties:
+        action:
+          type: string
+          enum: [refund_full, refund_partial, reject]
+          description: Action to take
+        resolution:
+          type: string
+          minLength: 10
+          description: Resolution notes
+        refund_amount_eur:
+          type: number
+          description: Amount for partial refund (EUR)
+          nullable: true
+
+    # ----------------------------------------
+    # ADMIN USER DTOs
+    # ----------------------------------------
+
+    AdminUserDTO:
+      type: object
+      required:
+        - id
+        - email
+        - role
+        - is_active
+        - is_2fa_enabled
+        - created_at
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [ADMIN, FINANCE, SUPPORT]
+        is_active:
+          type: boolean
+        is_2fa_enabled:
+          type: boolean
+        last_login_at:
+          type: string
+          format: date-time
+          nullable: true
+        created_at:
+          type: string
+          format: date-time
+
+    CreateAdminUserRequest:
+      type: object
+      required: [email, password, role]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          minLength: 8
+        role:
+          type: string
+          enum: [ADMIN, FINANCE, SUPPORT]
+
+    UpdateAdminUserRequest:
+      type: object
+      properties:
+        role:
+          type: string
+          enum: [ADMIN, FINANCE, SUPPORT]
+        is_active:
+          type: boolean
+
+    # ----------------------------------------
+    # COMMON DTOs
+    # ----------------------------------------
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Error code
+        message:
+          type: string
+          description: Human-readable error message
+        details:
+          type: object
+          description: Additional error details
+
+security:
+  - bearerAuth: []

@@ -2337,3 +2337,126 @@ Support:  support@cargobit.eu / Support123!@#
 ```
 
 ### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
+
+---
+Task ID: admin-api-dtos-openapi
+Agent: Main Agent
+Task: API-DTOs + OpenAPI-Spec für alle Admin-Endpoints
+
+## Work Log:
+
+### 1. OpenAPI 3.1.0 YAML Specification
+- Datei: `/home/z/my-project/download/openapi-admin-api.yaml` - NEU
+- Vollständige OpenAPI-Spec für Admin API
+- 7 Endpoint-Gruppen:
+  - Auth (login-step1, login-step2, logout, 2fa/setup, 2fa/enable)
+  - Payments (list, detail)
+  - Refunds (create, calculation)
+  - Disputes (list, detail, resolve)
+  - AdminUsers (list, create, update, deactivate)
+- Components:
+  - SecuritySchemes (Bearer JWT)
+  - 20+ Schema-Definitionen
+  - Query Parameters
+  - Request/Response Bodies
+  - Error Responses
+
+### 2. TypeScript DTOs
+- Datei: `/src/types/admin-dtos.ts` - NEU
+- Type-Safe DTOs für alle Admin Endpoints
+- Exportierte Typen:
+  - AdminRole, PaymentStatus, PaymentType, RefundType, RefundStatus, DisputeStatus
+  - Auth DTOs (AdminLoginStep1Request, AdminLoginStep1Response, etc.)
+  - Payment DTOs (PaymentSummaryDTO, PaymentDetailDTO, PaymentListResponse)
+  - Refund DTOs (RefundRequest, RefundResponse, RefundCalculationResponse)
+  - Dispute DTOs (DisputeSummaryDTO, DisputeDetailDTO, ResolveDisputeRequest)
+  - AdminUser DTOs (AdminUserDTO, CreateAdminUserRequest, UpdateAdminUserRequest)
+  - Common DTOs (ErrorResponse, WalletTransactionDTO, AuditEntryDTO)
+
+### 3. Disputes Admin API
+- Datei: `/src/app/api/admin/disputes/route.ts` - NEU
+  - GET: List disputes (ADMIN, FINANCE, SUPPORT)
+- Datei: `/src/app/api/admin/disputes/[disputeId]/route.ts` - NEU
+  - GET: Dispute detail (ADMIN, FINANCE, SUPPORT)
+- Datei: `/src/app/api/admin/disputes/[disputeId]/resolve/route.ts` - NEU
+  - POST: Resolve dispute (ADMIN, FINANCE for refunds, SUPPORT for reject only)
+  - Actions: refund_full, refund_partial, reject
+
+### 4. Admin Users Management API
+- Datei: `/src/app/api/admin/users/route.ts` - NEU
+  - GET: List admin users (ADMIN only)
+  - POST: Create admin user (ADMIN only)
+- Datei: `/src/app/api/admin/users/[userId]/route.ts` - NEU
+  - PATCH: Update admin user role/status (ADMIN only)
+  - DELETE: Deactivate admin user (ADMIN only)
+  - Self-protection: Cannot deactivate/demote yourself
+
+## Stage Summary:
+
+### Implementierte Dateien:
+1. `/home/z/my-project/download/openapi-admin-api.yaml` - OpenAPI 3.1.0 Spec
+2. `/src/types/admin-dtos.ts` - TypeScript DTOs
+3. `/src/app/api/admin/disputes/route.ts` - Disputes List
+4. `/src/app/api/admin/disputes/[disputeId]/route.ts` - Dispute Detail
+5. `/src/app/api/admin/disputes/[disputeId]/resolve/route.ts` - Resolve Dispute
+6. `/src/app/api/admin/users/route.ts` - Admin Users List/Create
+7. `/src/app/api/admin/users/[userId]/route.ts` - Admin User Update/Deactivate
+
+### API Endpoints Summary:
+
+| Endpoint | Method | Roles | Description |
+|----------|--------|-------|-------------|
+| `/auth/login-step1` | POST | - | Email + Password |
+| `/auth/login-step2` | POST | - | 2FA Code |
+| `/auth/logout` | POST | Any | Logout |
+| `/auth/2fa/setup` | POST | Any | Setup 2FA |
+| `/payments` | GET | ADMIN, FINANCE | List payments |
+| `/payments/{id}` | GET | ADMIN, FINANCE | Payment detail |
+| `/refund` | POST | ADMIN, FINANCE | Create refund |
+| `/refund` | GET | ADMIN, FINANCE | Refund calculation |
+| `/disputes` | GET | ADMIN, FINANCE, SUPPORT | List disputes |
+| `/disputes/{id}` | GET | ADMIN, FINANCE, SUPPORT | Dispute detail |
+| `/disputes/{id}/resolve` | POST | ADMIN, FINANCE, SUPPORT* | Resolve dispute |
+| `/users` | GET | ADMIN | List admin users |
+| `/users` | POST | ADMIN | Create admin user |
+| `/users/{id}` | PATCH | ADMIN | Update admin user |
+| `/users/{id}` | DELETE | ADMIN | Deactivate admin user |
+
+*SUPPORT can only use action=reject
+
+### DTO Schema Examples:
+
+**PaymentSummaryDTO:**
+```typescript
+{
+  id: string;
+  job_id: string;
+  shipper_id: string;
+  payment_intent_id: string;
+  amount_cents: number;
+  currency: string;
+  status: 'PENDING' | 'SUCCEEDED' | 'PARTIAL_REFUNDED' | 'REFUNDED' | 'FAILED';
+  created_at: string;
+}
+```
+
+**RefundRequest:**
+```typescript
+{
+  jobId: string;
+  type: 'full' | 'partial' | 'platform_fee_only';
+  amountEur?: number;
+  reason: string;
+}
+```
+
+**ResolveDisputeRequest:**
+```typescript
+{
+  action: 'refund_full' | 'refund_partial' | 'reject';
+  resolution: string;
+  refund_amount_eur?: number;
+}
+```
+
+### Status: ✅ VOLLSTÄNDIG IMPLEMENTIERT
