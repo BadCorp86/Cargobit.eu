@@ -8,7 +8,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/db';
-import { withAdminAuth, checkPermission, AdminRole } from '@/lib/admin-rbac';
+import { withAdminAuth, AdminRole } from '@/lib/admin-rbac';
 
 // ============================================
 // HELPER: CENTS TO EUROS
@@ -23,21 +23,13 @@ function centsToEuros(cents: number): number {
 // ============================================
 
 export async function GET(request: NextRequest) {
-  return withAdminAuth(request, async (admin) => {
-    // Check permission
-    if (!checkPermission(admin, 'payments:read')) {
-      return NextResponse.json(
-        { error: 'Forbidden - No permission to view payments' },
-        { status: 403 }
-      );
-    }
-    
+  return withAdminAuth(request, async (admin) => {    
     // Parse query parameters
     const { searchParams } = new URL(request.url);
     const status = searchParams.get('status');
     const shipperId = searchParams.get('shipperId');
     const jobId = searchParams.get('jobId');
-    const paymentIntentId = searchParams.get('paymentIntentId');
+    const search = searchParams.get('search');
     const from = searchParams.get('from');
     const to = searchParams.get('to');
     const limit = parseInt(searchParams.get('limit') || '100');
@@ -58,8 +50,13 @@ export async function GET(request: NextRequest) {
       where.jobId = jobId;
     }
     
-    if (paymentIntentId) {
-      where.paymentIntentId = paymentIntentId;
+    if (search) {
+      where.OR = [
+        { paymentIntentId: { contains: search } },
+        { chargeId: { contains: search } },
+        { shipperId: { contains: search } },
+        { jobId: { contains: search } },
+      ];
     }
     
     if (from || to) {
@@ -75,59 +72,78 @@ export async function GET(request: NextRequest) {
     // Query payments
     const payments = await prisma.payment.findMany({
       where,
-      include: {
-        job: {
-          select: {
-            id: true,
-            shipperUser: {
-              select: {
-                id: true,
-                email: true,
-                firstName: true,
-                lastName: true,
-              },
-            },
-          },
-        },
-      },
       orderBy: { createdAt: 'desc' },
       take: limit,
       skip: offset,
     });
     
-    // Get transporter names
-    const transporterIds = [...new Set(payments.map(p => p.transporterId))];
-    const transporters = await prisma.user.findMany({
-      where: { id: { in: transporterIds } },
-      select: { id: true, firstName: true, lastName: true },
-    });
+    // Get shipper and transporter names
+    const shipperIds = [...new Set(payments.map(p => p.shipperId))];
+    const transporterIds = [...new Set(payments.filter(p => p.transporterId).map(p => p.transporterId!))];
+    
+    const [shippers, transporters] = await Promise.all([
+      prisma.user.findMany({
+        where: { id: { in: shipperIds } },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      }),
+      prisma.user.findMany({
+        where: { id: { in: transporterIds } },
+        select: { id: true, firstName: true, lastName: true, email: true },
+      }),
+    ]);
+    
+    const shipperMap = new Map(shippers.map(s => [s.id, s]));
     const transporterMap = new Map(transporters.map(t => [t.id, t]));
     
+    // Get refund amounts
+    const paymentIds = payments.map(p => p.id);
+    const refunds = await prisma.refund.groupBy({
+      by: ['paymentId'],
+      where: { 
+        paymentId: { in: paymentIds },
+        status: 'SUCCEEDED',
+      },
+      _sum: { amountCents: true },
+    });
+    
+    const refundMap = new Map(refunds.map(r => [r.paymentId, r._sum.amountCents || 0]));
+    
     // Format response
-    const items = payments.map(p => ({
-      id: p.id,
-      paymentIntentId: p.paymentIntentId,
-      chargeId: p.chargeId,
-      jobId: p.jobId,
-      bidId: p.bidId,
-      shipperId: p.shipperId,
-      shipperName: `${p.job.shipperUser.firstName || ''} ${p.job.shipperUser.lastName || ''}`.trim() || 'N/A',
-      shipperEmail: p.job.shipperUser.email,
-      transporterId: p.transporterId,
-      transporterName: transporterMap.get(p.transporterId)
-        ? `${transporterMap.get(p.transporterId)!.firstName || ''} ${transporterMap.get(p.transporterId)!.lastName || ''}`.trim() || 'N/A'
-        : 'N/A',
-      amountCents: p.amountCents,
-      amountEur: centsToEuros(p.amountCents),
-      currency: p.currency,
-      platformFeeCents: p.platformFeeCents,
-      transporterAmountCents: p.transporterAmountCents,
-      refundedCents: p.refundedCents,
-      status: p.status,
-      paymentType: p.paymentType,
-      createdAt: p.createdAt,
-      succeededAt: p.succeededAt,
-    }));
+    const items = payments.map(p => {
+      const shipper = shipperMap.get(p.shipperId);
+      const transporter = p.transporterId ? transporterMap.get(p.transporterId) : null;
+      const refundedCents = refundMap.get(p.id) || 0;
+      
+      return {
+        id: p.id,
+        paymentIntentId: p.paymentIntentId,
+        chargeId: p.chargeId,
+        jobId: p.jobId,
+        shipperId: p.shipperId,
+        shipperName: shipper 
+          ? `${shipper.firstName || ''} ${shipper.lastName || ''}`.trim() || shipper.email
+          : 'Unknown',
+        shipperEmail: shipper?.email || 'N/A',
+        transporterId: p.transporterId,
+        transporterName: transporter
+          ? `${transporter.firstName || ''} ${transporter.lastName || ''}`.trim() || transporter.email
+          : 'N/A',
+        amountCents: p.amountCents,
+        amountEur: centsToEuros(p.amountCents),
+        currency: p.currency,
+        platformFeeCents: p.platformFeeCents,
+        platformFeeEur: centsToEuros(p.platformFeeCents),
+        transporterAmountCents: p.transporterAmountCents,
+        transporterAmountEur: p.transporterAmountCents ? centsToEuros(p.transporterAmountCents) : null,
+        refundedCents,
+        refundedEur: centsToEuros(refundedCents),
+        status: p.status,
+        description: p.description,
+        createdAt: p.createdAt,
+        paidAt: p.paidAt,
+        failedAt: p.failedAt,
+      };
+    });
     
     // Get total count
     const total = await prisma.payment.count({ where });
@@ -139,5 +155,5 @@ export async function GET(request: NextRequest) {
       offset,
       hasMore: offset + items.length < total,
     });
-  }, [AdminRole.ADMIN, AdminRole.FINANCE]); // Only admin and finance
+  }, [AdminRole.ADMIN, AdminRole.FINANCE]);
 }

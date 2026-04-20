@@ -4,16 +4,16 @@
  * POST /api/admin/payments/[id]/refund
  * 
  * Creates a refund for a payment.
+ * RBAC: ADMIN, FINANCE only
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { withAdminAuth, checkPermission } from '@/lib/admin-rbac';
+import { withAdminAuth, checkPermission, AdminRole } from '@/lib/admin-rbac';
 import { prisma } from '@/lib/db';
 
 interface RefundRequest {
   amountCents: number;
-  reason: string;
-  isFullRefund: boolean;
+  reason?: string;
 }
 
 export async function POST(
@@ -30,8 +30,8 @@ export async function POST(
     }
 
     try {
-      const body: RefundRequest = await request.json();
-      const { amountCents, reason, isFullRefund } = body;
+      const body = await request.json();
+      const { amountCents, reason } = body;
 
       // Validate
       if (!amountCents || amountCents <= 0) {
@@ -48,60 +48,92 @@ export async function POST(
         );
       }
 
-      // Get the payment/wallet transaction
-      const transaction = await prisma.walletTransaction.findUnique({
+      // Get the payment
+      const payment = await prisma.payment.findUnique({
         where: { id: params.id },
-        include: { wallet: true },
+        include: { refunds: true },
       });
 
-      if (!transaction) {
+      if (!payment) {
         return NextResponse.json(
           { error: 'Payment not found' },
           { status: 404 }
         );
       }
 
-      // Check if already refunded
-      if (transaction.type === 'REFUND') {
+      // Check status
+      if (payment.status !== 'SUCCEEDED') {
         return NextResponse.json(
-          { error: 'This payment has already been refunded' },
+          { error: 'Can only refund successful payments' },
           { status: 400 }
         );
       }
 
-      // Create refund transaction
-      const refund = await prisma.walletTransaction.create({
+      // Calculate already refunded
+      const alreadyRefunded = payment.refunds
+        .filter(r => r.status === 'SUCCEEDED')
+        .reduce((sum, r) => sum + r.amountCents, 0);
+
+      const maxRefundable = payment.amountCents - alreadyRefunded;
+
+      if (amountCents > maxRefundable) {
+        return NextResponse.json(
+          { error: `Refund amount exceeds refundable amount: ${maxRefundable / 100} EUR` },
+          { status: 400 }
+        );
+      }
+
+      // Create refund record
+      const refund = await prisma.refund.create({
         data: {
-          walletId: transaction.walletId,
-          type: 'REFUND',
-          amount: amountCents,
-          currency: transaction.currency,
-          relatedTransportId: transaction.relatedTransportId,
-          description: `Refund: ${reason}`,
-          reference: `refund_${params.id}`,
+          paymentId: payment.id,
+          amountCents,
+          reason,
+          status: 'PENDING',
+          initiatedBy: admin.id,
         },
       });
 
-      // Update wallet balance
-      await prisma.wallet.update({
-        where: { id: transaction.walletId },
+      // Update payment status if fully refunded
+      if (amountCents === maxRefundable) {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: 'REFUNDED' },
+        });
+      } else {
+        await prisma.payment.update({
+          where: { id: payment.id },
+          data: { status: 'PARTIALLY_REFUNDED' },
+        });
+      }
+
+      // Create payment audit event
+      await prisma.paymentAuditEvent.create({
         data: {
-          balance: { decrement: amountCents },
+          paymentId: payment.id,
+          eventType: 'refund_initiated',
+          oldStatus: payment.status,
+          newStatus: amountCents === maxRefundable ? 'REFUNDED' : 'PARTIALLY_REFUNDED',
+          adminId: admin.id,
+          metadata: JSON.stringify({
+            refundId: refund.id,
+            amountCents,
+            reason,
+          }),
         },
       });
 
-      // Create audit log
+      // Create admin audit log
       await prisma.adminAuditLog.create({
         data: {
           adminId: admin.id,
           action: 'refund',
           entityType: 'payment',
-          entityId: params.id,
+          entityId: payment.id,
           dataAfter: JSON.stringify({
+            refundId: refund.id,
             amountCents,
             reason,
-            isFullRefund,
-            refundId: refund.id,
           }),
           ipAddress: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown',
         },
@@ -111,8 +143,9 @@ export async function POST(
         success: true,
         refund: {
           id: refund.id,
-          amountCents: refund.amount,
-          currency: refund.currency,
+          amountCents: refund.amountCents,
+          amountEur: refund.amountCents / 100,
+          status: refund.status,
           createdAt: refund.createdAt,
         },
       });
@@ -123,5 +156,5 @@ export async function POST(
         { status: 500 }
       );
     }
-  }, ['ADMIN', 'FINANCE']); // Only ADMIN and FINANCE can refund
+  }, ['ADMIN', 'FINANCE'] as any);
 }

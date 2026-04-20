@@ -822,6 +822,7 @@ model WalletTransaction {
   currency            String          @default("EUR")
   
   relatedTransportId  String?
+  paymentId           String?         // Link to Payment for admin view
   description         String?
   reference           String?         // External reference
   
@@ -832,10 +833,12 @@ model WalletTransaction {
   createdAt           DateTime        @default(now())
   
   wallet              Wallet          @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  payment             Payment?        @relation(fields: [paymentId], references: [id], onDelete: SetNull)
   
   @@index([walletId])
   @@index([type])
   @@index([relatedTransportId])
+  @@index([paymentId])
 }
 
 model PayoutMethod {
@@ -1750,7 +1753,7 @@ model AdminUser {
   
   // Relations
   sessions        AdminSession[]
-  auditLogs       AuditLog[]
+  adminAuditLogs  AdminAuditLog[]
   
   @@index([email])
   @@index([role])
@@ -1805,8 +1808,280 @@ model AdminAuditLog {
   
   createdAt     DateTime  @default(now())
   
+  // Relations
+  admin         AdminUser @relation(fields: [adminId], references: [id], onDelete: Cascade)
+  
   @@index([adminId])
   @@index([action])
   @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// ============================================
+// 23. PAYMENTS & TRANSACTIONS (Admin View)
+// ============================================
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  CANCELLED
+}
+
+model Payment {
+  id                  String        @id @default(cuid())
+  
+  // Stripe references
+  paymentIntentId     String?       @unique  // Stripe PaymentIntent ID
+  chargeId            String?                // Stripe Charge ID
+  
+  // Related entities
+  jobId               String?       // Link to Transport/Job
+  shipperId           String        // User who paid
+  transporterId       String?       // Driver/Transporter receiving payment
+  
+  // Amounts
+  amountCents         Int           // Amount in cents
+  currency            String        @default("EUR")
+  platformFeeCents    Int           @default(0)  // 3.5% platform fee
+  transporterAmountCents Int?       // Amount going to transporter
+  
+  // Status
+  status              PaymentStatus @default(PENDING)
+  
+  // Metadata
+  description         String?
+  metadata            String?       // JSON with additional info
+  
+  // Timestamps
+  paidAt              DateTime?
+  failedAt            DateTime?
+  cancelledAt         DateTime?
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  
+  // Relations
+  refunds             Refund[]
+  walletTransactions  WalletTransaction[]
+  auditEvents         PaymentAuditEvent[]
+  
+  @@index([paymentIntentId])
+  @@index([jobId])
+  @@index([shipperId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model Refund {
+  id              String        @id @default(cuid())
+  paymentId       String
+  
+  // Stripe reference
+  refundId        String?       @unique  // Stripe Refund ID
+  
+  // Amount
+  amountCents     Int
+  reason          String?
+  
+  // Status
+  status          RefundStatus  @default(PENDING)
+  
+  // Admin info
+  initiatedBy     String        // Admin user ID
+  processedAt     DateTime?
+  failedAt        DateTime?
+  
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  // Relations
+  payment         Payment       @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  
+  @@index([paymentId])
+  @@index([refundId])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model PaymentAuditEvent {
+  id              String    @id @default(cuid())
+  paymentId       String
+  
+  // Event
+  eventType       String    // created, paid, failed, refunded, etc.
+  oldStatus       String?
+  newStatus       String
+  
+  // Context
+  adminId         String?   // If triggered by admin
+  metadata        String?   // JSON
+  
+  createdAt       DateTime  @default(now())
+  
+  // Relations
+  payment         Payment   @relation(fields: [paymentId], references: [id], onDelete: Cascade)
+  
+  @@index([paymentId])
+  @@index([eventType])
+  @@index([createdAt])
+}
+
+// ============================================
+// 24. DISPUTES SYSTEM
+// ============================================
+
+enum DisputeStatus {
+  OPEN          // New dispute, awaiting review
+  IN_PROGRESS   // Being investigated
+  AWAITING_INFO // Waiting for additional info from parties
+  RESOLVED      // Resolved (refunded/rejected)
+  CLOSED        // Closed without action
+}
+
+enum DisputeReason {
+  DAMAGE              // Goods damaged during transport
+  DELAY               // Significant delivery delay
+  LOST_CARGO          // Cargo lost
+  WRONG_DELIVERY      // Delivered to wrong address
+  QUALITY_ISSUE       // Quality of service issue
+  PRICE_DISPUTE       // Disagreement on pricing
+  DRIVER_BEHAVIOR     // Driver behavior complaint
+  DOCUMENTATION       // Missing/incorrect documents
+  OTHER               // Other reasons
+}
+
+enum DisputeResolution {
+  REFUND_FULL       // Full refund to shipper
+  REFUND_PARTIAL    // Partial refund to shipper
+  REJECT            // Reject dispute, no refund
+  COMPENSATION      // Compensation paid (not from transporter)
+  RESEND            // Re-send cargo
+}
+
+model Dispute {
+  id              String            @id @default(cuid())
+  
+  // Related Job
+  jobId           String            // Link to Transport/Job
+  
+  // Parties
+  createdById     String            // User who created the dispute
+  againstId       String?           // User/Driver against whom the dispute is filed
+  
+  // Details
+  reason          DisputeReason
+  subject         String
+  description     String
+  
+  // Amount in dispute
+  disputedAmountCents Int?
+  
+  // Status
+  status          DisputeStatus     @default(OPEN)
+  
+  // Resolution
+  resolution      DisputeResolution?
+  resolutionText  String?
+  refundAmountCents Int?
+  
+  // Admin handling
+  assignedToId    String?           // Admin user ID
+  resolvedById    String?           // Admin who resolved
+  resolvedAt      DateTime?
+  
+  // Timestamps
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  
+  // Relations
+  messages        DisputeMessage[]
+  attachments     DisputeAttachment[]
+  auditEvents     DisputeAuditEvent[]
+  
+  @@index([jobId])
+  @@index([createdById])
+  @@index([status])
+  @@index([reason])
+  @@index([createdAt])
+}
+
+model DisputeMessage {
+  id            String    @id @default(cuid())
+  disputeId     String
+  
+  // Sender
+  senderId      String
+  senderType    String    // USER, DRIVER, ADMIN, SUPPORT
+  
+  // Content
+  message       String
+  attachments   String?   // JSON array of attachment URLs
+  
+  // Visibility
+  isInternal    Boolean   @default(false)  // Internal note (not visible to parties)
+  
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  dispute       Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  
+  @@index([disputeId])
+  @@index([senderId])
+  @@index([createdAt])
+}
+
+model DisputeAttachment {
+  id            String    @id @default(cuid())
+  disputeId     String
+  messageId     String?   // Optional link to message
+  
+  // File info
+  fileName      String
+  fileUrl       String
+  fileType      String    // image, pdf, document
+  fileSize      Int?      // bytes
+  
+  // Uploader
+  uploadedBy    String    // User ID
+  
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  dispute       Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  
+  @@index([disputeId])
+}
+
+model DisputeAuditEvent {
+  id            String    @id @default(cuid())
+  disputeId     String
+  
+  // Event
+  eventType     String    // created, status_change, message, resolved, etc.
+  oldStatus     String?
+  newStatus     String?
+  
+  // Context
+  adminId       String?   // If triggered by admin
+  metadata      String?   // JSON
+  
+  createdAt     DateTime  @default(now())
+  
+  // Relations
+  dispute       Dispute  @relation(fields: [disputeId], references: [id], onDelete: Cascade)
+  
+  @@index([disputeId])
+  @@index([eventType])
   @@index([createdAt])
 }
