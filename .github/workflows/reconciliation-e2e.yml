@@ -1,0 +1,184 @@
+name: Reconciliation E2E Tests
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'src/reconciliation/**'
+      - 'src/app/api/admin/reconciliation/**'
+      - 'postman/postman_reconciliation.json'
+      - '.github/workflows/reconciliation-e2e.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/reconciliation/**'
+      - 'src/app/api/admin/reconciliation/**'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+  schedule:
+    # Run every 6 hours after reconciliation cron
+    - cron: '15 */6 * * *'
+
+env:
+  NODE_VERSION: '20'
+  Newman_VERSION: '6'
+
+jobs:
+  e2e-tests:
+    name: Run Newman E2E Tests
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment || 'staging' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Install Newman
+        run: npm install -g newman@${{ env.Newman_VERSION }} newman-reporter-junitfull
+
+      - name: Create reports directory
+        run: mkdir -p reports
+
+      - name: Create Postman environment file
+        run: |
+          cat > postman_env_${{ github.event.inputs.environment || 'staging' }}.json << EOF
+          {
+            "id": "env-${{ github.event.inputs.environment || 'staging' }}",
+            "name": "${{ github.event.inputs.environment || 'staging' }}",
+            "values": [
+              {
+                "key": "base_url",
+                "value": "${{ secrets[format('{0}_BASE_URL', github.event.inputs.environment || 'STAGING')] }}",
+                "type": "default",
+                "enabled": true
+              },
+              {
+                "key": "admin_jwt",
+                "value": "${{ secrets[format('{0}_ADMIN_JWT', github.event.inputs.environment || 'STAGING')] }}",
+                "type": "secret",
+                "enabled": true
+              }
+            ],
+            "_postman_variable_scope": "environment",
+            "_postman_exported_at": "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)",
+            "_postman_exported_using": "Manual"
+          }
+          EOF
+
+      - name: Run Newman E2E Tests
+        id: newman
+        run: |
+          newman run postman/postman_reconciliation.json \
+            -e postman_env_${{ github.event.inputs.environment || 'staging' }}.json \
+            --reporters cli,junitfull \
+            --reporter-junitfull-export reports/newman-reconciliation.xml \
+            --timeout-request 30000 \
+            --timeout-script 30000 \
+            --delay-request 100 \
+            --bail || echo "exit_code=$?" >> $GITHUB_OUTPUT
+        continue-on-error: true
+
+      - name: Upload JUnit Report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: newman-report
+          path: reports/newman-reconciliation.xml
+          retention-days: 30
+
+      - name: Publish Test Results
+        uses: dorny/test-reporter@v1
+        if: always()
+        with:
+          name: Newman E2E Results
+          path: reports/newman-reconciliation.xml
+          reporter: java-junit
+          fail-on-error: true
+
+      - name: Check Test Results
+        run: |
+          if [ -f reports/newman-reconciliation.xml ]; then
+            # Check for failures in JUnit XML
+            failures=$(grep -oP 'failures="\K[^"]+' reports/newman-reconciliation.xml | head -1)
+            errors=$(grep -oP 'errors="\K[^"]+' reports/newman-reconciliation.xml | head -1)
+
+            echo "Test Summary:"
+            echo "  Failures: ${failures:-0}"
+            echo "  Errors: ${errors:-0}"
+
+            if [ "${failures:-0}" -gt 0 ] || [ "${errors:-0}" -gt 0 ]; then
+              echo "::error::E2E tests failed with $failures failures and $errors errors"
+              exit 1
+            fi
+            echo "::notice::All E2E tests passed"
+          else
+            echo "::error::No test report generated"
+            exit 1
+          fi
+
+  notify-on-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: failure() && github.event_name == 'schedule'
+
+    steps:
+      - name: Send Slack Notification
+        uses: slackapi/slack-github-action@v1.24.0
+        with:
+          payload: |
+            {
+              "text": "🔴 Reconciliation E2E Tests Failed",
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "*🔴 Reconciliation E2E Tests Failed*\n\n• Repository: ${{ github.repository }}\n• Branch: ${{ github.ref_name }}\n• Run: <${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View Run>\n• Time: ${{ github.event.head_commit.timestamp }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+
+  # Optional: Run smoke tests after reconciliation
+  smoke-after-reconcile:
+    name: Smoke Tests After Reconcile
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule'
+    needs: e2e-tests
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Smoke Tests
+        run: |
+          # Wait for reconciliation to complete (5 min buffer)
+          sleep 300
+
+          # Basic health check
+          curl -fsS ${{ secrets.STAGING_BASE_URL }}/api/health || exit 1
+
+          # Check reconciliation metrics endpoint
+          curl -fsS ${{ secrets.STAGING_BASE_URL }}/api/metrics/payouts | grep -q "reconciliation_runs_total" || exit 1
+
+          echo "::notice::Smoke tests passed"

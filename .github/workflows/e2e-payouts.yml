@@ -1,0 +1,223 @@
+# ============================================
+# CARGOBIT PAYOUTS E2E TESTS
+# GitHub Actions Workflow
+# ============================================
+
+name: E2E Payouts Tests
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/app/api/admin/payouts/**'
+      - 'src/app/api/stripe/webhook/payouts/**'
+      - 'src/app/api/cron/payouts/**'
+      - 'src/services/payout-*.ts'
+      - 'prisma/schema.prisma'
+      - 'scripts/collections/payouts-e2e.postman_collection.json'
+  pull_request:
+    branches: [main, develop]
+    paths:
+      - 'src/app/api/admin/payouts/**'
+      - 'src/app/api/stripe/webhook/payouts/**'
+      - 'src/app/api/cron/payouts/**'
+      - 'src/services/payout-*.ts'
+      - 'prisma/schema.prisma'
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to test'
+        required: true
+        default: 'staging'
+        type: choice
+        options:
+          - staging
+          - production
+
+env:
+  NODE_VERSION: '20'
+  CI: true
+
+jobs:
+  test:
+    name: Run E2E Tests
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: cargobit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: bun run db:generate
+
+      - name: Setup test database
+        run: bun run db:push
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_test
+
+      - name: Build application
+        run: bun run build
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_test
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+
+      - name: Start application
+        run: bun run start &
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_test
+          REDIS_HOST: localhost
+          REDIS_PORT: 6379
+          STRIPE_SECRET_KEY: sk_test_placeholder
+          STRIPE_WEBHOOK_SECRET: whsec_test
+          CRON_SECRET: test_cron_secret
+          NEXT_PUBLIC_API_URL: http://localhost:3000
+          PORT: 3000
+
+      - name: Wait for application
+        run: |
+          echo "Waiting for application to start..."
+          timeout 60s bash -c 'until curl -s http://localhost:3000/api/health > /dev/null; do sleep 2; done'
+          echo "Application is ready!"
+
+      - name: Install Newman
+        run: npm install -g newman
+
+      - name: Create test results directory
+        run: mkdir -p test-results/payouts
+
+      - name: Run Newman E2E Tests
+        run: |
+          newman run scripts/collections/payouts-e2e.postman_collection.json \
+            --global-var "baseUrl=http://localhost:3000" \
+            --global-var "adminToken=${{ secrets.TEST_ADMIN_TOKEN }}" \
+            --reporters cli,json \
+            --reporter-json-export test-results/payouts/results.json \
+            --bail \
+            --timeout 60000 \
+            --timeout-request 30000 \
+            --delay-request 500
+        continue-on-error: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: newman-test-results
+          path: test-results/
+          retention-days: 30
+
+      - name: Check test results
+        run: |
+          if [ -f test-results/payouts/results.json ]; then
+            FAILURES=$(cat test-results/payouts/results.json | jq '.run.failures | length')
+            if [ "$FAILURES" -gt 0 ]; then
+              echo "::error::$FAILURES test(s) failed"
+              exit 1
+            fi
+          else
+            echo "::error::No test results found"
+            exit 1
+          fi
+
+  lint:
+    name: Lint Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Run ESLint
+        run: bun run lint
+        continue-on-error: true
+
+  type-check:
+    name: TypeScript Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v1
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Generate Prisma Client
+        run: bun run db:generate
+
+      - name: Run TypeScript check
+        run: bunx tsc --noEmit
+        continue-on-error: true
+
+  notify:
+    name: Notify on Failure
+    needs: [test, lint, type-check]
+    if: failure()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Send Slack notification
+        if: ${{ secrets.SLACK_WEBHOOK_URL }}
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

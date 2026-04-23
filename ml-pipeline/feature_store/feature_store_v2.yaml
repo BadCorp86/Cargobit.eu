@@ -1,0 +1,68 @@
+# =============================================================================
+# CargoBit Feature Store - Feast Configuration
+# =============================================================================
+# Production-ready Feast Feature Store for Online/Offline Serving
+#
+# Architecture:
+#   - Online Store: Redis (real-time serving, <10ms latency)
+#   - Offline Store: S3/Parquet (training, historical data)
+#   - Registry: PostgreSQL
+#
+# Setup:
+#   feast apply
+#   feast materialize-incremental $(date -u +"%Y-%m-%d %H:%M:%S")
+#
+# Author: CargoBit ML Team
+# Version: 3.0.0
+# =============================================================================
+
+project: cargobit_feature_store
+
+# Registry Configuration (PostgreSQL)
+registry:
+    registry_type: sql
+    path: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/feast_registry
+
+# Provider Configuration
+provider: aws  # Use "local" for development
+
+# Online Store Configuration (Redis)
+online_store:
+    type: redis
+    connection_string: ${REDIS_HOST}:6379
+    key_ttl_seconds: 86400  # 24 hours
+
+# Offline Store Configuration (S3/Parquet)
+offline_store:
+    type: file
+    file_format: parquet
+    # For production, use S3:
+    # type: s3
+    # s3_path: s3://cargobit-feature-store/
+
+# Entity Key Serialization
+entity_key_serialization_version: 2
+
+# =============================================================================
+# Feature Serving Configuration
+# =============================================================================
+
+# Feature Server (for online serving)
+feature_server:
+    enabled: true
+    host: 0.0.0.0
+    port: 6566
+    workers: 4
+
+# Monitoring
+monitoring:
+    enabled: true
+    metrics_port: 9090
+    latency_threshold_ms: 10
+
+# =============================================================================
+# Data Sources
+# =============================================================================
+
+# This file uses Jinja2 templating for environment variables
+# Actual feature definitions are in feature_definitions_v2.py

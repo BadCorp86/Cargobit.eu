@@ -1,0 +1,15 @@
+# Values für Reconciliation CronJob
+# Zu values.yaml hinzufügen
+
+reconciliation:
+  enabled: true
+  schedule: "0 */6 * * *"  # Alle 6 Stunden
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"

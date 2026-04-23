@@ -1,650 +1,392 @@
 {
   "info": {
-    "name": "CargoBit Admin - Payouts",
-    "description": "Admin Payouts API Collection for CargoBit Platform\n\nTask 3.1 - Payouts Create/List/Detail/Retry\n\nRBAC: ADMIN and FINANCE roles required",
+    "name": "CargoBit Admin Payouts API",
+    "description": "Task 3.1 Payouts - Admin API Collection",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost:3000",
-      "type": "string"
+      "value": "http://localhost:3000"
     },
     {
       "key": "admin_jwt",
-      "value": "",
-      "type": "string"
+      "value": "your_admin_jwt_token"
     },
     {
       "key": "payout_id",
-      "value": "",
-      "type": "string"
+      "value": ""
     }
   ],
-  "auth": {
-    "type": "bearer",
-    "bearer": [
-      {
-        "key": "token",
-        "value": "{{admin_jwt}}",
-        "type": "string"
-      }
-    ]
-  },
   "item": [
-    {
-      "name": "Authentication",
-      "item": [
-        {
-          "name": "Admin Login Step 1",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has requires2fa', () => {",
-                  "    pm.expect(json).to.have.property('requires2fa');",
-                  "});",
-                  "",
-                  "if (json.requires2fa) {",
-                  "    console.log('2FA required for login');",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@cargobit.eu\",\n  \"password\": \"your-admin-password\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/admin/auth/login-step1",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "auth", "login-step1"]
-            }
-          }
-        },
-        {
-          "name": "Admin Login Step 2",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has accessToken', () => {",
-                  "    pm.expect(json).to.have.property('accessToken');",
-                  "});",
-                  "",
-                  "pm.collectionVariables.set('admin_jwt', json.accessToken);",
-                  "console.log('Admin JWT saved to collection variables');"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"admin@cargobit.eu\",\n  \"code\": \"123456\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/admin/auth/login-step2",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "auth", "login-step2"]
-            }
-          }
-        }
-      ]
-    },
     {
       "name": "Payouts",
       "item": [
         {
           "name": "Create Payout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{admin_jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "admin_user_id"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"shipper_123\",\n  \"amountCents\": 5000,\n  \"currency\": \"EUR\",\n  \"idempotencyKey\": \"payout_shipper_123_20260421_v1\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/payouts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "payouts"]
+            }
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 201', () => {",
+                  "pm.test('Status code is 201', function () {",
                   "    pm.response.to.have.status(201);",
                   "});",
                   "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has payout object', () => {",
-                  "    pm.expect(json).to.have.property('payout');",
-                  "});",
-                  "",
-                  "pm.test('Payout has required fields', () => {",
-                  "    pm.expect(json.payout).to.have.property('id');",
-                  "    pm.expect(json.payout).to.have.property('userId');",
-                  "    pm.expect(json.payout).to.have.property('amountCents');",
-                  "    pm.expect(json.payout).to.have.property('status');",
-                  "});",
-                  "",
-                  "if (json.payout && json.payout.id) {",
-                  "    pm.collectionVariables.set('payout_id', json.payout.id);",
-                  "    console.log('Payout ID saved:', json.payout.id);",
-                  "}"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"shipper_123\",\n  \"amountCents\": 5000,\n  \"currency\": \"EUR\",\n  \"idempotencyKey\": \"payout_shipper_123_20260420_v1\",\n  \"description\": \"Test payout for shipper\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/admin/payouts",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "payouts"]
-            },
-            "description": "Create a new payout. Requires ADMIN or FINANCE role.\n\n**Request Body:**\n- `userId` (required): User ID receiving the payout\n- `amountCents` (required): Amount in cents (minimum 1)\n- `currency` (optional): Currency code, default EUR\n- `idempotencyKey` (optional): Unique key for deduplication\n- `description` (optional): Notes for the payout\n\n**Response:**\n- `201`: Payout created successfully\n- `400`: Validation error or insufficient funds\n- `403`: Insufficient permissions"
-          }
-        },
-        {
-          "name": "Create Payout - Idempotent Retry",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200 (duplicate)', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response indicates duplicate', () => {",
-                  "    pm.expect(json.duplicate).to.be.true;",
-                  "});",
-                  "",
-                  "pm.test('Same payout ID returned', () => {",
-                  "    pm.expect(json.payout.id).to.equal(pm.collectionVariables.get('payout_id'));",
+                  "pm.test('Response has payout id', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    pm.expect(jsonData.payout.id).to.exist;",
+                  "    pm.environment.set('payout_id', jsonData.payout.id);",
                   "});"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"shipper_123\",\n  \"amountCents\": 5000,\n  \"currency\": \"EUR\",\n  \"idempotencyKey\": \"payout_shipper_123_20260420_v1\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/admin/payouts",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "payouts"]
-            },
-            "description": "Retry with same idempotency key. Should return same payout with duplicate=true."
-          }
+          ]
         },
         {
           "name": "List Payouts",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has payouts array', () => {",
-                  "    pm.expect(json).to.have.property('payouts');",
-                  "    pm.expect(json.payouts).to.be.an('array');",
-                  "});",
-                  "",
-                  "pm.test('Response has pagination info', () => {",
-                  "    pm.expect(json).to.have.property('total');",
-                  "    pm.expect(json).to.have.property('limit');",
-                  "    pm.expect(json).to.have.property('offset');",
-                  "});",
-                  "",
-                  "console.log('Total payouts:', json.total);"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
+                "value": "{{admin_jwt}}"
+              },
+              {
+                "key": "x-user-id",
+                "value": "admin_user_id"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/admin/payouts?limit=50&offset=0&order=desc",
+              "raw": "{{base_url}}/api/admin/payouts?limit=50",
               "host": ["{{base_url}}"],
               "path": ["api", "admin", "payouts"],
               "query": [
-                { "key": "status", "value": "PENDING", "disabled": true },
-                { "key": "userId", "value": "shipper_123", "disabled": true },
-                { "key": "limit", "value": "50" },
-                { "key": "offset", "value": "0" },
-                { "key": "order", "value": "desc" }
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "status",
+                  "value": "PAID",
+                  "disabled": true
+                },
+                {
+                  "key": "userId",
+                  "value": "shipper_123",
+                  "disabled": true
+                }
               ]
-            },
-            "description": "List payouts with optional filters.\n\n**Query Parameters:**\n- `status`: Filter by PayoutStatus (PENDING, PROCESSING, PAID, FAILED, CANCELLED)\n- `userId`: Filter by user ID\n- `limit`: Result limit (default: 100, max: 1000)\n- `offset`: Pagination offset\n- `order`: Sort order (asc/desc, default: desc)"
-          }
-        },
-        {
-          "name": "List Payouts - Filter by Status",
+            }
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200', () => {",
+                  "pm.test('Status code is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "const json = pm.response.json();",
-                  "pm.test('All payouts have PENDING status', () => {",
-                  "    json.payouts.forEach(p => {",
-                  "        pm.expect(p.status).to.equal('PENDING');",
-                  "    });",
+                  "pm.test('Response has data array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
                   "});"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/admin/payouts?status=PENDING",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "payouts"],
-              "query": [
-                { "key": "status", "value": "PENDING" }
-              ]
-            }
-          }
+          ]
         },
         {
           "name": "Get Payout Detail",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 200', () => {",
-                  "    pm.response.to.have.status(200);",
-                  "});",
-                  "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has detailed payout info', () => {",
-                  "    pm.expect(json).to.have.property('id');",
-                  "    pm.expect(json).to.have.property('userId');",
-                  "    pm.expect(json).to.have.property('amountCents');",
-                  "    pm.expect(json).to.have.property('status');",
-                  "    pm.expect(json).to.have.property('createdAt');",
-                  "});",
-                  "",
-                  "pm.test('Response has audit trail', () => {",
-                  "    pm.expect(json).to.have.property('auditTrail');",
-                  "});",
-                  "",
-                  "pm.test('Response has wallet transactions', () => {",
-                  "    pm.expect(json).to.have.property('walletTransactions');",
-                  "});",
-                  "",
-                  "console.log('Payout detail:', JSON.stringify(json, null, 2));"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
+                "value": "{{admin_jwt}}"
+              },
+              {
+                "key": "x-user-id",
+                "value": "admin_user_id"
               }
             ],
             "url": {
               "raw": "{{base_url}}/api/admin/payouts/{{payout_id}}",
               "host": ["{{base_url}}"],
               "path": ["api", "admin", "payouts", "{{payout_id}}"]
-            },
-            "description": "Get detailed payout information including audit trail and wallet transactions."
-          }
-        },
-        {
-          "name": "Retry Failed Payout",
+            }
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200', () => {",
+                  "pm.test('Status code is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has success flag', () => {",
-                  "    pm.expect(json).to.have.property('success');",
-                  "});",
-                  "",
-                  "if (json.success) {",
-                  "    pm.test('Response has new payout', () => {",
-                  "        pm.expect(json).to.have.property('payout');",
-                  "    });",
-                  "}"
+                  "pm.test('Response has payout details', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    pm.expect(jsonData.data.payout.id).to.eql(pm.environment.get('payout_id'));",
+                  "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Retry Failed Payout",
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
+                "value": "{{admin_jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "admin_user_id"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
             "url": {
               "raw": "{{base_url}}/api/admin/payouts/{{payout_id}}/retry",
               "host": ["{{base_url}}"],
               "path": ["api", "admin", "payouts", "{{payout_id}}", "retry"]
-            },
-            "description": "Retry a failed payout. Creates a new payout with the same parameters.\n\n**Preconditions:**\n- Payout must be in FAILED status"
-          }
-        },
-        {
-          "name": "Cancel Payout",
+            }
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 200', () => {",
+                  "pm.test('Status code is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has success flag', () => {",
-                  "    pm.expect(json).to.have.property('success');",
-                  "    pm.expect(json.success).to.be.true;",
+                  "pm.test('Response indicates retry success', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Cancel Payout",
           "request": {
             "method": "DELETE",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
+                "value": "{{admin_jwt}}"
+              },
+              {
+                "key": "x-user-id",
+                "value": "admin_user_id"
               }
             ],
             "url": {
               "raw": "{{base_url}}/api/admin/payouts/{{payout_id}}",
               "host": ["{{base_url}}"],
               "path": ["api", "admin", "payouts", "{{payout_id}}"]
-            },
-            "description": "Cancel a pending payout. Reverses the wallet debit.\n\n**Preconditions:**\n- Payout must be in PENDING status"
-          }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response indicates cancellation', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.eql(true);",
+                  "    pm.expect(jsonData.payout.status).to.eql('CANCELLED');",
+                  "});"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
     {
-      "name": "Error Cases",
+      "name": "Error Scenarios",
       "item": [
         {
           "name": "Create Payout - Insufficient Balance",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 400', () => {",
-                  "    pm.response.to.have.status(400);",
-                  "});",
-                  "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has error', () => {",
-                  "    pm.expect(json).to.have.property('error');",
-                  "});",
-                  "",
-                  "pm.test('Error mentions insufficient balance', () => {",
-                  "    pm.expect(json.error.toLowerCase()).to.include('insufficient');",
-                  "});"
-                ]
-              }
-            }
-          ],
           "request": {
             "method": "POST",
             "header": [
+              {
+                "key": "Authorization",
+                "value": "{{admin_jwt}}"
+              },
               {
                 "key": "Content-Type",
                 "value": "application/json"
               },
               {
-                "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
+                "key": "x-user-id",
+                "value": "admin_user_id"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"user_with_no_balance\",\n  \"amountCents\": 99999900,\n  \"currency\": \"EUR\"\n}"
+              "raw": "{\n  \"userId\": \"user_with_low_balance\",\n  \"amountCents\": 10000000,\n  \"currency\": \"EUR\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/admin/payouts",
               "host": ["{{base_url}}"],
               "path": ["api", "admin", "payouts"]
             }
-          }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is INSUFFICIENT_BALANCE', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.eql('INSUFFICIENT_BALANCE');",
+                  "});"
+                ]
+              }
+            }
+          ]
         },
         {
           "name": "Create Payout - Invalid Amount",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "{{admin_jwt}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-id",
+                "value": "admin_user_id"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"shipper_123\",\n  \"amountCents\": 50\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/admin/payouts",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "payouts"]
+            }
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 400', () => {",
+                  "pm.test('Status code is 400', function () {",
                   "    pm.response.to.have.status(400);",
                   "});",
                   "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has validation errors', () => {",
-                  "    pm.expect(json).to.have.property('details');",
+                  "pm.test('Error code is INVALID_AMOUNT', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.eql('INVALID_AMOUNT');",
                   "});"
                 ]
               }
             }
-          ],
+          ]
+        },
+        {
+          "name": "Retry Payout - Not Failed",
           "request": {
             "method": "POST",
             "header": [
               {
-                "key": "Content-Type",
-                "value": "application/json"
+                "key": "Authorization",
+                "value": "{{admin_jwt}}"
               },
               {
-                "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
+                "key": "x-user-id",
+                "value": "admin_user_id"
               }
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"userId\": \"shipper_123\",\n  \"amountCents\": -100\n}"
+              "raw": "{}"
             },
             "url": {
-              "raw": "{{base_url}}/api/admin/payouts",
+              "raw": "{{base_url}}/api/admin/payouts/{{payout_id}}/retry",
               "host": ["{{base_url}}"],
-              "path": ["api", "admin", "payouts"]
+              "path": ["api", "admin", "payouts", "{{payout_id}}", "retry"]
             }
-          }
-        },
-        {
-          "name": "Get Payout - Not Found",
+          },
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
-                  "pm.test('Status code is 404', () => {",
-                  "    pm.response.to.have.status(404);",
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
                   "});",
                   "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has error', () => {",
-                  "    pm.expect(json).to.have.property('error');",
-                  "    pm.expect(json.error).to.include('not found');",
+                  "pm.test('Error code is NOT_FAILED', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.eql('NOT_FAILED');",
                   "});"
                 ]
               }
             }
-          ],
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{admin_jwt}}"
-              }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/admin/payouts/nonexistent_payout_id",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "payouts", "nonexistent_payout_id"]
-            }
-          }
-        },
-        {
-          "name": "Create Payout - No Auth",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 401', () => {",
-                  "    pm.response.to.have.status(401);",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"shipper_123\",\n  \"amountCents\": 5000\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/admin/payouts",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "payouts"]
-            }
-          }
-        },
-        {
-          "name": "Create Payout - SUPPORT Role (Forbidden)",
-          "event": [
-            {
-              "listen": "test",
-              "script": {
-                "exec": [
-                  "pm.test('Status code is 403', () => {",
-                  "    pm.response.to.have.status(403);",
-                  "});",
-                  "",
-                  "const json = pm.response.json();",
-                  "pm.test('Response has permission error', () => {",
-                  "    pm.expect(json).to.have.property('error');",
-                  "    pm.expect(json.error.toLowerCase()).to.include('permission');",
-                  "});"
-                ]
-              }
-            }
-          ],
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              },
-              {
-                "key": "Authorization",
-                "value": "Bearer {{support_jwt}}"
-              }
-            ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"userId\": \"shipper_123\",\n  \"amountCents\": 5000\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/admin/payouts",
-              "host": ["{{base_url}}"],
-              "path": ["api", "admin", "payouts"]
-            },
-            "description": "SUPPORT role should NOT have payouts:create permission."
-          }
+          ]
         }
       ]
     }

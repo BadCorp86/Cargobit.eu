@@ -1,0 +1,389 @@
+openapi: 3.0.3
+info:
+  title: ML Inference Service - Suggestion Scoring
+  version: 1.0.0
+  description: |
+    ML-powered Suggestion Scoring Service für die CargoBit Transport-Plattform.
+    
+    ## Features
+    - **ML Scoring**: Berechnet Acceptance-Wahrscheinlichkeit für Vorschläge
+    - **Explainability**: SHAP-basierte Erklärungen für Vorhersagen
+    - **Modell-Versionierung**: Unterstützung mehrerer Modell-Versionen
+    
+    ## Architektur
+    - LightGBM/XGBoost Binary Classification
+    - SHAP TreeExplainer für Feature Contributions
+    - Hybrid Scoring: `Score_final = α × heuristic + (1-α) × ml`
+    
+    ## Feature Set
+    - 6 Heuristic Component Scores
+    - 12 Context Features
+    - 8 Historical Features
+    - 4 Meta Features
+
+servers:
+  - url: https://ml-inference.cargobit.io/v1
+    description: Production
+  - url: https://ml-inference-staging.cargobit.io/v1
+    description: Staging
+  - url: http://localhost:8080
+    description: Development
+
+paths:
+  /score:
+    post:
+      summary: Berechnet den ML-Score für einen Vorschlag
+      operationId: scoreSuggestion
+      description: |
+        Berechnet die Acceptance-Wahrscheinlichkeit für einen Transport-Vorschlag
+        basierend auf Feature-Werten.
+        
+        **Performance**: < 20ms p99 Latency
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ScoreRequest'
+            examples:
+              standard:
+                summary: Standard Scoring Request
+                value:
+                  modelVersion: "latest"
+                  features:
+                    revenue_score: 0.85
+                    capacity_utilization_score: 0.72
+                    priority_score: 0.5
+                    risk_score: 0.15
+                    service_level_score: 0.9
+                    co2_score: 0.6
+                    distance_pickup_to_route_km: 12.5
+                    eta_to_pickup_minutes: 45.0
+                    free_volume_m3: 15.0
+                    tour_progress_pct: 0.35
+                    customer_acceptance_rate_30d: 0.78
+                    driver_acceptance_rate_30d: 0.82
+                    lane_realized_margin_avg_90d: 0.15
+      responses:
+        '200':
+          description: ML-Score erfolgreich berechnet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScoreResponse'
+              examples:
+                success:
+                  summary: Erfolgreiche Scoring Response
+                  value:
+                    modelVersion: "v20260415_abc123"
+                    scoreMl: 0.7832
+                    inferenceTimeMs: 12
+        '400':
+          description: Ungültige Anfrage
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Service nicht verfügbar
+
+  /explain:
+    post:
+      summary: Liefert Explainability-Informationen für einen Vorschlag
+      operationId: explainSuggestion
+      description: |
+        Liefert SHAP-basierte Erklärungen für die Vorhersage.
+        Zeigt die wichtigsten Features und deren Einfluss auf den Score.
+        
+        **Anwendungsfälle**:
+        - Dispatcher UI: Warum wurde dieser Score berechnet?
+        - Audit: Nachvollziehbarkeit von ML-Entscheidungen
+        - Debugging: Feature-Analyse für ML-Entwicklung
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExplainRequest'
+            examples:
+              standard:
+                summary: Standard Explain Request
+                value:
+                  modelVersion: "latest"
+                  features:
+                    revenue_score: 0.85
+                    capacity_utilization_score: 0.72
+                    priority_score: 0.5
+                    risk_score: 0.15
+                    service_level_score: 0.9
+                    co2_score: 0.6
+                    distance_pickup_to_route_km: 12.5
+                    eta_to_pickup_minutes: 45.0
+                  topK: 5
+      responses:
+        '200':
+          description: Erklärung erfolgreich berechnet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExplainResponse'
+              examples:
+                success:
+                  summary: Erfolgreiche Explain Response
+                  value:
+                    modelVersion: "v20260415_abc123"
+                    mlScore: 0.7832
+                    topContributors:
+                      - feature: "revenue_score"
+                        impact: 0.1523
+                        direction: "positive"
+                      - feature: "distance_pickup_to_route_km"
+                        impact: 0.0892
+                        direction: "negative"
+                      - feature: "customer_acceptance_rate_30d"
+                        impact: 0.0654
+                        direction: "positive"
+                      - feature: "risk_score"
+                        impact: 0.0432
+                        direction: "negative"
+                      - feature: "driver_acceptance_rate_30d"
+                        impact: 0.0321
+                        direction: "positive"
+                    explanationMethod: "shap"
+                    generatedAt: "2026-04-19T14:30:00Z"
+
+  /health:
+    get:
+      summary: Health Check
+      operationId: healthCheck
+      description: Prüft den Gesundheitszustand des Services
+      responses:
+        '200':
+          description: Service ist gesund
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [healthy, degraded]
+                  modelsLoaded:
+                    type: integer
+                  activeModel:
+                    type: string
+                  requestsProcessed:
+                    type: integer
+                  uptimeSeconds:
+                    type: number
+
+  /model/info:
+    get:
+      summary: Modell-Informationen
+      operationId: getModelInfo
+      description: Liefert Informationen über das aktive Modell
+      parameters:
+        - name: modelVersion
+          in: query
+          required: false
+          schema:
+            type: string
+            default: "latest"
+          description: Spezifische Modell-Version oder "latest"
+      responses:
+        '200':
+          description: Modell-Informationen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelInfo'
+
+  /models:
+    get:
+      summary: Verfügbare Modelle
+      operationId: listModels
+      description: Listet alle verfügbaren Modell-Versionen
+      responses:
+        '200':
+          description: Liste der Modelle
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  models:
+                    type: array
+                    items:
+                      type: string
+                  activeModel:
+                    type: string
+
+components:
+  schemas:
+    FeatureMap:
+      type: object
+      additionalProperties:
+        type: number
+      description: |
+        Key-Value Map von Feature-Namen zu numerischen Werten.
+        
+        **Unterstützte Features**:
+        
+        | Feature | Typ | Beschreibung |
+        |---------|-----|--------------|
+        | revenue_score | float [0,1] | Revenue Score |
+        | capacity_utilization_score | float [0,1] | Capacity Score |
+        | priority_score | float [0,1] | Priority Score |
+        | risk_score | float [0,1] | Risk Score |
+        | service_level_score | float [0,1] | Service Level Score |
+        | co2_score | float [0,1] | CO2 Score |
+        | distance_pickup_to_route_km | float | Distanz Pickup→Route |
+        | eta_to_pickup_minutes | float | ETA zum Pickup |
+        | free_volume_m3 | float | Freies Volumen |
+        | tour_progress_pct | float [0,1] | Tour Fortschritt |
+        | customer_acceptance_rate_30d | float [0,1] | Customer Acceptance 30d |
+        | driver_acceptance_rate_30d | float [0,1] | Driver Acceptance 30d |
+        | lane_realized_margin_avg_90d | float | Lane Margin 90d |
+      example:
+        revenue_score: 0.85
+        capacity_utilization_score: 0.72
+        priority_score: 0.5
+        risk_score: 0.15
+        distance_pickup_to_route_km: 12.5
+
+    ScoreRequest:
+      type: object
+      properties:
+        modelVersion:
+          type: string
+          description: 'Spezifische Modellversion, "latest" wenn leer'
+          default: "latest"
+        features:
+          type: object
+          additionalProperties:
+            type: number
+          description: Key-Value Map von Feature-Namen zu numerischen Werten
+      required:
+        - features
+
+    ScoreResponse:
+      type: object
+      properties:
+        modelVersion:
+          type: string
+          description: Verwendete Modell-Version
+        scoreMl:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: ML-Score (Acceptance-Wahrscheinlichkeit)
+        inferenceTimeMs:
+          type: integer
+          description: Inference-Zeit in Millisekunden
+      required:
+        - modelVersion
+        - scoreMl
+        - inferenceTimeMs
+
+    ExplainRequest:
+      type: object
+      properties:
+        modelVersion:
+          type: string
+          default: "latest"
+        features:
+          type: object
+          additionalProperties:
+            type: number
+        topK:
+          type: integer
+          minimum: 1
+          maximum: 20
+          default: 5
+          description: Anzahl der wichtigsten Features
+      required:
+        - features
+
+    FeatureContribution:
+      type: object
+      properties:
+        feature:
+          type: string
+          description: Feature-Name
+        impact:
+          type: number
+          description: Absoluter Einfluss auf den Score
+        direction:
+          type: string
+          enum: [positive, negative]
+          description: Richtung des Einflusses
+      required:
+        - feature
+        - impact
+        - direction
+
+    ExplainResponse:
+      type: object
+      properties:
+        modelVersion:
+          type: string
+        mlScore:
+          type: number
+        topContributors:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeatureContribution'
+        explanationMethod:
+          type: string
+          example: "shap"
+        generatedAt:
+          type: string
+          format: date-time
+      required:
+        - modelVersion
+        - mlScore
+        - topContributors
+        - explanationMethod
+        - generatedAt
+
+    ModelInfo:
+      type: object
+      properties:
+        modelVersion:
+          type: string
+        algorithm:
+          type: string
+          enum: [XGBOOST, LGBM, CATBOOST]
+        status:
+          type: string
+          enum: [ACTIVE, CANDIDATE, ROLLED_BACK, DEPRECATED]
+        auc:
+          type: number
+          description: AUC-ROC Score
+        ndcg10:
+          type: number
+          description: NDCG@10 Score
+        trainingDate:
+          type: string
+          format: date-time
+        featureCount:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        code:
+          type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+tags:
+  - name: scoring
+    description: ML Scoring Endpoints
+  - name: explainability
+    description: Explainability Endpoints
+  - name: monitoring
+    description: Health & Monitoring Endpoints

@@ -1,0 +1,143 @@
+# =============================================================================
+# CargoBit ML Gateway - Helm Values
+# =============================================================================
+
+replicaCount: 2
+
+image:
+  repository: cargobit/ml-gateway
+  pullPolicy: IfNotPresent
+  tag: "1.0.0"
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8082"
+  prometheus.io/path: "/metrics"
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+
+service:
+  type: ClusterIP
+  port: 8082
+  targetPort: 8082
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: ml-gateway.cargobit.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+
+nodeSelector: {}
+
+tolerations: []
+
+affinity: {}
+
+# ML Gateway Configuration
+config:
+  # Scoring service endpoint
+  scoringServiceUrl: "http://ml-scoring-service.ml.svc.cluster.local:8081"
+  
+  # Config service endpoint
+  configServiceUrl: "http://config-service.core.svc.cluster.local:8080"
+  
+  # Feature store endpoint
+  featureStoreUrl: "http://feast-feature-server.ml.svc.cluster.local:6566"
+  
+  # Default scoring profile
+  defaultProfile: "revenue_focused"
+  
+  # Canary percentage for ML rollout
+  canaryPercentage: 0
+
+# Redis configuration
+redis:
+  host: "redis.observability.svc.cluster.local"
+  port: 6379
+  db: 5
+
+# Service Mesh
+serviceMesh:
+  enabled: false
+  mtls: false
+
+# Network Policy
+networkPolicy:
+  enabled: true
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: cargobit
+      ports:
+        - protocol: TCP
+          port: 8082
+
+# Pod Disruption Budget
+pdb:
+  enabled: true
+  minAvailable: 1
+
+# Liveness/Readiness Probes
+probes:
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 3
+    failureThreshold: 3
+
+# Environment Variables
+env:
+  - name: LOG_LEVEL
+    value: "INFO"
+  - name: NODE_ENV
+    value: "production"
+
+# Secrets (if needed)
+secrets: []

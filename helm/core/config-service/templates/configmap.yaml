@@ -1,0 +1,208 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "config-service.fullname" . }}-config
+  labels:
+    {{- include "config-service.labels" . | nindent 4 }}
+data:
+  scoring-config.yaml: |
+    # =============================================================================
+    # CargoBit Scoring Configuration
+    # =============================================================================
+    # This file is managed by Helm. Do not edit directly.
+    # For changes, update the values.yaml or use the Config Service API.
+    # =============================================================================
+    
+    version: 1.0.0
+    kind: scoring-config
+    metadata:
+      name: capacity-matching-scoring
+      description: >
+        Scoring-Konfiguration für Kapazitätsbasiertes Matching von Zusatzaufträgen.
+        Alle Werte sind normalisiert (0–1) und müssen in Summe 1.0 ergeben.
+      owner: product-logistics
+      lastUpdatedBy: helm-deployment
+      lastUpdatedAt: "2025-04-19T14:30:00Z"
+      changeReason: "Helm deployment"
+      tags:
+        - scoring
+        - matching
+        - logistics
+        - optimization
+
+    spec:
+      scoring:
+        weights:
+          revenue: 0.35
+          capacityUtilization: 0.20
+          priority: 0.10
+          risk: 0.10
+          serviceLevel: 0.15
+          co2: 0.10
+
+        constraints:
+          sumEquals: 1.0
+          minValue: 0.0
+          maxValue: 1.0
+          precision: 2
+
+        components:
+          revenue:
+            minDetourKm: 0
+            maxDetourKm: 20
+            formula: "price / (detourKm + 1)"
+            normalization: "minmax"
+            bounds:
+              min: 0.0
+              max: 100.0
+            description: "Revenue normalisiert auf Detour-Aufwand"
+
+          capacityUtilization:
+            method: "volume"
+            minVolume: 0.0
+            maxVolume: 100.0
+            formula: "orderVolumeM3 / capacityFreeM3"
+            bounds:
+              min: 0.0
+              max: 1.0
+            description: "Auslastung der verfügbaren Kapazität"
+
+          priority:
+            mapping:
+              PREMIUM: 1.0
+              HIGH: 0.8
+              NORMAL: 0.5
+              LOW: 0.2
+            default: "NORMAL"
+            source: "customer_master_data"
+            description: "Kundenpriorität aus CRM/Master-Data"
+
+          risk:
+            mapping:
+              VERY_LOW: 1.0
+              LOW: 0.8
+              MEDIUM: 0.5
+              HIGH: 0.2
+              VERY_HIGH: 0.0
+            default: "MEDIUM"
+            factors:
+              - payment_history
+              - cancellation_rate
+              - credit_rating
+            factorWeights:
+              payment_history: 0.4
+              cancellation_rate: 0.3
+              credit_rating: 0.3
+            description: "Risikobewertung basierend auf Kundenhistorie"
+
+          serviceLevel:
+            mapping:
+              SLA_CRITICAL: 1.0
+              SLA_HIGH: 0.7
+              STANDARD: 0.3
+            default: "STANDARD"
+            slaTiers:
+              PLATINUM: 1.0
+              GOLD: 0.85
+              SILVER: 0.6
+              BRONZE: 0.4
+            description: "SLA-Kritikalität und Kundensegment"
+
+          co2:
+            formula: "1 - (detourKm / maxDetourKm)"
+            maxDetourKm: 20
+            bonusForBackload: 0.2
+            penaltyForEmptyReturn: 0.1
+            description: "CO₂-Effizienz durch Leerkilometer-Reduktion"
+
+      matching:
+        maxPickupDetourKm: 15
+        maxDeliveryDetourKm: 20
+        minScoreThreshold: 0.5
+        maxSuggestionsPerTour: 5
+        timeWindowToleranceMinutes: 30
+        minVolumeFreeM3: 0.5
+        minWeightFreeKg: 100
+
+      features:
+        enableVisionModel: false
+        enableLearningToRank: false
+        enableDriverPreferenceScore: false
+        enableRiskModelV2: false
+        enableCO2Optimization: false
+        enableHybridScoring: true
+
+      mlHybrid:
+        enabled: true
+        alpha: 0.8
+        fallbackToHeuristic: true
+        canaryPercentage: 0
+
+      profiles:
+        - id: revenue_focused
+          name: "Revenue-Fokus"
+          isDefault: true
+          weights:
+            revenue: 0.35
+            capacityUtilization: 0.20
+            priority: 0.10
+            risk: 0.10
+            serviceLevel: 0.15
+            co2: 0.10
+
+        - id: premium_customers
+          name: "Premium-Kunden"
+          isDefault: false
+          weights:
+            revenue: 0.25
+            capacityUtilization: 0.15
+            priority: 0.15
+            risk: 0.10
+            serviceLevel: 0.25
+            co2: 0.10
+
+        - id: sustainability
+          name: "Nachhaltigkeit"
+          isDefault: false
+          weights:
+            revenue: 0.25
+            capacityUtilization: 0.15
+            priority: 0.10
+            risk: 0.10
+            serviceLevel: 0.10
+            co2: 0.30
+
+        - id: risk_averse
+          name: "Risikominimierung"
+          isDefault: false
+          weights:
+            revenue: 0.25
+            capacityUtilization: 0.15
+            priority: 0.10
+            risk: 0.25
+            serviceLevel: 0.15
+            co2: 0.10
+
+      tenantOverrides:
+        - tenantId: "TENANT_DE_NORTH"
+          region: "DE-NORTH"
+          profileId: "sustainability"
+          reason: "Nachhaltigkeits-Initiative Norddeutschland"
+          effectiveFrom: "2025-01-01"
+
+        - tenantId: "TENANT_DE_SOUTH"
+          region: "DE-SOUTH"
+          profileId: "premium_customers"
+          reason: "Premium-Kunden-Fokus Süddeutschland"
+          effectiveFrom: "2025-01-01"
+
+        - tenantId: "TENANT_AT"
+          region: "AT"
+          profileId: "revenue_focused"
+          reason: "Standard-Profil Österreich"
+          effectiveFrom: "2025-01-01"
+
+      audit:
+        logAllScoringDecisions: true
+        retentionDays: 90
+        includeExplainability: true

@@ -424,7 +424,7 @@ export function RiskDashboard() {
   const [loading, setLoading] = useState(true);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
     setLoading(true);
     const [statsData, eventsData] = await Promise.all([
       fetchRiskStats(),
@@ -434,14 +434,33 @@ export function RiskDashboard() {
     setEvents(eventsData);
     setLastRefresh(new Date());
     setLoading(false);
-  };
+  }, []);
 
+  // Initial data load - using separate effect to avoid eslint warning
   useEffect(() => {
-    refreshData();
-    // Auto-refresh every 30 seconds
+    let mounted = true;
+    const loadInitialData = async () => {
+      setLoading(true);
+      const [statsData, eventsData] = await Promise.all([
+        fetchRiskStats(),
+        fetchRiskEvents(100),
+      ]);
+      if (mounted) {
+        setStats(statsData);
+        setEvents(eventsData);
+        setLastRefresh(new Date());
+        setLoading(false);
+      }
+    };
+    loadInitialData();
+    return () => { mounted = false; };
+  }, []);
+
+  // Auto-refresh interval
+  useEffect(() => {
     const interval = setInterval(refreshData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [refreshData]);
 
   return (
     <div className="space-y-6 p-6">

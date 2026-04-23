@@ -1,0 +1,552 @@
+openapi: 3.0.3
+info:
+  title: CargoBit Insurance Service API
+  description: |
+    Frachtversicherungs-API für die CargoBit Plattform.
+    
+    Bietet Echtzeit-Quotierungen, Policen-Erstellung und Verwaltung für Transportversicherungen.
+    
+    ## Authentifizierung
+    Alle Endpunkte erfordern einen Bearer Token im Authorization Header.
+    
+    ## Partner-Integration
+    Versicherer integrieren über API-Keys und Webhooks für Policy-Events.
+  version: 1.0.0
+  contact:
+    name: CargoBit API Support
+    email: api@cargobit.eu
+  license:
+    name: Proprietary
+
+servers:
+  - url: https://api.cargobit.eu/v1/insurance
+    description: Production
+  - url: https://api-staging.cargobit.eu/v1/insurance
+    description: Staging
+
+tags:
+  - name: Quotes
+    description: Versicherungsangebote berechnen
+  - name: Policies
+    description: Policen erstellen und verwalten
+  - name: Webhooks
+    description: Event-Benachrichtigungen für Partner
+
+paths:
+  /quote:
+    get:
+      tags: [Quotes]
+      summary: Versicherungsschutz berechnen
+      description: |
+        Berechnet Prämie und Deckungssumme für einen Transport.
+        
+        Unterstützt mehrere Tier-Optionen (BASIS, STANDARD, PREMIUM).
+      operationId: getQuote
+      parameters:
+        - name: orderId
+          in: query
+          description: Eindeutige Auftrags-ID
+          required: true
+          schema:
+            type: string
+            format: uuid
+            example: "550e8400-e29b-41d4-a716-446655440000"
+        - name: value
+          in: query
+          description: Warenwert in EUR
+          required: true
+          schema:
+            type: number
+            format: float
+            minimum: 100
+            maximum: 500000
+            example: 25000.00
+        - name: origin
+          in: query
+          description: Abholort (Stadt, Land)
+          required: true
+          schema:
+            type: string
+            example: "Berlin, DE"
+        - name: destination
+          in: query
+          description: Lieferort (Stadt, Land)
+          required: true
+          schema:
+            type: string
+            example: "Wien, AT"
+        - name: weight
+          in: query
+          description: Gewicht in kg
+          required: false
+          schema:
+            type: number
+            format: float
+            example: 1500.0
+        - name: transportType
+          in: query
+          description: Transportart
+          required: false
+          schema:
+            type: string
+            enum: [PALLET, BULK, LIQUID, OVERSIZE, COOLING, HAZMAT, CONTAINER]
+            example: "PALLET"
+        - name: riskLevel
+          in: query
+          description: Risiko-Level des Auftrags
+          required: false
+          schema:
+            type: string
+            enum: [GREEN, YELLOW, RED]
+            example: "GREEN"
+      responses:
+        '200':
+          description: Angebot erfolgreich berechnet
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+              example:
+                quoteId: "qt_1a2b3c4d5e6f"
+                orderId: "550e8400-e29b-41d4-a716-446655440000"
+                provider: "ALLIANZ"
+                currency: "EUR"
+                basePremium: 24.90
+                tiers:
+                  - tier: "BASIS"
+                    premium: 24.90
+                    coverage: 25000.00
+                    commissionRate: 0.15
+                  - tier: "STANDARD"
+                    premium: 39.90
+                    coverage: 50000.00
+                    commissionRate: 0.15
+                  - tier: "PREMIUM"
+                    premium: 74.90
+                    coverage: 100000.00
+                    commissionRate: 0.12
+                riskFactors:
+                  - "Internationaler Transport"
+                  - "Ersttransport auf dieser Route"
+                validUntil: "2024-04-16T18:00:00Z"
+        '400':
+          description: Ungültige Anfrageparameter
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Auftrag nicht gefunden
+
+  /policy:
+    post:
+      tags: [Policies]
+      summary: Police erstellen
+      description: |
+        Erstellt eine Versicherungspolice aus einem akzeptierten Angebot.
+        
+        Löst automatisch Webhooks für den Versicherer aus.
+      operationId: createPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePolicyRequest'
+            example:
+              quoteId: "qt_1a2b3c4d5e6f"
+              orderId: "550e8400-e29b-41d4-a716-446655440000"
+              customerId: "user_12345"
+              tier: "STANDARD"
+      responses:
+        '201':
+          description: Police erfolgreich erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResponse'
+        '400':
+          description: Ungültige Anfrage oder Angebot abgelaufen
+        '409':
+          description: Police für diesen Auftrag existiert bereits
+
+    get:
+      tags: [Policies]
+      summary: Police abrufen
+      operationId: getPolicy
+      parameters:
+        - name: policyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Police gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResponse'
+        '404':
+          description: Police nicht gefunden
+
+  /policies:
+    get:
+      tags: [Policies]
+      summary: Policen auflisten
+      description: |
+        Listet alle Policen eines Kunden oder Auftrags mit Paginierung.
+        
+        Erfordert Authentifizierung via Bearer Token.
+      operationId: listPolicies
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: customerId
+          in: query
+          description: Kunden-ID filtern
+          schema:
+            type: string
+            format: uuid
+        - name: orderId
+          in: query
+          description: Auftrags-ID filtern
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Status filtern
+          schema:
+            type: string
+            enum: [PENDING, ACTIVE, CANCELLED, EXPIRED, CLAIMED]
+        - name: page
+          in: query
+          description: Seitennummer
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: Ergebnisse pro Seite
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sortBy
+          in: query
+          description: Sortierfeld
+          schema:
+            type: string
+            enum: [createdAt, premium, coverage, status]
+            default: createdAt
+        - name: sortOrder
+          in: query
+          description: Sortierrichtung
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Liste der Policen
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    required: [items, page, pageSize, total]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/PolicyResponse'
+                      page:
+                        type: integer
+                        example: 1
+                      pageSize:
+                        type: integer
+                        example: 20
+                      total:
+                        type: integer
+                        example: 156
+                      totalPages:
+                        type: integer
+                        example: 8
+                      hasNext:
+                        type: boolean
+                        example: true
+        '401':
+          description: Nicht authentifiziert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: UNAUTHORIZED
+                message: "Authentication required"
+                requestId: "550e8400-e29b-41d4-a716-446655440000"
+        '403':
+          description: Keine Berechtigung
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /policy/{policyId}/cancel:
+    post:
+      tags: [Policies]
+      summary: Police stornieren
+      operationId: cancelPolicy
+      parameters:
+        - name: policyId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Police storniert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResponse'
+
+  /webhook/{event}:
+    post:
+      tags: [Webhooks]
+      summary: Webhook-Event empfangen
+      description: |
+        Von Versicherern aufgerufen bei externen Events.
+        
+        Unterstützte Events:
+        - `issued`: Police ausgestellt
+        - `cancelled`: Police storniert
+        - `paid`: Schaden bezahlt
+      parameters:
+        - name: event
+          in: path
+          required: true
+          schema:
+            type: string
+            enum: [issued, cancelled, paid]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WebhookPayload'
+      responses:
+        '200':
+          description: Webhook verarbeitet
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    QuoteResponse:
+      type: object
+      required: [quoteId, orderId, provider, currency, basePremium, tiers, validUntil]
+      properties:
+        quoteId:
+          type: string
+          description: Eindeutige Angebots-ID
+          example: "qt_1a2b3c4d5e6f"
+        orderId:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [ALLIANZ, HDI, AXA, MUNICH_RE, GENERALI]
+        currency:
+          type: string
+          default: "EUR"
+        basePremium:
+          type: number
+          format: float
+          description: Basisprämie in EUR
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuoteTier'
+        riskFactors:
+          type: array
+          items:
+            type: string
+        validUntil:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+
+    QuoteTier:
+      type: object
+      properties:
+        tier:
+          type: string
+          enum: [BASIS, STANDARD, PREMIUM]
+        premium:
+          type: number
+          format: float
+        coverage:
+          type: number
+          format: float
+          description: Deckungssumme in EUR
+        commissionRate:
+          type: number
+          format: float
+          description: Provisionssatz (z.B. 0.15 = 15%)
+
+    CreatePolicyRequest:
+      type: object
+      required: [quoteId, orderId, customerId, tier]
+      properties:
+        quoteId:
+          type: string
+        orderId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        tier:
+          type: string
+          enum: [BASIS, STANDARD, PREMIUM]
+        transportId:
+          type: string
+          format: uuid
+          description: Optional: Verknüpfter Transport
+
+    PolicyResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        policyNumber:
+          type: string
+          example: "CB-2024-001234"
+        quoteId:
+          type: string
+        orderId:
+          type: string
+          format: uuid
+        customerId:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [ALLIANZ, HDI, AXA, MUNICH_RE, GENERALI]
+        tier:
+          type: string
+          enum: [BASIS, STANDARD, PREMIUM]
+        premium:
+          type: number
+          format: float
+        coverage:
+          type: number
+          format: float
+        commission:
+          type: number
+          format: float
+          description: Plattform-Provision in EUR
+        commissionRate:
+          type: number
+          format: float
+        status:
+          type: string
+          enum: [PENDING, ACTIVE, CANCELLED, EXPIRED, CLAIMED]
+        validFrom:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+        pdfUrl:
+          type: string
+          format: uri
+          description: Link zum Policy-PDF
+        certificateUrl:
+          type: string
+          format: uri
+        createdAt:
+          type: string
+          format: date-time
+
+    WebhookPayload:
+      type: object
+      required: [policyId, event]
+      properties:
+        policyId:
+          type: string
+        event:
+          type: string
+        policyNumber:
+          type: string
+        pdfUrl:
+          type: string
+          format: uri
+        timestamp:
+          type: string
+          format: date-time
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Maschinenlesbarer Fehlercode
+          example: INSURANCE_QUOTE_NOT_FOUND
+        message:
+          type: string
+          description: Lesbare Fehlermeldung
+          example: "Insurance quote not found or expired"
+        details:
+          type: object
+          description: Zusätzliche Fehlerdetails
+          additionalProperties: true
+        requestId:
+          type: string
+          format: uuid
+          description: Request-ID für Support
+        timestamp:
+          type: string
+          format: date-time
+
+    ValidationError:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationError'
+
+security:
+  - bearerAuth: []

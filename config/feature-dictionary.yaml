@@ -1,0 +1,521 @@
+# =============================================================================
+# CargoBit Feature Dictionary (ML-Ready & Explainable)
+# =============================================================================
+# Vollständiges, produktionsreifes Feature-Dictionary für Capacity-Based Matching
+# 
+# Kategorien:
+#   A.1 - Heuristik-Features (bereits heute vorhanden)
+#   A.2 - Kontext-Features (leicht berechenbar)
+#   A.3 - Historische Features (für ML besonders wertvoll)
+#   A.4 - Meta-Features (für Explainability & Debugging)
+#
+# Jedes Feature enthält:
+#   - name: Eindeutiger Bezeichner
+#   - type: float | int | category | string | timestamp
+#   - source: Datenquelle (Service/DB)
+#   - refresh: Echtzeit | täglich | wöchentlich
+#   - description: Fachliche Erklärung
+#   - mlReady: true/false (Ready for ML Training)
+#   - explainability: true/false (Nützlich für SHAP)
+# =============================================================================
+
+version: 2.0.0
+kind: feature-dictionary
+metadata:
+  name: cargobit-feature-dictionary
+  description: >
+    Vollständiges Feature-Dictionary für ML-basiertes Capacity Matching.
+    Alle Features sind dokumentiert, typisiert und ML-ready.
+  owner: ml-platform
+  lastUpdatedBy: sergej
+  lastUpdatedAt: "2025-04-19T16:00:00Z"
+  changeReason: "Integration des MVP Feature Dictionary"
+
+# =============================================================================
+# A.1 HEURISTIK-FEATURES (direkt aus Suggestion Engine)
+# =============================================================================
+features:
+  heuristic:
+    description: "Features aus der bestehenden Suggestion Engine - bereits produktiv"
+    category: "A.1"
+    features:
+      - name: revenueScore
+        type: float
+        source: Suggestion Engine
+        refresh: Echtzeit
+        description: "Preis / (Umweg + 1) - Economic Value normalisiert auf Detour"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        normalization: minmax
+        computedFrom:
+          - price
+          - detourKm
+
+      - name: capacityUtilizationScore
+        type: float
+        source: Capacity Engine
+        refresh: Echtzeit
+        description: "Anteil belegter Kapazität nach Matching"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        normalization: ratio
+        computedFrom:
+          - orderVolumeM3
+          - capacityFreeM3
+          - orderPallets
+          - capacityFreePallets
+
+      - name: priorityScore
+        type: float
+        source: Order
+        refresh: Echtzeit
+        description: "Premium / Normal / Low - Business-Priorität"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        encoding: ordinal
+        mapping:
+          PREMIUM: 1.0
+          HIGH: 0.8
+          NORMAL: 0.5
+          LOW: 0.2
+
+      - name: riskScore
+        type: float
+        source: Customer Risk DB
+        refresh: täglich
+        description: "Zahlungsausfall-/Zuverlässigkeitsrisiko"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        # Higher = Lower Risk
+        factors:
+          - payment_history
+          - cancellation_rate
+          - credit_rating
+
+      - name: serviceLevelScore
+        type: float
+        source: SLA DB
+        refresh: täglich
+        description: "SLA-Relevanz und Kundensegment"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        encoding: ordinal
+        mapping:
+          SLA_CRITICAL: 1.0
+          SLA_HIGH: 0.7
+          STANDARD: 0.3
+
+      - name: co2Score
+        type: float
+        source: Routing Engine
+        refresh: Echtzeit
+        description: "CO₂-Effekt (Leerkilometer-Reduktion)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        formula: "1 - (detourKm / maxDetourKm)"
+
+      - name: finalHeuristicScore
+        type: float
+        source: Suggestion Engine
+        refresh: Echtzeit
+        description: "Gewichteter Gesamtscore (Heuristik)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        # Used as baseline for comparison with ML
+
+# =============================================================================
+# A.2 KONTEXT-FEATURES (leicht berechenbar, sehr wertvoll)
+# =============================================================================
+  context:
+    description: "Kontextuelle Features - leicht berechenbar, hohe Vorhersagekraft"
+    category: "A.2"
+    features:
+      - name: distancePickupToRouteKm
+        type: float
+        source: Routing Engine
+        refresh: Echtzeit
+        description: "Distanz Pickup → Route (Umweg zum Pickup)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 100.0
+        unit: km
+
+      - name: distanceDeliveryToDestinationKm
+        type: float
+        source: Routing Engine
+        refresh: Echtzeit
+        description: "Distanz Delivery → Ziel (Umweg zur Delivery)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 100.0
+        unit: km
+
+      - name: etaToPickupMinutes
+        type: float
+        source: Routing Engine
+        refresh: Echtzeit
+        description: "ETA zum Pickup (vom aktuellen Standort)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 480.0  # 8 hours
+        unit: minutes
+
+      - name: etaToDeliveryMinutes
+        type: float
+        source: Routing Engine
+        refresh: Echtzeit
+        description: "ETA zur Delivery (inkl. Pickup-Zeit)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 720.0  # 12 hours
+        unit: minutes
+
+      - name: freeVolumeM3
+        type: float
+        source: Capacity Engine
+        refresh: Echtzeit
+        description: "Freies Volumen auf dem Fahrzeug"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 100.0
+        unit: m³
+
+      - name: freePallets
+        type: int
+        source: Capacity Engine
+        refresh: Echtzeit
+        description: "Freie Palettenplätze"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0
+          max: 34
+        unit: pallets
+
+      - name: freeWeightKg
+        type: float
+        source: Capacity Engine
+        refresh: Echtzeit
+        description: "Freies Gewicht (Traglast)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 25000.0
+        unit: kg
+
+      - name: vehicleType
+        type: category
+        source: Fleet DB
+        refresh: täglich
+        description: "Fahrzeugtyp: Van, LKW, Trailer"
+        mlReady: true
+        explainability: true
+        encoding: one-hot
+        categories:
+          - VAN
+          - TRUCK_7_5T
+          - TRUCK_12T
+          - TRUCK_18T
+          - TRUCK_40T
+          - TRAILER
+
+      - name: tourProgressPct
+        type: float
+        source: Telematik
+        refresh: Echtzeit
+        description: "Fortschritt der Tour (0-100%)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        formula: "stopsCompleted / totalStops"
+
+# =============================================================================
+# A.3 HISTORISCHE FEATURES (für ML extrem stark)
+# =============================================================================
+  historical:
+    description: "Historische Aggregationen - Hohe Vorhersagekraft für Acceptance"
+    category: "A.3"
+    features:
+      - name: customerAcceptanceRate30d
+        type: float
+        source: Outcome Events
+        refresh: täglich
+        description: "Wie oft Kunde Zusatzaufträge akzeptiert (30 Tage)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        aggregation:
+          window: 30d
+          metric: acceptance_rate
+          entity: customer_id
+
+      - name: driverAcceptanceRate30d
+        type: float
+        source: Outcome Events
+        refresh: täglich
+        description: "Wie oft Fahrer Zusatzaufträge annimmt (30 Tage)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        aggregation:
+          window: 30d
+          metric: acceptance_rate
+          entity: driver_id
+
+      - name: laneRealizedMarginAvg90d
+        type: float
+        source: Finance DB
+        refresh: täglich
+        description: "Durchschnittlicher Deckungsbeitrag pro Lane (90 Tage)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: -1.0
+          max: 1.0
+        aggregation:
+          window: 90d
+          metric: avg_margin
+          entity: lane_id
+
+      - name: customerDelayAvg30d
+        type: float
+        source: Outcome Events
+        refresh: täglich
+        description: "Durchschnittliche Verspätung bei diesem Kunden (30 Tage)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 120.0
+        unit: minutes
+        aggregation:
+          window: 30d
+          metric: avg_delay
+          entity: customer_id
+
+      - name: driverDelayAvg30d
+        type: float
+        source: Outcome Events
+        refresh: täglich
+        description: "Durchschnittliche Verspätung dieses Fahrers (30 Tage)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 120.0
+        unit: minutes
+        aggregation:
+          window: 30d
+          metric: avg_delay
+          entity: driver_id
+
+      - name: customerCancellationRate30d
+        type: float
+        source: Outcome Events
+        refresh: täglich
+        description: "Stornoquote des Kunden (30 Tage)"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        aggregation:
+          window: 30d
+          metric: cancellation_rate
+          entity: customer_id
+
+      - name: historicalExecutionRate
+        type: float
+        source: Outcome Events
+        refresh: täglich
+        description: "Wie oft Vorschläge wirklich ausgeführt wurden"
+        mlReady: true
+        explainability: true
+        bounds:
+          min: 0.0
+          max: 1.0
+        aggregation:
+          window: 90d
+          metric: execution_rate
+          entity: global
+
+# =============================================================================
+# A.4 META-FEATURES (für Explainability & Debugging)
+# =============================================================================
+  meta:
+    description: "Meta-Informationen für ML-Ops, Explainability & Debugging"
+    category: "A.4"
+    features:
+      - name: modelVersion
+        type: string
+        source: ML-Service
+        refresh: Echtzeit
+        description: "Welche Modellversion wurde genutzt"
+        mlReady: false
+        explainability: false
+        format: semver
+        example: "2.1.3"
+
+      - name: heuristicWeightsVersion
+        type: string
+        source: Config Service
+        refresh: Echtzeit
+        description: "Welche Config war aktiv"
+        mlReady: false
+        explainability: false
+        format: semver
+        example: "1.0.0"
+
+      - name: suggestionGeneratedAt
+        type: timestamp
+        source: Suggestion Engine
+        refresh: Echtzeit
+        description: "Zeitpunkt der Generierung"
+        mlReady: false
+        explainability: false
+        format: ISO8601
+        example: "2025-04-19T14:30:00Z"
+
+# =============================================================================
+# FEATURE GROUPS (für Training & Serving)
+# =============================================================================
+featureGroups:
+  - id: mvp_training
+    name: "MVP Training Features"
+    description: "Features für Iteration 1 - Binary Classifier"
+    features:
+      # Heuristic (7)
+      - revenueScore
+      - capacityUtilizationScore
+      - priorityScore
+      - riskScore
+      - serviceLevelScore
+      - co2Score
+      - finalHeuristicScore
+      # Context (9)
+      - distancePickupToRouteKm
+      - distanceDeliveryToDestinationKm
+      - etaToPickupMinutes
+      - etaToDeliveryMinutes
+      - freeVolumeM3
+      - freePallets
+      - freeWeightKg
+      - vehicleType
+      - tourProgressPct
+    totalFeatures: 16
+
+  - id: mvp_training_with_history
+    name: "MVP Training Features + History"
+    description: "Features für Iteration 2 - mit historischen Features"
+    features:
+      # All MVP features
+      - ${mvp_training}
+      # Historical (7)
+      - customerAcceptanceRate30d
+      - driverAcceptanceRate30d
+      - laneRealizedMarginAvg90d
+      - customerDelayAvg30d
+      - driverDelayAvg30d
+      - customerCancellationRate30d
+      - historicalExecutionRate
+    totalFeatures: 23
+
+  - id: explainability
+    name: "Explainability Features"
+    description: "Features für SHAP-Erklärungen"
+    features:
+      - revenueScore
+      - capacityUtilizationScore
+      - priorityScore
+      - riskScore
+      - serviceLevelScore
+      - co2Score
+      - customerAcceptanceRate30d
+      - driverAcceptanceRate30d
+      - distancePickupToRouteKm
+      - distanceDeliveryToDestinationKm
+    totalFeatures: 10
+
+# =============================================================================
+# FEATURE STATISTICS (für Monitoring & Drift Detection)
+# =============================================================================
+statistics:
+  refreshInterval: daily
+  metrics:
+    - mean
+    - stddev
+    - min
+    - max
+    - p5
+    - p25
+    - p50
+    - p75
+    - p95
+  driftDetection:
+    enabled: true
+    method: ks_test
+    threshold: 0.05
+    alertChannel: "#ml-alerts"
+
+# =============================================================================
+# DATA QUALITY RULES
+# =============================================================================
+dataQuality:
+  rules:
+    - name: no_null_values
+      scope: all
+      severity: error
+      description: "Features dürfen keine NULL-Werte haben"
+
+    - name: bounds_check
+      scope: numeric
+      severity: warning
+      description: "Werte müssen innerhalb der definierten Bounds liegen"
+
+    - name: category_check
+      scope: category
+      severity: error
+      description: "Werte müssen einer definierten Kategorie entsprechen"
+
+  monitoring:
+    enabled: true
+    dashboard: grafana
+    alertThreshold: 0.95  # 95% features must pass quality checks

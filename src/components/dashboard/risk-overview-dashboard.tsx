@@ -561,8 +561,27 @@ export function RiskOverviewDashboard() {
     setLoading(false);
   }, []);
 
+  // Initial data load - using separate effect to avoid eslint warning
   useEffect(() => {
-    refreshData();
+    let mounted = true;
+    const loadInitialData = () => {
+      setLoading(true);
+      // In production: fetch from API
+      const { stats: s, highRiskEntities: e, trend: t } = generateMockData();
+      if (mounted) {
+        setStats(s);
+        setHighRiskEntities(e);
+        setTrend(t);
+        setLastRefresh(new Date());
+        setLoading(false);
+      }
+    };
+    loadInitialData();
+    return () => { mounted = false; };
+  }, []);
+
+  // Auto-refresh interval
+  useEffect(() => {
     const interval = setInterval(refreshData, 30000);
     return () => clearInterval(interval);
   }, [refreshData]);

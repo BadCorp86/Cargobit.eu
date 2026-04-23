@@ -1,0 +1,175 @@
+# CargoBit Kafka Topics - Strimzi CRDs
+# Deploy with: kubectl apply -f kafka-topics.yaml -n cargobit-kafka
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: logistics.load-snapshot.v1
+  namespace: cargobit-kafka
+  labels:
+    strimzi.io/cluster: cargobit-kafka
+    app.kubernetes.io/part-of: cargobit
+    domain: logistics
+    data-classification: internal
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    # Retention: 7 days for time-series data
+    retention.ms: 604800000
+    retention.bytes: 10737418240  # 10 GB
+    # Compression
+    compression.type: zstd
+    # Segment size
+    segment.bytes: 1073741824  # 1 GB
+    # Cleanup
+    cleanup.policy: delete
+    # Message format
+    message.format.version: "3.0"
+    # Schema Registry compatibility
+    confluent.value.subject.name.strategy: io.confluent.kafka.serializers.subject.TopicRecordNameStrategy
+  topicName: logistics.load-snapshot.v1
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: logistics.capacity-state.v1
+  namespace: cargobit-kafka
+  labels:
+    strimzi.io/cluster: cargobit-kafka
+    app.kubernetes.io/part-of: cargobit
+    domain: logistics
+    data-classification: internal
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    # Retention: 7 days, compacted for current state
+    retention.ms: 604800000
+    retention.bytes: 5368709120  # 5 GB
+    # Compaction for current state
+    cleanup.policy: compact
+    min.compaction.lag.ms: 3600000  # 1 hour
+    # Compression
+    compression.type: zstd
+    # Segment size
+    segment.bytes: 536870912  # 512 MB
+    # Message format
+    message.format.version: "3.0"
+  topicName: logistics.capacity-state.v1
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: logistics.suggestion.v1
+  namespace: cargobit-kafka
+  labels:
+    strimzi.io/cluster: cargobit-kafka
+    app.kubernetes.io/part-of: cargobit
+    domain: logistics
+    data-classification: internal
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    # Retention: 30 days for analytics
+    retention.ms: 2592000000
+    retention.bytes: 21474836480  # 20 GB
+    # No compaction - keep all suggestions
+    cleanup.policy: delete
+    # Compression
+    compression.type: zstd
+    # Segment size
+    segment.bytes: 1073741824  # 1 GB
+    # Message format
+    message.format.version: "3.0"
+  topicName: logistics.suggestion.v1
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: logistics.suggestion-decision.v1
+  namespace: cargobit-kafka
+  labels:
+    strimzi.io/cluster: cargobit-kafka
+    app.kubernetes.io/part-of: cargobit
+    domain: logistics
+    data-classification: internal
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    # Retention: 365 days for audit trail
+    retention.ms: 31536000000
+    retention.bytes: 21474836480  # 20 GB
+    # No compaction - keep all decisions
+    cleanup.policy: delete
+    # Compression
+    compression.type: zstd
+    # Segment size
+    segment.bytes: 1073741824  # 1 GB
+    # Message format
+    message.format.version: "3.0"
+  topicName: logistics.suggestion-decision.v1
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: logistics.tour-route.v1
+  namespace: cargobit-kafka
+  labels:
+    strimzi.io/cluster: cargobit-kafka
+    app.kubernetes.io/part-of: cargobit
+    domain: logistics
+    data-classification: internal
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    # Retention: 365 days for audit
+    retention.ms: 31536000000
+    retention.bytes: 21474836480  # 20 GB
+    # Compaction for current route + history
+    cleanup.policy: compact,delete
+    min.compaction.lag.ms: 86400000  # 24 hours
+    # Compression
+    compression.type: zstd
+    # Segment size
+    segment.bytes: 1073741824  # 1 GB
+    # Message format
+    message.format.version: "3.0"
+  topicName: logistics.tour-route.v1
+
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: logistics.suggestion-outcome.v1
+  namespace: cargobit-kafka
+  labels:
+    strimzi.io/cluster: cargobit-kafka
+    app.kubernetes.io/part-of: cargobit
+    domain: logistics
+    data-classification: internal
+    ml-training: "true"
+spec:
+  partitions: 6
+  replicas: 3
+  config:
+    # Retention: 365 days for ML training
+    retention.ms: 31536000000
+    retention.bytes: 53687091200  # 50 GB (ML training data)
+    # No compaction - keep all outcomes
+    cleanup.policy: delete
+    # Compression
+    compression.type: zstd
+    # Segment size
+    segment.bytes: 1073741824  # 1 GB
+    # Message format
+    message.format.version: "3.0"
+  topicName: logistics.suggestion-outcome.v1

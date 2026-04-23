@@ -1,0 +1,408 @@
+# CargoBit ML Pipeline Alerting Rules
+# ====================================
+#
+# Prometheus alerting rules for ML model monitoring.
+#
+# Categories:
+# - Model Performance Alerts (NDCG, accuracy drift)
+# - Service Health Alerts (latency, availability)
+# - Feature Store Alerts (materialization, freshness)
+# - Training Pipeline Alerts (failures, data quality)
+
+groups:
+  # ==========================================================================
+  # Model Performance Alerts
+  # ==========================================================================
+  - name: ml_model_performance
+    rules:
+      # NDCG below threshold
+      - alert: MLModelNDCGBelowThreshold
+        expr: |
+          ml_model_ndcg_10 < 0.65
+        for: 30m
+        labels:
+          severity: warning
+          team: ml
+          category: performance
+        annotations:
+          summary: "ML model NDCG@10 below threshold"
+          description: "Model v{{ $labels.model_version }} NDCG@10 is {{ $value | humanizePercentage }}, below 65% threshold"
+          runbook_url: "https://docs.cargobit.io/runbooks/ml-ndcg-low"
+
+      # NDCG dropping rapidly
+      - alert: MLModelNDCGDropping
+        expr: |
+          (
+            ml_model_ndcg_10 - 
+            ml_model_ndcg_10 offset 24h
+          ) < -0.05
+        for: 1h
+        labels:
+          severity: critical
+          team: ml
+          category: performance
+        annotations:
+          summary: "ML model NDCG@10 dropping rapidly"
+          description: "NDCG@10 dropped by {{ $value | humanizePercentage }} in the last 24 hours"
+          runbook_url: "https://docs.cargobit.io/runbooks/ml-performance-drift"
+
+      # Model drift detected
+      - alert: MLModelDriftDetected
+        expr: |
+          ml_model_prediction_drift_score > 0.3
+        for: 2h
+        labels:
+          severity: warning
+          team: ml
+          category: performance
+        annotations:
+          summary: "ML model prediction drift detected"
+          description: "Prediction distribution drift score is {{ $value }}, indicating potential model degradation"
+
+      # Feature importance change
+      - alert: MLFeatureImportanceChange
+        expr: |
+          abs(
+            ml_feature_importance - 
+            ml_feature_importance offset 7d
+          ) > 0.1
+        for: 1h
+        labels:
+          severity: info
+          team: ml
+          category: performance
+        annotations:
+          summary: "Feature importance changed significantly"
+          description: "Feature {{ $labels.feature }} importance changed by {{ $value | humanizePercentage }}"
+
+  # ==========================================================================
+  # Service Health Alerts
+  # ==========================================================================
+  - name: ml_service_health
+    rules:
+      # Service unavailable
+      - alert: MLScoringServiceDown
+        expr: |
+          up{job="ml-scoring-service"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: ml
+          category: availability
+        annotations:
+          summary: "ML Scoring Service is down"
+          description: "ML Scoring Service has been unavailable for more than 2 minutes"
+          runbook_url: "https://docs.cargobit.io/runbooks/ml-service-down"
+
+      # High latency
+      - alert: MLScoringHighLatency
+        expr: |
+          histogram_quantile(0.95, 
+            rate(ml_scoring_latency_seconds_bucket[5m])
+          ) > 0.025
+        for: 10m
+        labels:
+          severity: warning
+          team: ml
+          category: latency
+        annotations:
+          summary: "ML Scoring latency above threshold"
+          description: "P95 latency is {{ $value | humanizeDuration }}, above 25ms threshold"
+
+      # Very high latency (critical)
+      - alert: MLScoringCriticalLatency
+        expr: |
+          histogram_quantile(0.99, 
+            rate(ml_scoring_latency_seconds_bucket[5m])
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          team: ml
+          category: latency
+        annotations:
+          summary: "ML Scoring critical latency"
+          description: "P99 latency is {{ $value | humanizeDuration }}, above 100ms threshold"
+
+      # High error rate
+      - alert: MLScoringHighErrorRate
+        expr: |
+          rate(ml_scoring_requests_total{status="error"}[5m]) /
+          rate(ml_scoring_requests_total[5m]) > 0.01
+        for: 5m
+        labels:
+          severity: warning
+          team: ml
+          category: errors
+        annotations:
+          summary: "ML Scoring error rate above 1%"
+          description: "Error rate is {{ $value | humanizePercentage }}"
+
+      # Model not loaded
+      - alert: MLModelNotLoaded
+        expr: |
+          ml_scoring_model_loaded == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: ml
+          category: availability
+        annotations:
+          summary: "No ML model loaded in scoring service"
+          description: "Scoring service is running without a model, using fallback heuristic only"
+
+      # Shadow mode active for too long
+      - alert: MLShadowModeTooLong
+        expr: |
+          ml_scoring_mode{mode="shadow"} == 1
+          and on() (time() - ml_scoring_mode_change_timestamp) > 604800
+        for: 1h
+        labels:
+          severity: info
+          team: ml
+          category: deployment
+        annotations:
+          summary: "ML model in shadow mode for over 7 days"
+          description: "Consider promoting model to canary or production mode"
+
+  # ==========================================================================
+  # Feature Store Alerts
+  # ==========================================================================
+  - name: ml_feature_store
+    rules:
+      # Feature store unavailable
+      - alert: FeatureStoreDown
+        expr: |
+          up{job="feast-feature-server"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: ml
+          category: availability
+        annotations:
+          summary: "Feature Store is down"
+          description: "Feast Feature Server has been unavailable for more than 5 minutes"
+
+      # Feature materialization lag
+      - alert: FeatureMaterializationLag
+        expr: |
+          time() - feast_materialization_latest_timestamp > 7200
+        for: 30m
+        labels:
+          severity: warning
+          team: ml
+          category: freshness
+        annotations:
+          summary: "Feature materialization lag detected"
+          description: "Feature {{ $labels.feature_view }} is {{ $value | humanizeDuration }} behind"
+          runbook_url: "https://docs.cargobit.io/runbooks/feature-materialization"
+
+      # Redis connection issues
+      - alert: FeatureStoreRedisIssues
+        expr: |
+          feast_redis_connection_errors_total > 10
+        for: 5m
+        labels:
+          severity: warning
+          team: ml
+          category: infrastructure
+        annotations:
+          summary: "Feature Store Redis connection issues"
+          description: "{{ $value }} Redis connection errors detected"
+
+      # High online store latency
+      - alert: FeatureStoreHighLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(feast_online_serving_latency_seconds_bucket[5m])
+          ) > 0.01
+        for: 10m
+        labels:
+          severity: warning
+          team: ml
+          category: latency
+        annotations:
+          summary: "Feature Store latency above 10ms"
+          description: "P95 latency is {{ $value | humanizeDuration }}"
+
+      # Feature view stale
+      - alert: FeatureViewStale
+        expr: |
+          feast_feature_view_age_hours > 48
+        for: 1h
+        labels:
+          severity: warning
+          team: ml
+          category: freshness
+        annotations:
+          summary: "Feature view is stale"
+          description: "Feature view {{ $labels.feature_view }} has not been updated in {{ $value }} hours"
+
+  # ==========================================================================
+  # Training Pipeline Alerts
+  # ==========================================================================
+  - name: ml_training_pipeline
+    rules:
+      # Training job failed
+      - alert: MLTrainingJobFailed
+        expr: |
+          airflow_dag_run_status{dag_id="ml_pipeline_master",status="failed"} == 1
+        for: 5m
+        labels:
+          severity: critical
+          team: ml
+          category: training
+        annotations:
+          summary: "ML training pipeline failed"
+          description: "Training pipeline run {{ $labels.run_id }} failed"
+          runbook_url: "https://docs.cargobit.io/runbooks/training-failed"
+
+      # ETL job duration too long
+      - alert: MLETLJobSlow
+        expr: |
+          airflow_task_duration_seconds{dag_id="ml_pipeline_master",task_id="run_etl"} > 3600
+        for: 1h
+        labels:
+          severity: warning
+          team: ml
+          category: training
+        annotations:
+          summary: "ETL job running for over 1 hour"
+          description: "ETL job may be stuck or processing too much data"
+
+      # Training data quality issues
+      - alert: MLTrainingDataQualityLow
+        expr: |
+          ml_etl_quality_score < 0.8
+        for: 30m
+        labels:
+          severity: warning
+          team: ml
+          category: data_quality
+        annotations:
+          summary: "Training data quality below threshold"
+          description: "ETL data quality score is {{ $value | humanizePercentage }}, below 80% threshold"
+
+      # No training data
+      - alert: MLNoTrainingData
+        expr: |
+          ml_etl_records_processed == 0
+        for: 1h
+        labels:
+          severity: critical
+          team: ml
+          category: data_quality
+        annotations:
+          summary: "No training data processed"
+          description: "ETL job processed 0 records, check upstream data sources"
+
+      # Model promotion failed
+      - alert: MLModelPromotionFailed
+        expr: |
+          ml_model_promotion_status{status="failed"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          team: ml
+          category: deployment
+        annotations:
+          summary: "Model promotion to production failed"
+          description: "Model v{{ $labels.model_version }} failed promotion checks"
+
+      # Training samples below minimum
+      - alert: MLInsufficientTrainingSamples
+        expr: |
+          ml_training_samples_total < 5000
+        for: 30m
+        labels:
+          severity: warning
+          team: ml
+          category: data_quality
+        annotations:
+          summary: "Insufficient training samples"
+          description: "Only {{ $value }} training samples, minimum is 5000"
+
+  # ==========================================================================
+  # Business Metric Alerts
+  # ==========================================================================
+  - name: ml_business_metrics
+    rules:
+      # Low acceptance rate after model deployment
+      - alert: MLLowAcceptanceRate
+        expr: |
+          rate(suggestion_accepted_total[1h]) /
+          rate(suggestion_total[1h]) < 0.15
+        for: 2h
+        labels:
+          severity: warning
+          team: ml
+          category: business
+        annotations:
+          summary: "Suggestion acceptance rate below 15%"
+          description: "Current acceptance rate is {{ $value | humanizePercentage }}, may indicate model issues"
+
+      # High delay rate
+      - alert: MLHighDelayRate
+        expr: |
+          avg(suggestion_delay_minutes) > 15
+        for: 2h
+        labels:
+          severity: warning
+          team: ml
+          category: business
+        annotations:
+          summary: "Average suggestion delay above 15 minutes"
+          description: "Current average delay is {{ $value }} minutes"
+
+      # Margin degradation
+      - alert: MLMarginDegradation
+        expr: |
+          avg(suggestion_realized_margin) < 0
+        for: 1h
+        labels:
+          severity: critical
+          team: ml
+          category: business
+        annotations:
+          summary: "Negative average realized margin"
+          description: "Average margin is {{ $value }}, indicating potential revenue loss"
+
+  # ==========================================================================
+  # Composite Alerts (multiple conditions)
+  # ==========================================================================
+  - name: ml_composite_alerts
+    rules:
+      # Model degraded (multiple indicators)
+      - alert: MLModelDegraded
+        expr: |
+          (
+            ml_model_ndcg_10 < 0.65
+            and ml_scoring_error_rate > 0.01
+            and rate(suggestion_accepted_total[1h]) / rate(suggestion_total[1h]) < 0.20
+          )
+        for: 1h
+        labels:
+          severity: critical
+          team: ml
+          category: composite
+        annotations:
+          summary: "ML model is degraded (multiple indicators)"
+          description: "Model showing multiple degradation signals: low NDCG, high error rate, low acceptance"
+          runbook_url: "https://docs.cargobit.io/runbooks/ml-degraded"
+
+      # Infrastructure under strain
+      - alert: MLInfrastructureStrain
+        expr: |
+          (
+            histogram_quantile(0.95, rate(ml_scoring_latency_seconds_bucket[5m])) > 0.05
+            and feast_online_serving_latency_p95 > 0.015
+            and ml_scoring_requests_per_second > 100
+          )
+        for: 15m
+        labels:
+          severity: warning
+          team: ml
+          category: composite
+        annotations:
+          summary: "ML infrastructure under strain"
+          description: "High load causing elevated latency across components. Consider scaling."

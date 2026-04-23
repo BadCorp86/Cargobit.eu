@@ -1,0 +1,86 @@
+{
+  "type": "record",
+  "name": "CapacityStateUpdated",
+  "namespace": "io.cargobit.logistics.events",
+  "doc": "Event emitted when capacity state is recalculated",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "CapacityStateEventType",
+        "symbols": ["capacity.state.updated"]
+      }
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "tourId",
+      "type": "string",
+      "doc": "Tour identifier"
+    },
+    {
+      "name": "vehicleId",
+      "type": "string",
+      "doc": "Vehicle identifier"
+    },
+    {
+      "name": "segmentId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Current tour segment"
+    },
+    {
+      "name": "volumeFreeM3",
+      "type": "double",
+      "doc": "Free volume in cubic meters"
+    },
+    {
+      "name": "weightFreeKg",
+      "type": "double",
+      "doc": "Free weight in kilograms"
+    },
+    {
+      "name": "palletsFree",
+      "type": "int",
+      "doc": "Free pallet slots"
+    },
+    {
+      "name": "volumeUsedM3",
+      "type": "double",
+      "doc": "Used volume in cubic meters"
+    },
+    {
+      "name": "weightUsedKg",
+      "type": "double",
+      "doc": "Used weight in kilograms"
+    },
+    {
+      "name": "palletsUsed",
+      "type": "int",
+      "doc": "Used pallet slots"
+    },
+    {
+      "name": "utilizationPercent",
+      "type": "double",
+      "doc": "Overall utilization percentage"
+    },
+    {
+      "name": "triggerReason",
+      "type": {
+        "type": "enum",
+        "name": "CapacityUpdateReason",
+        "symbols": ["LOAD_SNAPSHOT", "ORDER_ASSIGNED", "ORDER_COMPLETED", "MANUAL_OVERRIDE", "SEGMENT_CHANGE"]
+      }
+    }
+  ]
+}

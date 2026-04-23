@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #FFFFFF;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SimHei', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+  #diagram { width: fit-content; min-width: 800px; }
+</style>
+</head>
+<body>
+<div id="diagram">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Shipper as Verlader (Frontend)
+    participant API as Backend API
+    participant Match as Matching Service
+    participant ML as ML-Service
+    participant Wallet as Wallet-Service
+    participant Stripe as Stripe
+    participant Transporter as Transporteur (Frontend)
+
+    rect rgb(239, 246, 255)
+    Note over Shipper,API: Phase 1: Job Creation
+    Shipper->>API: POST /jobs (Neuen Auftrag erstellen)
+    API->>API: Job in DB anlegen (status = "open")
+    API-->>Shipper: Job-Details
+    end
+
+    rect rgb(240, 253, 244)
+    Note over Match,ML: Phase 2: Matching
+    API->>Match: match_transporters_for_job(job)
+    Match->>API: Kandidaten aus DB laden
+    loop pro Kandidat
+        Match->>ML: POST /score (Features)
+        ML-->>Match: scoreMl
+    end
+    Match-->>API: Top-N Transporteur-IDs (mit Score)
+    API->>Transporter: Notify (In-App / E-Mail: Neuer Job)
+    end
+
+    rect rgb(255, 247, 237)
+    Note over Transporter,API: Phase 3: Bidding
+    Transporter->>API: POST /jobs/{id}/bids (Angebot abgeben)
+    API->>API: Bid speichern (status = "open")
+    API-->>Transporter: Bid bestätigt
+    Shipper->>API: GET /jobs/{id}/bids (Angebote ansehen)
+    end
+
+    rect rgb(245, 243, 255)
+    Note over Shipper,Wallet: Phase 4: Accept Bid & Wallet Booking
+    Shipper->>API: PATCH /jobs/{id}/accept_bid (bid_id)
+    API->>API: Job & Bid validieren (Status, Ownership)
+    API->>Wallet: get_wallet_by_user(shipper)
+    Wallet-->>API: Wallet-Daten
+
+    alt Wallet-Balance < Bid-Preis
+        API-->>Shipper: 400 Insufficient wallet balance
+    else Wallet-Balance ok
+        API->>Wallet: debit_wallet(shipper, amount, "booking")
+        API->>Wallet: credit_wallet(platform, fee)
+        API->>Wallet: credit_wallet(transporter, amount-fee)
+        API->>API: Job.status = "booked", Bid.status = "accepted"
+        API->>API: andere Bids = "rejected"
+        API-->>Shipper: Booking bestätigt
+        API-->>Transporter: Du wurdest gebucht
+    end
+    end
+
+    rect rgb(254, 243, 199)
+    Note over Transporter,API: Phase 5: Transport Execution
+    Transporter->>API: Status-Updates (in_progress, completed)
+    API->>API: Job.status aktualisieren
+    end
+
+    rect rgb(254, 226, 226)
+    Note over API,Stripe: Phase 6: Payout
+    API->>API: (Worker/Cron) findet completed + payout_pending
+    API->>Wallet: check transporter wallet balance
+    API->>Stripe: Transfer.create(...) (Stripe Connect Payout)
+    Stripe-->>API: Transfer bestätigt
+    API->>Wallet: debit_wallet(transporter, amount, "payout")
+    API->>API: Job.payout_status = "paid"
+    end
+  </pre>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#EFF6FF',
+      primaryBorderColor: '#3B82F6',
+      primaryTextColor: '#1E293B',
+      lineColor: '#94A3B8',
+      secondaryColor: '#F0FDF4',
+      secondaryBorderColor: '#10B981',
+      secondaryTextColor: '#1E293B',
+      tertiaryColor: '#FFF7ED',
+      tertiaryBorderColor: '#F59E0B',
+      tertiaryTextColor: '#1E293B',
+      noteBkgColor: '#F8FAFC',
+      noteTextColor: '#6B7280',
+      noteBorderColor: '#E2E8F0',
+      fontSize: '13px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, SimHei, sans-serif',
+    },
+    sequence: {
+      mirrorActors: false,
+      messageAlign: 'center',
+      actorMargin: 60,
+      width: 180,
+      height: 65,
+      boxMargin: 16,
+      boxTextMargin: 8,
+      noteMargin: 16,
+      messageMargin: 40,
+      bottomMarginAdj: 1,
+    },
+    flowchart: { 
+      curve: 'basis', 
+      padding: 32,
+      nodeSpacing: 80,
+      rankSpacing: 80,
+      htmlLabels: true,
+      wrappingWidth: 160,
+    },
+  });
+</script>
+</body>
+</html>

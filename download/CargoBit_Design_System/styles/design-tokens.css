@@ -1,0 +1,281 @@
+/**
+ * CargoBit Design System - CSS Variables
+ * Version: 1.0.0
+ * 
+ * Usage:
+ * - Import globally in your app: @import 'design-tokens.css';
+ * - Toggle dark mode: Add 'dark' class to <html> or <body>
+ * - Access variables: var(--color-brand-primary)
+ */
+
+/* ========================================
+   LIGHT MODE (Default)
+   ======================================== */
+:root {
+  /* ----------------------------------------
+     Brand Colors
+     ---------------------------------------- */
+  --color-brand-primary: #0052FF;
+  --color-brand-primary-hover: #003EB3;
+  --color-brand-secondary: #00C2A8;
+  --color-brand-accent: #FFB800;
+
+  /* ----------------------------------------
+     Neutral Scale
+     ---------------------------------------- */
+  --color-neutral-50: #F9FAFB;
+  --color-neutral-100: #F3F4F6;
+  --color-neutral-200: #E5E7EB;
+  --color-neutral-300: #D1D5DB;
+  --color-neutral-400: #9CA3AF;
+  --color-neutral-500: #6B7280;
+  --color-neutral-600: #4B5563;
+  --color-neutral-700: #374151;
+  --color-neutral-800: #1F2933;
+  --color-neutral-900: #111827;
+
+  /* ----------------------------------------
+     Risk Level Colors
+     ---------------------------------------- */
+  --color-risk-green: #2ECC71;
+  --color-risk-green-light: #D1FAE5;
+  --color-risk-green-text: #065F46;
+  
+  --color-risk-yellow: #F1C40F;
+  --color-risk-yellow-light: #FEF3C7;
+  --color-risk-yellow-text: #92400E;
+  
+  --color-risk-red: #E74C3C;
+  --color-risk-red-light: #FEE2E2;
+  --color-risk-red-text: #991B1B;
+
+  /* ----------------------------------------
+     Insurance Colors
+     ---------------------------------------- */
+  --color-insurance-blue: #0077CC;
+  --color-insurance-blue-light: #DBEAFE;
+  --color-insurance-gold: #D4AF37;
+  --color-insurance-gold-light: #FEF3C7;
+  --color-insurance-silver: #C0C0C0;
+
+  /* ----------------------------------------
+     Feedback States
+     ---------------------------------------- */
+  --color-feedback-success: #10B981;
+  --color-feedback-warning: #F59E0B;
+  --color-feedback-error: #EF4444;
+  --color-feedback-info: #3B82F6;
+
+  /* ----------------------------------------
+     Background Colors
+     ---------------------------------------- */
+  --color-bg-page: #F9FAFB;
+  --color-bg-surface: #FFFFFF;
+  --color-bg-surface-subtle: #F3F4F6;
+  --color-bg-overlay: rgba(0, 0, 0, 0.5);
+
+  /* ----------------------------------------
+     Text Colors
+     ---------------------------------------- */
+  --color-text-primary: #111827;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+  --color-text-inverse: #FFFFFF;
+  --color-text-link: #0052FF;
+  --color-text-link-hover: #003EB3;
+
+  /* ----------------------------------------
+     Border Colors
+     ---------------------------------------- */
+  --color-border-subtle: #E5E7EB;
+  --color-border-strong: #D1D5DB;
+  --color-border-focus: #0052FF;
+  --color-border-error: #EF4444;
+
+  /* ----------------------------------------
+     Typography
+     ---------------------------------------- */
+  --font-family-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-family-mono: 'JetBrains Mono', 'Consolas', 'Monaco', monospace;
+
+  --font-size-xs: 12px;
+  --font-size-sm: 14px;
+  --font-size-md: 16px;
+  --font-size-lg: 18px;
+  --font-size-xl: 20px;
+  --font-size-2xl: 24px;
+  --font-size-3xl: 32px;
+
+  --font-weight-regular: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+
+  --line-height-tight: 1.25;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.75;
+
+  /* ----------------------------------------
+     Spacing
+     ---------------------------------------- */
+  --spacing-4: 4px;
+  --spacing-8: 8px;
+  --spacing-12: 12px;
+  --spacing-16: 16px;
+  --spacing-20: 20px;
+  --spacing-24: 24px;
+  --spacing-32: 32px;
+  --spacing-40: 40px;
+
+  /* ----------------------------------------
+     Border Radius
+     ---------------------------------------- */
+  --radius-none: 0px;
+  --radius-sm: 4px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-pill: 999px;
+
+  /* ----------------------------------------
+     Shadows
+     ---------------------------------------- */
+  --shadow-none: none;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-dropdown: 0 10px 15px rgba(15, 23, 42, 0.15);
+  --shadow-modal: 0 20px 25px rgba(15, 23, 42, 0.20);
+
+  /* ----------------------------------------
+     Transitions
+     ---------------------------------------- */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+  --transition-slow: 300ms ease;
+
+  /* ----------------------------------------
+     Z-Index Scale
+     ---------------------------------------- */
+  --z-dropdown: 100;
+  --z-sticky: 200;
+  --z-fixed: 300;
+  --z-modal-backdrop: 400;
+  --z-modal: 500;
+  --z-popover: 600;
+  --z-tooltip: 700;
+}
+
+/* ========================================
+   DARK MODE
+   ======================================== */
+.dark,
+[data-theme="dark"] {
+  /* Brand Colors (Adjusted for dark mode) */
+  --color-brand-primary: #4C8DFF;
+  --color-brand-primary-hover: #3A6FCC;
+
+  /* Risk Colors (Adjusted for dark mode) */
+  --color-risk-green: #27AE60;
+  --color-risk-yellow: #D4AC0D;
+  --color-risk-red: #C0392B;
+
+  /* Background Colors */
+  --color-bg-page: #0F1115;
+  --color-bg-surface: #1A1C20;
+  --color-bg-surface-subtle: #2A2D33;
+  --color-bg-overlay: rgba(0, 0, 0, 0.7);
+
+  /* Text Colors */
+  --color-text-primary: #FFFFFF;
+  --color-text-secondary: #D1D5DB;
+  --color-text-muted: #9CA3AF;
+  --color-text-inverse: #000000;
+  --color-text-link: #4C8DFF;
+  --color-text-link-hover: #6B9FFF;
+
+  /* Border Colors */
+  --color-border-subtle: #2F333A;
+  --color-border-strong: #4B5563;
+
+  /* Shadows (Darker for dark mode) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5);
+  --shadow-dropdown: 0 10px 20px rgba(0, 0, 0, 0.6);
+  --shadow-modal: 0 20px 30px rgba(0, 0, 0, 0.7);
+}
+
+/* ========================================
+   COMPONENT TOKENS
+   ======================================== */
+:root {
+  /* Button */
+  --btn-bg-primary: var(--color-brand-primary);
+  --btn-bg-primary-hover: var(--color-brand-primary-hover);
+  --btn-bg-secondary: var(--color-neutral-100);
+  --btn-bg-secondary-hover: var(--color-neutral-200);
+  --btn-bg-ghost: transparent;
+  --btn-bg-ghost-hover: var(--color-neutral-100);
+  --btn-bg-danger: var(--color-feedback-error);
+  --btn-bg-danger-hover: #DC2626;
+  --btn-text-primary: var(--color-text-inverse);
+  --btn-text-secondary: var(--color-text-primary);
+  --btn-text-ghost: var(--color-text-primary);
+  --btn-text-danger: var(--color-text-inverse);
+  --btn-radius: var(--radius-md);
+  --btn-padding-x: var(--spacing-16);
+  --btn-padding-y: var(--spacing-8);
+
+  /* Input */
+  --input-bg: var(--color-bg-surface);
+  --input-border: var(--color-border-strong);
+  --input-border-focus: var(--color-border-focus);
+  --input-border-error: var(--color-border-error);
+  --input-text: var(--color-text-primary);
+  --input-placeholder: var(--color-text-muted);
+  --input-radius: var(--radius-md);
+  --input-padding-x: var(--spacing-12);
+  --input-padding-y: var(--spacing-8);
+
+  /* Card */
+  --card-bg: var(--color-bg-surface);
+  --card-border: var(--color-border-subtle);
+  --card-radius: var(--radius-lg);
+  --card-shadow: var(--shadow-card);
+  --card-padding: var(--spacing-16);
+}
+
+/* Dark mode component overrides */
+.dark,
+[data-theme="dark"] {
+  --btn-bg-secondary: var(--color-neutral-800);
+  --btn-bg-secondary-hover: var(--color-neutral-700);
+  --btn-bg-ghost-hover: var(--color-neutral-800);
+}
+
+/* ========================================
+   UTILITY CLASSES
+   ======================================== */
+
+/* Text Colors */
+.text-brand { color: var(--color-brand-primary); }
+.text-risk-green { color: var(--color-risk-green); }
+.text-risk-yellow { color: var(--color-risk-yellow); }
+.text-risk-red { color: var(--color-risk-red); }
+
+/* Background Colors */
+.bg-surface { background-color: var(--color-bg-surface); }
+.bg-surface-subtle { background-color: var(--color-bg-surface-subtle); }
+
+/* Risk Level Backgrounds */
+.bg-risk-green { background-color: var(--color-risk-green-light); }
+.bg-risk-yellow { background-color: var(--color-risk-yellow-light); }
+.bg-risk-red { background-color: var(--color-risk-red-light); }
+
+/* Shadows */
+.shadow-card { box-shadow: var(--shadow-card); }
+.shadow-dropdown { box-shadow: var(--shadow-dropdown); }
+.shadow-modal { box-shadow: var(--shadow-modal); }
+
+/* Radius */
+.rounded-card { border-radius: var(--card-radius); }
+.rounded-btn { border-radius: var(--btn-radius); }

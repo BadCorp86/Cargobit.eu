@@ -1,0 +1,310 @@
+openapi: 3.0.3
+info:
+  title: CargoBit Insurance Service API
+  description: |
+    Produktionsreife API für Frachtversicherungen auf der CargoBit-Plattform.
+    
+    ## Features
+    - Echtzeit-Prämienberechnung
+    - Policen-Erstellung und -Verwaltung
+    - Webhooks für Status-Updates
+    - Provisionstracking für Plattform-Betreiber
+    
+    ## Authentifizierung
+    Alle Endpunkte erfordern einen Bearer-Token im Authorization-Header.
+  version: 1.0.0
+  contact:
+    name: CargoBit API Support
+    email: api@cargobit.io
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.cargobit.io/v1
+    description: Production
+  - url: https://api-staging.cargobit.io/v1
+    description: Staging
+
+tags:
+  - name: Quote
+    description: Prämienberechnung
+  - name: Policy
+    description: Policen-Verwaltung
+  - name: Webhooks
+    description: Event-Benachrichtigungen
+
+paths:
+  /insurance/quote:
+    get:
+      tags:
+        - Quote
+      summary: Versicherungsschutz berechnen
+      description: Berechnet die Versicherungsprämie in Echtzeit basierend auf Transportdaten
+      operationId: getQuote
+      parameters:
+        - name: orderId
+          in: query
+          required: true
+          description: Transportauftrags-ID
+          schema:
+            type: string
+            example: TR-12345
+        - name: value
+          in: query
+          required: true
+          description: Warenwert in EUR
+          schema:
+            type: number
+            minimum: 100
+            maximum: 500000
+            example: 45000
+        - name: origin
+          in: query
+          required: true
+          description: Abholort (Stadt oder Land)
+          schema:
+            type: string
+            example: Berlin, DE
+        - name: destination
+          in: query
+          required: true
+          description: Zielort (Stadt oder Land)
+          schema:
+            type: string
+            example: München, DE
+        - name: weight
+          in: query
+          required: false
+          description: Frachtgewicht in kg
+          schema:
+            type: number
+            example: 2500
+      responses:
+        '200':
+          description: Erfolgreiche Berechnung
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /insurance/policy:
+    post:
+      tags:
+        - Policy
+      summary: Versicherungspolice erstellen
+      description: Schließt eine Versicherung basierend auf einem Quote ab
+      operationId: createPolicy
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePolicyRequest'
+      responses:
+        '201':
+          description: Police erfolgreich erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResponse'
+        '400':
+          description: Validierungsfehler
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+    get:
+      tags:
+        - Policy
+      summary: Police abrufen
+      operationId: getPolicy
+      parameters:
+        - name: policyId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Police gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyResponse'
+
+  /insurance/policies:
+    get:
+      tags:
+        - Policy
+      summary: Alle Policen auflisten
+      operationId: listPolicies
+      parameters:
+        - name: customerId
+          in: query
+          schema:
+            type: string
+        - name: orderId
+          in: query
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [active, expired, cancelled]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+        - name: offset
+          in: query
+          schema:
+            type: integer
+            default: 0
+      responses:
+        '200':
+          description: Liste der Policen
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PolicyListResponse'
+
+components:
+  schemas:
+    QuoteResponse:
+      type: object
+      properties:
+        premium:
+          type: number
+          description: Prämie in EUR
+          example: 24.90
+        currency:
+          type: string
+          default: EUR
+        coverage:
+          type: number
+          description: Deckungssumme
+          example: 50000
+        provider:
+          type: string
+          description: Versicherer
+          example: Allianz
+        quoteId:
+          type: string
+          description: Eindeutige Quote-ID
+          example: q_1713200400_abc123
+        validUntil:
+          type: string
+          format: date-time
+        tiers:
+          type: array
+          items:
+            $ref: '#/components/schemas/InsuranceTier'
+
+    InsuranceTier:
+      type: object
+      properties:
+        name:
+          type: string
+          enum: [basis, standard, premium]
+        premium:
+          type: number
+        coverage:
+          type: number
+        features:
+          type: array
+          items:
+            type: string
+        recommended:
+          type: boolean
+
+    CreatePolicyRequest:
+      type: object
+      required:
+        - quoteId
+        - orderId
+        - customerId
+      properties:
+        quoteId:
+          type: string
+        orderId:
+          type: string
+        customerId:
+          type: string
+        tier:
+          type: string
+          enum: [basis, standard, premium]
+          default: standard
+
+    PolicyResponse:
+      type: object
+      properties:
+        policyId:
+          type: string
+        provider:
+          type: string
+        premium:
+          type: number
+        commission:
+          type: number
+          description: Plattform-Provision
+        status:
+          type: string
+          enum: [active, expired, cancelled]
+        pdfUrl:
+          type: string
+          format: uri
+        policyNumber:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        validFrom:
+          type: string
+          format: date-time
+        validUntil:
+          type: string
+          format: date-time
+
+    PolicyListResponse:
+      type: object
+      properties:
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/PolicyResponse'
+        total:
+          type: integer
+        limit:
+          type: integer
+        offset:
+          type: integer
+        hasMore:
+          type: boolean
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+security:
+  - bearerAuth: []

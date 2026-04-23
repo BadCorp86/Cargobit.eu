@@ -1,0 +1,37 @@
+{
+  "name": "@cargobit/design-system",
+  "version": "1.0.0",
+  "description": "Design System for CargoBit Transport Platform",
+  "main": "index.ts",
+  "types": "index.ts",
+  "scripts": {
+    "build": "tsc",
+    "lint": "eslint . --ext .ts,.tsx",
+    "tokens:build": "style-dictionary build"
+  },
+  "dependencies": {
+    "clsx": "^2.1.0",
+    "tailwind-merge": "^2.2.0",
+    "class-variance-authority": "^0.7.0"
+  },
+  "peerDependencies": {
+    "react": "^18.0.0",
+    "react-dom": "^18.0.0",
+    "tailwindcss": "^3.4.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "typescript": "^5.0.0",
+    "style-dictionary": "^3.9.0"
+  },
+  "keywords": [
+    "design-system",
+    "cargobit",
+    "transport",
+    "tailwind",
+    "react"
+  ],
+  "author": "CargoBit Team",
+  "license": "MIT"
+}

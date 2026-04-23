@@ -1,0 +1,242 @@
+# CargoBit Shared API Components
+# Include this file in both insurance-service.yaml and ad-service.yaml
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT Token aus CargoBit Auth Service
+
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: API-Key für Partner-Integration
+
+  parameters:
+    PageParam:
+      in: query
+      name: page
+      description: Seitennummer für Paginierung
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+
+    PageSizeParam:
+      in: query
+      name: pageSize
+      description: Anzahl der Ergebnisse pro Seite
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+    SortByParam:
+      in: query
+      name: sortBy
+      description: Sortierfeld
+      schema:
+        type: string
+
+    SortOrderParam:
+      in: query
+      name: sortOrder
+      description: Sortierrichtung
+      schema:
+        type: string
+        enum: [asc, desc]
+        default: desc
+
+  headers:
+    RateLimit-Limit:
+      description: Maximale Requests pro Zeitfenster
+      schema:
+        type: integer
+    RateLimit-Remaining:
+      description: Verbleibende Requests
+      schema:
+        type: integer
+    RateLimit-Reset:
+      description: Unix-Timestamp wann Limit zurückgesetzt wird
+      schema:
+        type: integer
+    X-Request-Id:
+      description: Eindeutige Request-ID für Tracing
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Maschinenlesbarer Fehlercode
+          example: INSURANCE_QUOTE_NOT_FOUND
+        message:
+          type: string
+          description: Lesbare Fehlermeldung
+          example: "Insurance quote not found or expired"
+        details:
+          type: object
+          description: Zusätzliche Fehlerdetails
+          additionalProperties: true
+          example:
+            field: "quoteId"
+            value: "qt_invalid"
+        requestId:
+          type: string
+          format: uuid
+          description: Request-ID für Support
+        timestamp:
+          type: string
+          format: date-time
+
+    ValidationError:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationError'
+
+    PaginatedResponse:
+      type: object
+      required: [items, page, pageSize, total]
+      properties:
+        items:
+          type: array
+          items: {}
+          description: Array der Ergebnisse
+        page:
+          type: integer
+          description: Aktuelle Seite
+          minimum: 1
+        pageSize:
+          type: integer
+          description: Ergebnisse pro Seite
+          minimum: 1
+          maximum: 100
+        total:
+          type: integer
+          description: Gesamtanzahl der Ergebnisse
+          minimum: 0
+        totalPages:
+          type: integer
+          description: Gesamtanzahl der Seiten
+        hasNext:
+          type: boolean
+          description: Ob es eine nächste Seite gibt
+        hasPrev:
+          type: boolean
+          description: Ob es eine vorherige Seite gibt
+
+    HealthStatus:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded, unhealthy]
+        version:
+          type: string
+        uptime:
+          type: integer
+          description: Uptime in Sekunden
+        checks:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              status:
+                type: string
+                enum: [pass, fail, warn]
+              latencyMs:
+                type: integer
+
+  responses:
+    BadRequest:
+      description: Ungültige Anfrage
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ValidationErrorResponse'
+          example:
+            code: VALIDATION_ERROR
+            message: "Invalid request parameters"
+            errors:
+              - field: "orderId"
+                message: "Must be a valid UUID"
+                code: "INVALID_FORMAT"
+
+    Unauthorized:
+      description: Nicht authentifiziert
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: UNAUTHORIZED
+            message: "Authentication required"
+
+    Forbidden:
+      description: Keine Berechtigung
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: FORBIDDEN
+            message: "Insufficient permissions for this resource"
+
+    NotFound:
+      description: Ressource nicht gefunden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: NOT_FOUND
+            message: "Resource not found"
+
+    RateLimited:
+      description: Rate Limit überschritten
+      headers:
+        Retry-After:
+          description: Sekunden bis zum nächsten Versuch
+          schema:
+            type: integer
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: RATE_LIMITED
+            message: "Rate limit exceeded. Please retry later."
+
+    InternalError:
+      description: Interner Server-Fehler
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            code: INTERNAL_ERROR
+            message: "An unexpected error occurred"

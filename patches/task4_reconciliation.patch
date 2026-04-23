@@ -1,0 +1,217 @@
+*** Begin Patch
+*** Add File: src/reconciliation/reconciliation.module.ts
++import { Module } from '@nestjs/common';
++import { TypeOrmModule } from '@nestjs/typeorm';
++import { ReconciliationController } from './controllers/reconciliation.controller';
++import { ReconciliationService } from './services/reconciliation.service';
++import { Payout } from '../payments/entities/payout.entity';
++import { PayoutEvent } from '../payments/entities/payout-event.entity';
++import { AuditService } from '../audit/audit.service';
++import { ScheduleModule } from '@nestjs/schedule';
++import { ReconciliationScheduler } from './reconciliation/reconciliation.scheduler';
++
++@Module({
++  imports: [TypeOrmModule.forFeature([Payout, PayoutEvent]), ScheduleModule.forRoot()],
++  controllers: [ReconciliationController],
++  providers: [ReconciliationService, AuditService, ReconciliationScheduler],
++  exports: [ReconciliationService],
++})
++export class ReconciliationModule {}
++
+*** End Patch
+*** Begin Patch
+*** Add File: src/reconciliation/controllers/reconciliation.controller.ts
++import { Controller, Get, Post, Param, Body, UseGuards } from '@nestjs/common';
++import { ReconciliationService } from '../services/reconciliation.service';
++import { AdminAuthGuard } from '../../auth/admin-auth.guard';
++import { MarkPayoutDto } from '../dto/mark-payout.dto';
++
++@Controller('admin/reconciliation')
++@UseGuards(AdminAuthGuard)
++export class ReconciliationController {
++  constructor(private readonly svc: ReconciliationService) {}
++
++  @Get('open')
++  async listOpen() {
++    return this.svc.listOpenPayouts();
++  }
++
++  @Post(':id/mark')
++  async mark(@Param('id') id: string, @Body() body: MarkPayoutDto) {
++    return this.svc.markPayout(id, body);
++  }
++}
++
+*** End Patch
+*** Begin Patch
+*** Add File: src/reconciliation/dto/mark-payout.dto.ts
++import { IsIn, IsOptional, IsString } from 'class-validator';
++
++export class MarkPayoutDto {
++  @IsIn(['resolved', 'needs_review'])
++  status: 'resolved' | 'needs_review';
++
++  @IsOptional()
++  @IsString()
++  note?: string;
++}
++
+*** End Patch
+*** Begin Patch
+*** Add File: src/reconciliation/services/reconciliation.service.ts
++import { Injectable, Logger } from '@nestjs/common';
++import { InjectRepository } from '@nestjs/typeorm';
++import { Repository, Connection } from 'typeorm';
++import { Payout } from '../../payments/entities/payout.entity';
++import { PayoutEvent } from '../../payments/entities/payout-event.entity';
++import { AuditService } from '../../audit/audit.service';
++
++@Injectable()
++export class ReconciliationService {
++  private readonly logger = new Logger(ReconciliationService.name);
++
++  constructor(
++    @InjectRepository(Payout) private readonly payouts: Repository<Payout>,
++    @InjectRepository(PayoutEvent) private readonly events: Repository<PayoutEvent>,
++    private readonly audit: AuditService,
++    private readonly connection: Connection,
++  ) {}
++
++  async listOpenPayouts(): Promise<any[]> {
++    const rows = await this.payouts.find({ where: [{ status: 'pending' }, { status: 'processing' }] });
++    return rows.map(r => ({ id: r.id, amount_cents: r.amount_cents, status: r.status, diff: 0 }));
++  }
++
++  async markPayout(id: string, payload: { status: 'resolved' | 'needs_review'; note?: string }) {
++    return await this.connection.transaction(async manager => {
++      const p = await manager.findOne(Payout, { where: { id } });
++      if (!p) throw new Error('Payout not found');
++      p.status = payload.status === 'resolved' ? 'paid' : p.status;
++      await manager.save(p);
++      await manager.insert(PayoutEvent, { payout_id: id, type: 'manual_mark', payload });
++      await this.audit.recordTransactional(manager, 'reconciliation.mark', { payoutId: id, payload });
++      return { ok: true, payout: p };
++    });
++  }
++}
++
+*** End Patch
+*** Begin Patch
+*** Add File: src/reconciliation/reconciliation/reconciliation.scheduler.ts
++import { Injectable, Logger } from '@nestjs/common';
++import { Cron } from '@nestjs/schedule';
++import { ReconciliationService } from '../services/reconciliation.service';
++import { LeaderLock } from '../../infra/leader-lock.service';
++
++@Injectable()
++export class ReconciliationScheduler {
++  private readonly logger = new Logger(ReconciliationScheduler.name);
++
++  constructor(private readonly svc: ReconciliationService, private readonly lock: LeaderLock) {}
++
++  @Cron('0 */6 * * *')
++  async run() {
++    const key = 'reconciliation:leader';
++    if (!(await this.lock.acquire(key, 60))) {
++      this.logger.log('Not leader, skipping reconciliation run');
++      return;
++    }
++    try {
++      this.logger.log('Starting reconciliation run');
++      const open = await this.svc.listOpenPayouts();
++      this.logger.log(`Found ${open.length} open payouts`);
++    } finally {
++      await this.lock.release(key);
++    }
++  }
++}
++
+*** End Patch
+*** Begin Patch
+*** Add File: helm/payments/templates/reconciliation-cronjob.yaml
++{{- if .Values.reconciliation.enabled }}
++apiVersion: batch/v1
++kind: CronJob
++metadata:
++  name: {{ include "payments.name" . }}-reconciliation
++spec:
++  schedule: "{{ .Values.reconciliation.schedule }}"
++  jobTemplate:
++    spec:
++      template:
++        spec:
++          serviceAccountName: {{ .Values.serviceAccount.name }}
++          containers:
++            - name: reconciliation
++              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
++              command: ["node", "dist/src/reconciliation/reconciliation.scheduler.js"]
++              envFrom:
++                - secretRef:
++                    name: {{ .Values.env.existingSecret }}
++          restartPolicy: OnFailure
++{{- end }}
++
+*** End Patch
+*** Begin Patch
+*** Add File: helm/payments/values.yaml
++reconciliation:
++  enabled: true
++  schedule: "0 */6 * * *"
++
+*** End Patch
+*** Begin Patch
+*** Add File: postman_reconciliation.json
++{
++  "info": { "name": "Reconciliation - Staging" },
++  "item": [
++    {
++      "name": "List Open Payouts",
++      "request": {
++        "method": "GET",
++        "header": [{ "key": "Authorization", "value": "{{admin_jwt}}" }],
++        "url": { "raw": "{{base_url}}/admin/reconciliation/open", "host": ["{{base_url}}"], "path": ["admin","reconciliation","open"] }
++      }
++    },
++    {
++      "name": "Mark Payout",
++      "request": {
++        "method": "POST",
++        "header": [{ "key": "Authorization", "value": "{{admin_jwt}}" }, { "key": "Content-Type", "value": "application/json" }],
++        "body": { "mode": "raw", "raw": "{\"status\":\"resolved\",\"note\":\"manual fix\"}" },
++        "url": { "raw": "{{base_url}}/admin/reconciliation/{{payout_id}}/mark", "host": ["{{base_url}}"], "path": ["admin","reconciliation","{{payout_id}}","mark"] }
++      }
++    }
++  ]
++}
++
+*** End Patch
+*** Begin Patch
+*** Add File: src/reconciliation/__tests__/reconciliation.service.spec.ts
++import { Test, TestingModule } from '@nestjs/testing';
++import { ReconciliationService } from '../services/reconciliation.service';
++import { getRepositoryToken } from '@nestjs/typeorm';
++import { Payout } from '../../payments/entities/payout.entity';
++
++describe('ReconciliationService', () => {
++  let service: ReconciliationService;
++
++  beforeEach(async () => {
++    const module: TestingModule = await Test.createTestingModule({
++      providers: [
++        ReconciliationService,
++        { provide: getRepositoryToken(Payout), useValue: { find: jest.fn().mockResolvedValue([]) } },
++        { provide: 'AuditService', useValue: { record: jest.fn(), recordTransactional: jest.fn() } },
++      ],
++    }).compile();
++
++    service = module.get<ReconciliationService>(ReconciliationService);
++  });
++
++  it('listOpenPayouts returns array', async () => {
++    const res = await service.listOpenPayouts();
++    expect(Array.isArray(res)).toBe(true);
++  });
++});
++
+*** End Patch
+*** End Patch

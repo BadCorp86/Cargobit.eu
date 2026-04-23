@@ -1,0 +1,216 @@
+{
+  "templates": [
+    {
+      "eventType": "HIGH_RISK_BLOCKED",
+      "channel": "SLACK",
+      "body": "🚨 *High-Risk erkannt – Aktion blockiert*\n• User: {{userId}}\n• Entity: {{entityType}} {{entityId}}\n• Score: {{riskScore}}\n• Regeln: {{triggeredRules}}\n• Zeit: {{timestamp}}\n\nBitte sofort prüfen.",
+      "active": true
+    },
+    {
+      "eventType": "HIGH_RISK_BLOCKED",
+      "channel": "EMAIL",
+      "subject": "[High Risk] Aktion blockiert – Score {{riskScore}}",
+      "body": "Hallo Security-Team,\n\neine sicherheitsrelevante Aktion wurde blockiert.\n\nDetails:\n- User: {{userId}}\n- Entity: {{entityType}} {{entityId}}\n- Risk Score: {{riskScore}}\n- Ausgelöste Regeln: {{triggeredRules}}\n- Zeitpunkt: {{timestamp}}\n\nBitte prüfen Sie den Fall im Dashboard.\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "HIGH_RISK_BLOCKED",
+      "channel": "SMS",
+      "body": "High-Risk Fall: Score {{riskScore}}. User {{userId}}. Aktion blockiert. Bitte prüfen.",
+      "active": true
+    },
+    {
+      "eventType": "HIGH_RISK_MITIGATION",
+      "channel": "SLACK",
+      "body": "🟡 *Risk-Mitigation angewendet*\n• User: {{userId}}\n• Entity: {{entityType}} {{entityId}}\n• Score: {{riskScore}}\n• Mitigations: {{mitigations}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "HIGH_RISK_MITIGATION",
+      "channel": "EMAIL",
+      "subject": "[Risk Mitigation] Aktion mit Einschränkungen – Score {{riskScore}}",
+      "body": "Hallo Team,\n\neine Aktion wurde mit Sicherheitsmaßnahmen genehmigt.\n\nDetails:\n- User: {{userId}}\n- Entity: {{entityType}} {{entityId}}\n- Risk Score: {{riskScore}}\n- Angewendete Mitigations: {{mitigations}}\n- Zeitpunkt: {{timestamp}}\n\nDie Aktion wird überwacht.\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "FRAUD_ALERT",
+      "channel": "SLACK",
+      "body": "🚨 *Betrugsverdacht erkannt*\n• User: {{userId}}\n• Entity: {{entityType}} {{entityId}}\n• Grund: {{reason}}\n• Zeit: {{timestamp}}\n\n⚠️ Sofortige Prüfung erforderlich!",
+      "active": true
+    },
+    {
+      "eventType": "FRAUD_ALERT",
+      "channel": "EMAIL",
+      "subject": "[FRAUD ALERT] Betrugsverdacht – {{entityType}} {{entityId}}",
+      "body": "Hallo Security-Team,\n\n⚠️ BETRUGSVERDACHT ERKANNT ⚠️\n\nDetails:\n- User: {{userId}}\n- Entity: {{entityType}} {{entityId}}\n- Grund: {{reason}}\n- Zeitpunkt: {{timestamp}}\n\nBitte prüfen Sie den Fall umgehend.\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "FRAUD_ALERT",
+      "channel": "SMS",
+      "body": "FRAUD ALERT: {{reason}}. User {{userId}}. Entity {{entityId}}. Sofort prüfen!",
+      "active": true
+    },
+    {
+      "eventType": "PERMISSION_DENIED",
+      "channel": "SLACK",
+      "body": "🔒 *Permission Denied*\n• User: {{userId}}\n• Versuchte Aktion: {{attemptedAction}}\n• Erforderliche Berechtigung: {{requiredPermission}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "PERMISSION_DENIED",
+      "channel": "EMAIL",
+      "subject": "[Security] Unbefugter Zugriffsversuch – {{userId}}",
+      "body": "Hallo Team,\n\nein unbefugter Zugriffsversuch wurde protokolliert.\n\nDetails:\n- User: {{userId}}\n- Versuchte Aktion: {{attemptedAction}}\n- Erforderliche Berechtigung: {{requiredPermission}}\n- Zeitpunkt: {{timestamp}}\n\nBei Verdacht auf Missbrauch bitte Maßnahmen ergreifen.\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "SUPPORT_TICKET_CREATED",
+      "channel": "SLACK",
+      "body": "🎫 *Neues Support-Ticket erstellt*\n• Ticket-ID: {{ticketId}}\n• User: {{userId}}\n• Entity: {{entityType}} {{entityId}}\n• Grund: {{reason}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "SUPPORT_TICKET_CREATED",
+      "channel": "EMAIL",
+      "subject": "[Support] Neues Ticket – {{ticketId}}",
+      "body": "Hallo Support-Team,\n\nein neues Support-Ticket wurde erstellt.\n\nDetails:\n- Ticket-ID: {{ticketId}}\n- User: {{userId}}\n- Entity: {{entityType}} {{entityId}}\n- Grund: {{reason}}\n- Zeitpunkt: {{timestamp}}\n\nBitte prüfen und bearbeiten.\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "USER_BLOCKED",
+      "channel": "SLACK",
+      "body": "🚫 *User gesperrt*\n• User: {{userId}}\n• Grund: {{reason}}\n• Gesperrt von: {{blockedBy}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "USER_BLOCKED",
+      "channel": "EMAIL",
+      "subject": "[Security] User gesperrt – {{userId}}",
+      "body": "Hallo Team,\n\nein User-Account wurde gesperrt.\n\nDetails:\n- User: {{userId}}\n- Grund: {{reason}}\n- Gesperrt von: {{blockedBy}}\n- Zeitpunkt: {{timestamp}}\n- Vorherige Flags: {{previousFlags}}\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "USER_UNBLOCKED",
+      "channel": "SLACK",
+      "body": "✅ *User freigeschaltet*\n• User: {{userId}}\n• Grund: {{reason}}\n• Freigeschaltet von: {{unblockedBy}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "RISK_OVERRIDE",
+      "channel": "SLACK",
+      "body": "🔄 *Risk-Override durch Support*\n• User: {{userId}}\n• Original Score: {{originalScore}}\n• Grund: {{overrideReason}}\n• Override durch: {{overriddenBy}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "RISK_OVERRIDE",
+      "channel": "EMAIL",
+      "subject": "[Override] Risk-Override durchgeführt – {{userId}}",
+      "body": "Hallo Team,\n\nein Risk-Override wurde durchgeführt.\n\nDetails:\n- User: {{userId}}\n- Original Risk Score: {{originalScore}}\n- Override-Grund: {{overrideReason}}\n- Override durch: {{overriddenBy}}\n- Neuer Status: {{newStatus}}\n- Zeitpunkt: {{timestamp}}\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "PAYOUT_BLOCKED",
+      "channel": "SLACK",
+      "body": "💰 *Payout blockiert*\n• User: {{userId}}\n• Betrag: {{amount}} {{currency}}\n• Grund: {{reason}}\n• Zeit: {{timestamp}}\n\nBitte prüfen!",
+      "active": true
+    },
+    {
+      "eventType": "PAYOUT_BLOCKED",
+      "channel": "EMAIL",
+      "subject": "[Payout Block] Auszahlung blockiert – {{amount}} {{currency}}",
+      "body": "Hallo Finance-Team,\n\neine Auszahlung wurde blockiert.\n\nDetails:\n- User: {{userId}}\n- Betrag: {{amount}} {{currency}}\n- Grund: {{reason}}\n- Zeitpunkt: {{timestamp}}\n\nBitte prüfen und entscheiden.\n\nMit freundlichen Grüßen\nSecurity-System",
+      "active": true
+    },
+    {
+      "eventType": "PAYOUT_DELAYED",
+      "channel": "SLACK",
+      "body": "⏳ *Payout verzögert (24h)*\n• User: {{userId}}\n• Betrag: {{amount}} {{currency}}\n• Risk Score: {{riskScore}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "HIGH_VALUE_TRANSACTION",
+      "channel": "SLACK",
+      "body": "💵 *High-Value Transaktion*\n• User: {{userId}}\n• Betrag: {{amount}} {{currency}}\n• Typ: {{transactionType}}\n• Zeit: {{timestamp}}",
+      "active": true
+    },
+    {
+      "eventType": "HIGH_VALUE_TRANSACTION",
+      "channel": "EMAIL",
+      "subject": "[High Value] Transaktion > 50.000€ – {{amount}} {{currency}}",
+      "body": "Hallo Team,\n\neine High-Value Transaktion wurde erkannt.\n\nDetails:\n- User: {{userId}}\n- Betrag: {{amount}} {{currency}}\n- Transaktionstyp: {{transactionType}}\n- Zeitpunkt: {{timestamp}}\n\nMit freundlichen Grüßen\nFinance-System",
+      "active": true
+    }
+  ],
+  
+  "channelConfigs": {
+    "SLACK": {
+      "webhookUrl": "https://hooks.slack.com/services/YOUR/WEBHOOK/URL",
+      "channel": "#security-alerts",
+      "username": "CargoBit Security"
+    },
+    "EMAIL": {
+      "smtpHost": "smtp.example.com",
+      "smtpPort": 587,
+      "smtpUser": "security@cargobit.com",
+      "smtpPassword": "YOUR_PASSWORD",
+      "fromEmail": "security@cargobit.com",
+      "fromName": "CargoBit Security"
+    },
+    "SMS": {
+      "provider": "twilio",
+      "apiKey": "YOUR_TWILIO_API_KEY",
+      "apiSecret": "YOUR_TWILIO_API_SECRET",
+      "fromNumber": "+49123456789"
+    }
+  },
+  
+  "rateLimits": {
+    "SLACK": {
+      "maxRequests": 30,
+      "windowMs": 60000,
+      "description": "max 1 msg / 2s"
+    },
+    "EMAIL": {
+      "maxRequests": 50,
+      "windowMs": 60000,
+      "description": "max 50 / min"
+    },
+    "SMS": {
+      "maxRequests": 5,
+      "windowMs": 60000,
+      "description": "max 5 / min"
+    }
+  },
+  
+  "priorities": {
+    "LOW": {
+      "level": 1,
+      "description": "Info - Keine sofortige Aktion erforderlich",
+      "examples": ["Login", "Profil-Update", "Transport-Status"],
+      "maxRetries": 2,
+      "retryDelayMs": 60000
+    },
+    "MEDIUM": {
+      "level": 2,
+      "description": "Warnung - Beobachten",
+      "examples": ["Gelb-Mitigation", "Neue IBAN", "Unvollständige KYC"],
+      "maxRetries": 3,
+      "retryDelayMs": 30000
+    },
+    "HIGH": {
+      "level": 3,
+      "description": "Security - Sofort prüfen",
+      "examples": ["High-Risk Block", "Fraud-Verdacht", "Support-Ticket"],
+      "maxRetries": 5,
+      "retryDelayMs": 15000
+    },
+    "CRITICAL": {
+      "level": 4,
+      "description": "Sofort - Kritisch",
+      "examples": ["Payout > 100k", "System-Kompromittierung", "Massen-Fraud"],
+      "maxRetries": 10,
+      "retryDelayMs": 5000
+    }
+  }
+}

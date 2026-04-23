@@ -1,0 +1,123 @@
+{
+  "type": "record",
+  "name": "TourRouteUpdated",
+  "namespace": "io.cargobit.logistics.events",
+  "doc": "Event emitted when a tour route is updated",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "TourRouteEventType",
+        "symbols": ["tour.route.updated"]
+      }
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "tourId",
+      "type": "string",
+      "doc": "Tour identifier"
+    },
+    {
+      "name": "vehicleId",
+      "type": "string",
+      "doc": "Vehicle identifier"
+    },
+    {
+      "name": "driverId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Driver identifier"
+    },
+    {
+      "name": "reason",
+      "type": {
+        "type": "enum",
+        "name": "RouteUpdateReason",
+        "symbols": [
+          "SUGGESTION_ACCEPTED",
+          "MANUAL_EDIT",
+          "TRAFFIC_DETOUR",
+          "CUSTOMER_REQUEST",
+          "VEHICLE_ISSUE",
+          "OPTIMIZATION"
+        ]
+      },
+      "doc": "Reason for route update"
+    },
+    {
+      "name": "suggestionId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Related suggestion (if reason=SUGGESTION_ACCEPTED)"
+    },
+    {
+      "name": "previousStops",
+      "type": ["null", {
+        "type": "array",
+        "items": {
+          "type": "record",
+          "name": "StopV1",
+          "fields": [
+            {"name": "stopId", "type": "string"},
+            {"name": "stopType", "type": {"type": "enum", "name": "StopType", "symbols": ["PICKUP", "DELIVERY", "BREAK", "DEPOT"]}},
+            {"name": "orderId", "type": ["null", "string"], "default": null},
+            {"name": "lat", "type": "double"},
+            {"name": "lng", "type": "double"},
+            {"name": "plannedArrival", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+            {"name": "plannedDeparture", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+            {"name": "sequence", "type": "int"}
+          ]
+        }
+      }],
+      "default": null,
+      "doc": "Previous stop sequence"
+    },
+    {
+      "name": "newStops",
+      "type": {
+        "type": "array",
+        "items": "StopV1"
+      },
+      "doc": "New stop sequence"
+    },
+    {
+      "name": "addedStops",
+      "type": ["null", {"type": "array", "items": "string"}],
+      "default": null,
+      "doc": "IDs of newly added stops"
+    },
+    {
+      "name": "removedStops",
+      "type": ["null", {"type": "array", "items": "string"}],
+      "default": null,
+      "doc": "IDs of removed stops"
+    },
+    {
+      "name": "totalDistanceKm",
+      "type": "double",
+      "doc": "Total route distance in km"
+    },
+    {
+      "name": "totalDurationMinutes",
+      "type": "int",
+      "doc": "Total route duration in minutes"
+    },
+    {
+      "name": "detourAddedKm",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Additional distance due to route change"
+    }
+  ]
+}

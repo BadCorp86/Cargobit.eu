@@ -1,0 +1,73 @@
+# Feast Feature Store Configuration
+# ==================================
+#
+# CargoBit ML Feature Store for Suggestion Scoring
+#
+# Components:
+# - Online Store: Redis (real-time serving, <10ms latency)
+# - Offline Store: S3/Parquet (training, historical data)
+# - Registry: PostgreSQL
+#
+# Setup:
+#   feast apply
+#   feast materialize-incremental $(date -u +"%Y-%m-%d %H:%M:%S")
+
+project: cargobit_suggestions
+
+# Registry (stores feature metadata)
+registry:
+  registry_type: sql
+  path: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:5432/feast_registry
+  cache_ttl_seconds: 60
+
+# Provider (cloud infrastructure)
+provider: aws
+
+# Online Store (Redis for real-time serving)
+online_store:
+  type: redis
+  connection_string: ${REDIS_HOST}:6379
+  key_prefix: cargobit_
+  client_type: redis-py
+
+# Offline Store (S3/Parquet for training)
+offline_store:
+  type: file
+  file_format: parquet
+
+# Entity Service (for entity lookup)
+entity_key_serialization_version: 2
+
+# Feature Server (optional REST API)
+feature_server:
+  enabled: true
+  host: 0.0.0.0
+  port: 6566
+  workers: 4
+
+# Flags
+flags:
+  alpha_features: false
+  on_demand_feature_view: true
+  use_verbose_logging: true
+
+# Monitoring
+monitoring:
+  enabled: true
+  metrics_endpoint: /metrics
+  health_endpoint: /health
+
+# Batch Engine (for materialization)
+batch_engine:
+  type: spark
+  config:
+    spark.master: "local[*]"
+    spark.executor.memory: "4g"
+    spark.driver.memory: "2g"
+
+# Auth (optional)
+auth:
+  type: no_auth
+  # For production, use:
+  # type: kubernetes
+  # service_account: feast-service-account

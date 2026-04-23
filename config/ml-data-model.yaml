@@ -1,0 +1,545 @@
+# =============================================================================
+# CargoBit ML Data Model
+# =============================================================================
+# Data Model für das ML-System: Tables, Columns, Keys, Relationships
+# 
+# Struktur:
+#   - Raw Events (Event Sourcing)
+#   - Feature Store Tables (Feast)
+#   - Training Tables (ML Pipeline)
+#   - Serving Tables (Real-time)
+#
+# Author: CargoBit ML Team
+# Version: 2.0.0
+# =============================================================================
+
+version: 2.0.0
+kind: ml-data-model
+metadata:
+  name: cargobit-ml-data-model
+  description: >
+    Data Model für ML-basiertes Capacity Matching.
+    Enthält alle Tabellen, Schemas und Beziehungen.
+  owner: ml-platform
+  lastUpdatedBy: sergej
+  lastUpdatedAt: "2025-04-19T16:00:00Z"
+
+# =============================================================================
+# EVENT SCHEMAS (Kafka Topics / Event Sourcing)
+# =============================================================================
+events:
+  - name: suggestion_generated
+    description: "Wird emittiert, wenn ein neuer Vorschlag generiert wurde"
+    topic: "cargobit.suggestions.generated"
+    partitionKey: suggestionId
+    schema:
+      columns:
+        - name: suggestionId
+          type: UUID
+          required: true
+          description: "Eindeutige Vorschlags-ID"
+        - name: tourId
+          type: UUID
+          required: true
+          description: "Tour-ID des Fahrzeugs"
+        - name: orderId
+          type: UUID
+          required: true
+          description: "Auftrags-ID"
+        - name: customerId
+          type: UUID
+          required: true
+          description: "Kunden-ID"
+        - name: driverId
+          type: UUID
+          required: true
+          description: "Fahrer-ID"
+        - name: vehicleId
+          type: UUID
+          required: true
+          description: "Fahrzeug-ID"
+        - name: laneId
+          type: STRING
+          required: true
+          description: "Lane-ID (Origin->Destination)"
+        - name: heuristicScore
+          type: FLOAT
+          required: true
+          description: "Heuristischer Score"
+        - name: scoreComponents
+          type: JSON
+          required: true
+          description: "Einzelne Score-Komponenten"
+        - name: features
+          type: JSON
+          required: true
+          description: "Feature-Vektor zum Zeitpunkt der Generierung"
+        - name: modelVersion
+          type: STRING
+          required: false
+          description: "ML-Modellversion (falls verwendet)"
+        - name: configVersion
+          type: STRING
+          required: true
+          description: "Config-Version für Heuristik"
+        - name: generatedAt
+          type: TIMESTAMP
+          required: true
+          description: "Zeitpunkt der Generierung"
+
+  - name: suggestion_decision_made
+    description: "Wird emittiert, wenn eine Entscheidung getroffen wurde"
+    topic: "cargobit.suggestions.decision"
+    partitionKey: suggestionId
+    schema:
+      columns:
+        - name: suggestionId
+          type: UUID
+          required: true
+        - name: decision
+          type: STRING
+          required: true
+          enum: [ACCEPTED, REJECTED, IGNORED, TIMEOUT]
+        - name: decisionBy
+          type: STRING
+          required: true
+          enum: [DISPATCHER, DRIVER, AUTO_ACCEPT, SYSTEM]
+        - name: decisionByUserId
+          type: UUID
+          required: false
+        - name: reason
+          type: STRING
+          required: false
+        - name: decisionAt
+          type: TIMESTAMP
+          required: true
+
+  - name: suggestion_outcome
+    description: "Wird emittiert, wenn der Vorschlag ausgeführt wurde"
+    topic: "cargobit.suggestions.outcome"
+    partitionKey: suggestionId
+    schema:
+      columns:
+        - name: suggestionId
+          type: UUID
+          required: true
+        - name: orderId
+          type: UUID
+          required: true
+        - name: executionStatus
+          type: STRING
+          required: true
+          enum: [COMPLETED, CANCELLED, FAILED]
+        - name: actualMargin
+          type: FLOAT
+          required: false
+          description: "Tatsächlicher Deckungsbeitrag"
+        - name: actualDelayMinutes
+          type: FLOAT
+          required: false
+          description: "Tatsächliche Verspätung"
+        - name: actualDetourKm
+          type: FLOAT
+          required: false
+          description: "Tatsächlicher Umweg"
+        - name: co2SavedKg
+          type: FLOAT
+          required: false
+          description: "CO₂-Ersparnis"
+        - name: completedAt
+          type: TIMESTAMP
+          required: true
+
+# =============================================================================
+# FEATURE STORE TABLES (Feast Offline Store - Parquet/S3)
+# =============================================================================
+featureStore:
+  offline:
+    - name: customer_features
+      description: "Aggregierte Kunden-Features (täglich)"
+      source: s3://cargobit-feature-store/customer_features/
+      format: parquet
+      partitionBy: [event_timestamp]
+      primaryKey: [customer_id]
+      columns:
+        - name: customer_id
+          type: STRING
+          primaryKey: true
+        - name: event_timestamp
+          type: TIMESTAMP
+          partitionKey: true
+        - name: acceptance_rate_7d
+          type: FLOAT
+        - name: acceptance_rate_30d
+          type: FLOAT
+        - name: acceptance_rate_90d
+          type: FLOAT
+        - name: realized_margin_avg_7d
+          type: FLOAT
+        - name: realized_margin_avg_30d
+          type: FLOAT
+        - name: realized_margin_avg_90d
+          type: FLOAT
+        - name: total_suggestions_30d
+          type: INT
+        - name: total_accepts_30d
+          type: INT
+        - name: cancellation_rate_30d
+          type: FLOAT
+        - name: avg_delay_minutes_30d
+          type: FLOAT
+        - name: on_time_rate_30d
+          type: FLOAT
+        - name: tier_encoded
+          type: INT
+        - name: credit_rating
+          type: FLOAT
+
+    - name: driver_features
+      description: "Aggregierte Fahrer-Features (täglich)"
+      source: s3://cargobit-feature-store/driver_features/
+      format: parquet
+      partitionBy: [event_timestamp]
+      primaryKey: [driver_id]
+      columns:
+        - name: driver_id
+          type: STRING
+          primaryKey: true
+        - name: event_timestamp
+          type: TIMESTAMP
+          partitionKey: true
+        - name: acceptance_rate_7d
+          type: FLOAT
+        - name: acceptance_rate_30d
+          type: FLOAT
+        - name: realized_margin_avg_30d
+          type: FLOAT
+        - name: total_suggestions_30d
+          type: INT
+        - name: total_accepts_30d
+          type: INT
+        - name: total_tours_30d
+          type: INT
+        - name: rating
+          type: FLOAT
+        - name: avg_delay_minutes_30d
+          type: FLOAT
+        - name: on_time_rate_30d
+          type: FLOAT
+
+    - name: lane_features
+      description: "Aggregierte Lane-Features (täglich)"
+      source: s3://cargobit-feature-store/lane_features/
+      format: parquet
+      partitionBy: [event_timestamp]
+      primaryKey: [lane_id]
+      columns:
+        - name: lane_id
+          type: STRING
+          primaryKey: true
+        - name: event_timestamp
+          type: TIMESTAMP
+          partitionKey: true
+        - name: acceptance_rate_30d
+          type: FLOAT
+        - name: realized_margin_avg_90d
+          type: FLOAT
+        - name: avg_distance_km
+          type: FLOAT
+        - name: avg_duration_minutes
+          type: FLOAT
+        - name: total_tours_30d
+          type: INT
+
+    - name: suggestion_events
+      description: "Rohdaten aller Suggestion-Events (Training)"
+      source: s3://cargobit-ml-data/suggestion_events/
+      format: parquet
+      partitionBy: [event_date]
+      primaryKey: [suggestion_id]
+      columns:
+        - name: suggestion_id
+          type: STRING
+          primaryKey: true
+        - name: event_date
+          type: DATE
+          partitionKey: true
+        - name: event_timestamp
+          type: TIMESTAMP
+        - name: tour_id
+          type: STRING
+        - name: order_id
+          type: STRING
+        - name: customer_id
+          type: STRING
+        - name: driver_id
+          type: STRING
+        - name: vehicle_id
+          type: STRING
+        - name: lane_id
+          type: STRING
+        - name: heuristic_score
+          type: FLOAT
+        - name: ml_score
+          type: FLOAT
+        - name: final_score
+          type: FLOAT
+        - name: decision
+          type: STRING
+        - name: decision_at
+          type: TIMESTAMP
+        - name: execution_status
+          type: STRING
+        - name: actual_margin
+          type: FLOAT
+        - name: features_json
+          type: STRING
+          description: "JSON-serialisierter Feature-Vektor"
+
+  online:
+    - name: customer_features_online
+      description: "Redis Online Store für Echtzeit-Serving"
+      source: redis
+      keyPattern: "customer:{customer_id}:features"
+      ttl: 86400  # 24 hours
+      features:
+        - acceptance_rate_30d
+        - realized_margin_avg_30d
+        - cancellation_rate_30d
+
+    - name: driver_features_online
+      description: "Redis Online Store für Fahrer-Features"
+      source: redis
+      keyPattern: "driver:{driver_id}:features"
+      ttl: 86400
+      features:
+        - acceptance_rate_30d
+        - rating
+        - on_time_rate_30d
+
+# =============================================================================
+# TRAINING DATASET (ML Pipeline)
+# =============================================================================
+trainingDatasets:
+  - name: suggestion_acceptance_v1
+    description: "Training Dataset für Binary Classifier (Acceptance Prediction)"
+    target: accepted
+    features:
+      - ${featureGroups.mvp_training}
+    source: suggestion_events
+    labelDefinition:
+      positive: [ACCEPTED]
+      negative: [REJECTED, IGNORED, TIMEOUT]
+    timeSplit:
+      trainStart: "2024-01-01"
+      trainEnd: "2024-09-30"
+      valStart: "2024-10-01"
+      valEnd: "2024-12-31"
+      testStart: "2025-01-01"
+      testEnd: "2025-03-31"
+    sampling:
+      strategy: balanced
+      ratio: 0.5  # 50% positive, 50% negative
+    output:
+      format: parquet
+      path: s3://cargobit-ml-training/acceptance_v1/
+
+  - name: suggestion_acceptance_v2
+    description: "Training Dataset mit historischen Features"
+    target: accepted
+    features:
+      - ${featureGroups.mvp_training_with_history}
+    source: suggestion_events
+    joins:
+      - table: customer_features
+        on: customer_id
+        asOfJoin: true
+      - table: driver_features
+        on: driver_id
+        asOfJoin: true
+      - table: lane_features
+        on: lane_id
+        asOfJoin: true
+    output:
+      format: parquet
+      path: s3://cargobit-ml-training/acceptance_v2/
+
+# =============================================================================
+# SERVING TABLES (PostgreSQL)
+# =============================================================================
+serving:
+  - name: model_registry
+    description: "Registrierte ML-Modelle mit Metadaten"
+    schema: ml
+    columns:
+      - name: model_id
+        type: UUID
+        primaryKey: true
+      - name: model_name
+        type: STRING
+        required: true
+      - name: model_version
+        type: STRING
+        required: true
+      - name: model_type
+        type: STRING
+        enum: [BINARY_CLASSIFIER, LEARNING_TO_RANK, REGRESSION]
+      - name: training_dataset
+        type: STRING
+      - name: metrics
+        type: JSON
+        description: "AUC, Precision, Recall, etc."
+      - name: feature_importance
+        type: JSON
+        description: "SHAP values, feature weights"
+      - name: artifact_path
+        type: STRING
+        description: "S3 path to model artifact"
+      - name: status
+        type: STRING
+        enum: [STAGING, PRODUCTION, ARCHIVED]
+      - name: deployed_at
+        type: TIMESTAMP
+      - name: created_at
+        type: TIMESTAMP
+      - name: created_by
+        type: STRING
+
+  - name: scoring_history
+    description: "Alle Scoring-Entscheidungen für Audit & Monitoring"
+    schema: ml
+    columns:
+      - name: id
+        type: UUID
+        primaryKey: true
+      - name: suggestion_id
+        type: UUID
+        indexed: true
+      - name: heuristic_score
+        type: FLOAT
+      - name: ml_score
+        type: FLOAT
+      - name: final_score
+        type: FLOAT
+      - name: alpha
+        type: FLOAT
+        description: "Blend-Mode Parameter"
+      - name: model_version
+        type: STRING
+      - name: config_version
+        type: STRING
+      - name: features_used
+        type: JSON
+      - name: shap_values
+        type: JSON
+      - name: scored_at
+        type: TIMESTAMP
+        indexed: true
+
+  - name: model_metrics_daily
+    description: "Tägliche Modell-Metriken für Monitoring"
+    schema: ml
+    columns:
+      - name: id
+        type: UUID
+        primaryKey: true
+      - name: metric_date
+        type: DATE
+        indexed: true
+      - name: model_version
+        type: STRING
+        indexed: true
+      - name: total_predictions
+        type: INT
+      - name: acceptance_rate
+        type: FLOAT
+      - name: heuristic_acceptance_rate
+        type: FLOAT
+      - name: ml_acceptance_rate
+        type: FLOAT
+      - name: avg_score_heuristic
+        type: FLOAT
+      - name: avg_score_ml
+        type: FLOAT
+      - name: avg_realized_margin
+        type: FLOAT
+      - name: score_distribution
+        type: JSON
+      - name: created_at
+        type: TIMESTAMP
+
+# =============================================================================
+# RELATIONSHIPS (Entity-Relationship Diagram)
+# =============================================================================
+relationships:
+  - name: suggestion_to_order
+    from: suggestion_events
+    to: orders
+    type: many-to-one
+    foreignKey: order_id
+
+  - name: suggestion_to_customer
+    from: suggestion_events
+    to: customer_features
+    type: many-to-one
+    foreignKey: customer_id
+
+  - name: suggestion_to_driver
+    from: suggestion_events
+    to: driver_features
+    type: many-to-one
+    foreignKey: driver_id
+
+  - name: suggestion_to_lane
+    from: suggestion_events
+    to: lane_features
+    type: many-to-one
+    foreignKey: lane_id
+
+  - name: scoring_to_model
+    from: scoring_history
+    to: model_registry
+    type: many-to-one
+    foreignKey: model_version
+
+# =============================================================================
+# INDEXES (Performance Optimization)
+# =============================================================================
+indexes:
+  - table: suggestion_events
+    columns: [customer_id, event_date]
+    type: btree
+    
+  - table: suggestion_events
+    columns: [driver_id, event_date]
+    type: btree
+    
+  - table: suggestion_events
+    columns: [decision, event_date]
+    type: btree
+
+  - table: scoring_history
+    columns: [scored_at]
+    type: btree
+
+  - table: model_metrics_daily
+    columns: [metric_date, model_version]
+    type: btree
+
+# =============================================================================
+# RETENTION POLICIES
+# =============================================================================
+retention:
+  - table: suggestion_events
+    hot: 90d      # S3 Standard
+    warm: 365d    # S3 IA
+    cold: 2555d   # S3 Glacier (7 years)
+
+  - table: scoring_history
+    hot: 30d
+    warm: 90d
+    cold: 365d
+
+  - table: model_metrics_daily
+    hot: 365d
+    warm: 1825d   # 5 years

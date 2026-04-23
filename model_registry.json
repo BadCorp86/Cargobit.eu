@@ -1,0 +1,8 @@
+{
+  "stable": "v2026-05-01",
+  "canary": "v2026-05-01",
+  "canaryTraffic": 0.0,
+  "models": [
+    "v2026-05-01"
+  ]
+}

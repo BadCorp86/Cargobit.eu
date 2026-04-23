@@ -1,0 +1,284 @@
+# ============================================
+# CARGOBIT SECURITY GATEWAY - SECURITY TESTS
+# Version: 2.0 - SAST/DAST Configuration
+# ============================================
+
+# ============================================
+# 1. SEMGREP CONFIGURATION (SAST)
+# ============================================
+# File: .semgrepignore
+
+# Patterns to ignore during SAST
+# node_modules/
+# dist/
+# .next/
+# coverage/
+# *.min.js
+# pacts/
+
+---
+# File: semgrep.yml
+
+rules:
+  # Custom Security Gateway Rules
+  - id: cargo-security-no-hardcoded-api-keys
+    patterns:
+      - pattern: |
+          const API_KEY = "..."
+      - pattern: |
+          const SECRET = "..."
+      - pattern-not: |
+          const API_KEY = process.env.API_KEY
+    message: "Do not hardcode API keys or secrets"
+    severity: ERROR
+    languages: [typescript, javascript]
+
+  - id: cargo-security-no-eval
+    patterns:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+    message: "Avoid eval() and new Function() - security risk"
+    severity: ERROR
+    languages: [typescript, javascript]
+
+  - id: cargo-security-validate-input
+    patterns:
+      - pattern-inside: |
+          function $FUNC(..., $INPUT, ...) { ... }
+      - pattern: |
+          $INPUT
+      - pattern-not: |
+          validate($INPUT)
+    message: "Ensure input is validated before use"
+    severity: WARNING
+    languages: [typescript, javascript]
+
+  - id: cargo-security-no-sql-injection
+    patterns:
+      - pattern: |
+          `SELECT * FROM ${...}`
+      - pattern: |
+          `DELETE FROM ${...}`
+      - pattern: |
+          `UPDATE ${...} SET`
+    message: "Potential SQL injection - use parameterized queries"
+    severity: ERROR
+    languages: [typescript, javascript]
+
+  - id: cargo-security-auth-check-required
+    patterns:
+      - pattern-inside: |
+          export async function $HANDLER(req: Request) { ... }
+      - pattern: |
+          await $DB.query(...)
+      - pattern-not-inside: |
+          if (!req.user) { ... }
+    message: "Database operation without authentication check"
+    severity: WARNING
+    languages: [typescript]
+
+  - id: cargo-security-rate-limit-required
+    patterns:
+      - pattern-inside: |
+          app.post("/api/security/...", $HANDLER)
+      - pattern-not-inside: |
+          rateLimit(...)
+    message: "Security endpoints should have rate limiting"
+    severity: WARNING
+    languages: [typescript, javascript]
+
+  - id: cargo-security-audit-log-sensitive
+    patterns:
+      - pattern-inside: |
+          await audit.log({ ... })
+      - pattern: |
+          password: $VAL
+      - pattern: |
+          token: $VAL
+      - pattern: |
+          apiKey: $VAL
+    message: "Do not log sensitive data in audit logs"
+    severity: ERROR
+    languages: [typescript, javascript]
+
+  - id: cargo-security-risk-score-bounds
+    patterns:
+      - pattern: |
+          riskScore = $VAL
+      - pattern-not: |
+          Math.min(100, Math.max(0, $VAL))
+    message: "Risk score should be bounded 0-100"
+    severity: WARNING
+    languages: [typescript, javascript]
+
+  - id: cargo-security-no-prototype-pollution
+    patterns:
+      - pattern: |
+          Object.assign({}, $INPUT)
+      - pattern: |
+          { ...$INPUT }
+    message: "Check for prototype pollution with untrusted input"
+    severity: WARNING
+    languages: [typescript, javascript]
+
+# ============================================
+# 2. TRIVY CONFIGURATION
+# ============================================
+# File: .trivyignore
+
+# CVE-2023-12345  # Example: Low severity, no fix available
+# CVE-2023-67890  # Example: False positive
+
+# ============================================
+# 3. OWASP ZAP CONFIGURATION (DAST)
+# ============================================
+# File: zap-config.conf
+
+# ZAP Context Configuration
+context.name=CargoBitSecurityGateway
+context.include=.*localhost:3004.*
+context.exclude=.*\.css|.*\.js|.*\.png|.*\.jpg
+
+# Authentication
+auth.method=http-header
+auth.header.name=Authorization
+auth.header.value=Bearer ${API_KEY}
+
+# Scan Policies
+scanner.strength=medium
+scanner.threshold=medium
+
+# Active Scan Rules (enabled)
+ascanrules.beta.enabled=true
+ascanrules.alpha.enabled=false
+
+# Passive Scan Rules
+pscanrules.all.enabled=true
+
+# AJAX Spider (for SPA)
+ajaxSpider.enabled=true
+ajaxSpider.maxDuration=2
+
+# ============================================
+# 4. SNYK CONFIGURATION
+# ============================================
+# File: .snyk
+
+# Snyk Policy File
+version: v1.25.0
+
+# Ignore specific vulnerabilities (with expiry)
+# ignore:
+#   CVE-2023-XXXXX:
+#     - '*':
+#         reason: No fix available
+#         expires: 2024-12-31T00:00:00.000Z
+
+# Patch settings
+patch:
+  # Example: patch before install
+  # 'npm:lodash': 2021-04-20
+
+# ============================================
+# 5. DEPENDENCY CHECK CONFIGURATION
+# ============================================
+
+# OWASP Dependency Check Configuration
+# Run with: dependency-check --scan . --out reports/
+
+# ============================================
+# 6. SECURITY HEADERS CONFIGURATION
+# ============================================
+
+securityHeaders:
+  required:
+    - name: X-Content-Type-Options
+      value: nosniff
+    - name: X-Frame-Options
+      value: DENY
+    - name: X-XSS-Protection
+      value: 1; mode=block
+    - name: Strict-Transport-Security
+      value: max-age=31536000; includeSubDomains
+    - name: Content-Security-Policy
+      value: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'"
+    - name: Referrer-Policy
+      value: strict-origin-when-cross-origin
+    - name: Permissions-Policy
+      value: "geolocation=(), microphone=(), camera=()"
+
+# ============================================
+# 7. RATE LIMITING THRESHOLDS
+# ============================================
+
+rateLimits:
+  security_check:
+    windowMs: 60000  # 1 minute
+    max: 100         # 100 requests per minute
+    message: "Too many security check requests"
+
+  risk_override:
+    windowMs: 3600000  # 1 hour
+    max: 10            # 10 overrides per hour
+    message: "Too many risk override attempts"
+
+  mitigation_apply:
+    windowMs: 60000    # 1 minute
+    max: 30            # 30 mitigations per minute
+    message: "Too many mitigation requests"
+
+# ============================================
+# 8. API SECURITY TEST CASES
+# ============================================
+
+apiSecurityTests:
+  - name: "SQL Injection in user ID"
+    endpoint: "/api/security/risk/user/{id}"
+    payload: "u_1001' OR '1'='1"
+    expectedStatus: [400, 404]
+
+  - name: "XSS in action parameter"
+    endpoint: "/api/security/check"
+    payload:
+      action: "<script>alert('XSS')</script>"
+    expectedStatus: [400]
+
+  - name: "SSRF via webhook URL"
+    endpoint: "/api/notification/send"
+    payload:
+      webhookUrl: "http://169.254.169.254/latest/meta-data/"
+    expectedStatus: [400, 403]
+
+  - name: "Path traversal in entity ID"
+    endpoint: "/api/security/risk/../../../etc/passwd"
+    expectedStatus: [400, 404]
+
+  - name: "Mass assignment attack"
+    endpoint: "/api/security/risk/override"
+    payload:
+      entityType: "user"
+      entityId: "u_1001"
+      newLevel: "green"
+      newScore: 15
+      isAdmin: true  # Extra field
+    expectedStatus: [200, 400]
+
+  - name: "NoSQL injection in query"
+    endpoint: "/api/audit/search"
+    payload:
+      correlationId: { "$ne": null }
+    expectedStatus: [400]
+
+  - name: "JWT none algorithm"
+    endpoint: "/api/security/check"
+    headers:
+      Authorization: "Bearer eyJhbGciOiJub25lIn0.eyJyb2xlIjoiQURNSU4ifQ."
+    expectedStatus: [401]
+
+  - name: "Command injection"
+    endpoint: "/api/security/check"
+    payload:
+      entity:
+        context:
+          command: "; rm -rf /"
+    expectedStatus: [400]

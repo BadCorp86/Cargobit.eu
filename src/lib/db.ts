@@ -10,7 +10,4 @@ export const db =
     log: ['query'],
   })
 
-// Re-export as prisma for backward compatibility
-export const prisma = db
-
 if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db

@@ -1,0 +1,415 @@
+# ============================================
+# CARGOBIT SECURITY GATEWAY - GITLAB CI/CD
+# Version: 2.0 - Enterprise-Ready
+# Platform: GitLab CI
+# ============================================
+
+stages:
+  - build
+  - unit-test
+  - integration-test
+  - contract-test
+  - e2e-test
+  - security-test
+  - load-test
+  - chaos-test
+  - deploy-staging
+  - deploy-production
+
+variables:
+  NODE_VERSION: "20"
+  PNPM_VERSION: "8"
+  BASE_URL: "http://localhost:3004"
+  RISK_ENGINE_URL: "http://localhost:3003"
+  DOCKER_TLS_CERTDIR: ""
+  POSTGRES_USER: test
+  POSTGRES_PASSWORD: test
+  POSTGRES_DB: cargobit_test
+
+# ============================================
+# GLOBAL CACHE
+# ============================================
+.cache_template: &cache_config
+  key: ${CI_COMMIT_REF_SLUG}
+  paths:
+    - node_modules/
+    - .pnpm-store/
+    - .next/cache/
+
+# ============================================
+# GLOBAL BEFORE_SCRIPT
+# ============================================
+.before_script_template: &setup_pnpm
+  - corepack enable
+  - corepack prepare pnpm@${PNPM_VERSION} --activate
+  - pnpm config set store-dir .pnpm-store
+
+# ============================================
+# BUILD STAGE
+# ============================================
+build:
+  stage: build
+  image: node:${NODE_VERSION}
+  cache:
+    <<: *cache_config
+  before_script:
+    - *setup_pnpm
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm tsc --noEmit
+    - pnpm eslint . --ext .ts,.tsx --max-warnings 0
+    - pnpm build
+  artifacts:
+    paths:
+      - .next/
+      - dist/
+    expire_in: 1 day
+  tags:
+    - docker
+
+# ============================================
+# UNIT TEST STAGE
+# ==========================================
+unit-tests:
+  stage: unit-test
+  image: node:${NODE_VERSION}
+  needs: [build]
+  cache:
+    <<: *cache_config
+  before_script:
+    - *setup_pnpm
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm test:unit --coverage --reporter=junit --outputFile=test-results.xml
+  after_script:
+    - |
+      COVERAGE=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
+      if (( $(echo "$COVERAGE < 85" | bc -l) )); then
+        echo "Coverage $COVERAGE% is below 85% threshold"
+        exit 1
+      fi
+      echo "Coverage $COVERAGE% meets threshold"
+  coverage: '/Lines\s*:\s*(\d+\.?\d*)%/'
+  artifacts:
+    when: always
+    reports:
+      junit: test-results.xml
+      coverage_report:
+        coverage_format: cobertura
+        path: coverage/cobertura-coverage.xml
+    paths:
+      - coverage/
+    expire_in: 7 days
+  tags:
+    - docker
+
+# ============================================
+# INTEGRATION TEST STAGE
+# ============================================
+integration-tests:
+  stage: integration-test
+  image: node:${NODE_VERSION}
+  needs: [build]
+  services:
+    - name: postgres:15
+      alias: postgres
+    - name: redis:7-alpine
+      alias: redis
+  variables:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    REDIS_URL: redis://redis:6379
+  cache:
+    <<: *cache_config
+  before_script:
+    - *setup_pnpm
+    - pnpm install --frozen-lockfile
+    - pnpm prisma migrate deploy
+    - pnpm tsx scripts/seed-test-data.ts
+    - pnpm tsx mini-services/risk-engine-service/index.ts &
+    - pnpm tsx mini-services/security-gateway-service/index.ts &
+    - sleep 10
+  script:
+    - pnpm test:integration --reporter=junit --outputFile=integration-results.xml
+  artifacts:
+    when: always
+    reports:
+      junit: integration-results.xml
+    paths:
+      - coverage/
+    expire_in: 7 days
+  tags:
+    - docker
+
+# ============================================
+# CONTRACT TEST STAGE
+# ============================================
+contract-tests:
+  stage: contract-test
+  image: node:${NODE_VERSION}
+  needs: [build]
+  cache:
+    <<: *cache_config
+  before_script:
+    - *setup_pnpm
+    - pnpm install --frozen-lockfile
+  script:
+    - pnpm test:contract
+    - npx @apidevtools/swagger-cli validate download/openapi-security-gateway.yaml
+  artifacts:
+    paths:
+      - pacts/
+    expire_in: 30 days
+  tags:
+    - docker
+
+# ============================================
+# E2E TEST STAGE
+# ============================================
+e2e-tests:
+  stage: e2e-test
+  image: mcr.microsoft.com/playwright:v1.40.0-jammy
+  needs: [unit-tests, integration-tests]
+  services:
+    - name: postgres:15
+      alias: postgres
+  variables:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/cargobit_e2e
+  cache:
+    <<: *cache_config
+  before_script:
+    - *setup_pnpm
+    - pnpm install --frozen-lockfile
+    - pnpm exec playwright install --with-deps
+    - pnpm prisma migrate deploy
+    - pnpm tsx scripts/seed-test-data.ts
+    - pnpm build
+    - pnpm start &
+    - pnpm tsx mini-services/risk-engine-service/index.ts &
+    - pnpm tsx mini-services/security-gateway-service/index.ts &
+    - sleep 15
+  script:
+    - pnpm test:e2e --reporter=html
+  artifacts:
+    when: always
+    paths:
+      - playwright-report/
+      - test-results/
+    expire_in: 14 days
+  tags:
+    - docker
+
+# ============================================
+# SECURITY TEST STAGE (SAST/DAST)
+# ============================================
+security-tests:
+  stage: security-test
+  image: node:${NODE_VERSION}
+  needs: [build]
+  cache:
+    <<: *cache_config
+  before_script:
+    - *setup_pnpm
+    - pnpm install --frozen-lockfile
+  script:
+    # SAST with Semgrep
+    - pip install semgrep
+    - semgrep --config "p/security-audit" --config "p/secrets" --config "p/owasp-top-ten" --sarif -o semgrep-results.sarif .
+    # Dependency audit
+    - pnpm audit --audit-level=high --json > npm-audit.json || true
+    # Trivy scan
+    - |
+      CRITICAL=$(cat npm-audit.json | jq '.metadata.vulnerabilities.critical // 0')
+      HIGH=$(cat npm-audit.json | jq '.metadata.vulnerabilities.high // 0')
+      if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 5 ]; then
+        echo "Found $CRITICAL critical and $HIGH high vulnerabilities"
+        exit 1
+      fi
+  artifacts:
+    paths:
+      - semgrep-results.sarif
+      - npm-audit.json
+    expire_in: 30 days
+  tags:
+    - docker
+
+# Include GitLab SAST template
+sast:
+  stage: security-test
+  include:
+    - template: Security/SAST.gitlab-ci.yml
+
+# Include GitLab Dependency Scanning
+dependency_scanning:
+  stage: security-test
+  include:
+    - template: Security/Dependency-Scanning.gitlab-ci.yml
+
+# ============================================
+# LOAD TEST STAGE (K6)
+# ============================================
+load-tests:
+  stage: load-test
+  image: loadimpact/k6:latest
+  needs: [unit-tests, integration-tests]
+  services:
+    - name: postgres:15
+      alias: postgres
+  variables:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/cargobit_load
+    K6_OUT: json=load-test-results.json
+  before_script:
+    - apk add --no-cache nodejs npm
+    - npm install -g pnpm
+    - pnpm install --frozen-lockfile
+    - pnpm prisma migrate deploy
+    - pnpm tsx scripts/seed-test-data.ts
+    - pnpm tsx mini-services/risk-engine-service/index.ts &
+    - pnpm tsx mini-services/security-gateway-service/index.ts &
+    - sleep 10
+  script:
+    - k6 run --env SCENARIO=ramp-up --env BASE_URL=${BASE_URL} load-tests/k6/security-gateway.js
+  artifacts:
+    paths:
+      - load-test-results.json
+      - load-test-summary.json
+    expire_in: 14 days
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_BRANCH == "main"
+    - when: manual
+  tags:
+    - docker
+
+# ============================================
+# CHAOS TEST STAGE
+# ============================================
+chaos-tests:
+  stage: chaos-test
+  image: node:${NODE_VERSION}
+  needs: [unit-tests, integration-tests]
+  services:
+    - name: postgres:15
+      alias: postgres
+    - docker:dind
+  variables:
+    DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/cargobit_chaos
+  before_script:
+    - *setup_pnpm
+    - pnpm install --frozen-lockfile
+    - pnpm prisma migrate deploy
+    - pnpm tsx scripts/seed-test-data.ts
+    - pnpm tsx mini-services/risk-engine-service/index.ts &
+    - pnpm tsx mini-services/security-gateway-service/index.ts &
+    - sleep 10
+  script:
+    - echo "Running chaos tests..."
+    - pnpm test:chaos
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "schedule" && $CHAOS_TEST == "true"
+    - when: manual
+  tags:
+    - docker
+  allow_failure: true
+
+# ============================================
+# DEPLOY STAGING
+# ============================================
+deploy-staging:
+  stage: deploy-staging
+  image: alpine:latest
+  needs: [unit-tests, integration-tests, contract-tests, e2e-tests, security-tests]
+  before_script:
+    - apk add --no-cache curl aws-cli kubectl
+  script:
+    - aws ecr get-login-password | docker login --username AWS --password-stdin ${AWS_ECR_REGISTRY}
+    - docker build -t ${AWS_ECR_REGISTRY}/cargobit-security-gateway:staging-${CI_COMMIT_SHA} .
+    - docker push ${AWS_ECR_REGISTRY}/cargobit-security-gateway:staging-${CI_COMMIT_SHA}
+    - kubectl set image deployment/security-gateway security-gateway=${AWS_ECR_REGISTRY}/cargobit-security-gateway:staging-${CI_COMMIT_SHA} -n staging
+    - kubectl rollout status deployment/security-gateway -n staging --timeout=300s
+    - curl -f https://staging.cargobit.eu/api/security/health
+  environment:
+    name: staging
+    url: https://staging.cargobit.eu
+  rules:
+    - if: $CI_COMMIT_BRANCH == "develop"
+  tags:
+    - docker
+
+# ============================================
+# DEPLOY PRODUCTION
+# ============================================
+deploy-production:
+  stage: deploy-production
+  image: alpine:latest
+  needs: [unit-tests, integration-tests, contract-tests, e2e-tests, security-tests, load-tests]
+  before_script:
+    - apk add --no-cache curl aws-cli kubectl
+  script:
+    - aws ecr get-login-password | docker login --username AWS --password-stdin ${AWS_ECR_REGISTRY}
+    - docker build -t ${AWS_ECR_REGISTRY}/cargobit-security-gateway:prod-${CI_COMMIT_SHA} .
+    - docker push ${AWS_ECR_REGISTRY}/cargobit-security-gateway:prod-${CI_COMMIT_SHA}
+    - kubectl set image deployment/security-gateway security-gateway=${AWS_ECR_REGISTRY}/cargobit-security-gateway:prod-${CI_COMMIT_SHA} -n production
+    - kubectl rollout status deployment/security-gateway -n production --timeout=300s
+    - curl -f https://api.cargobit.eu/security/health
+  environment:
+    name: production
+    url: https://api.cargobit.eu
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  tags:
+    - docker
+  when: manual
+
+# ============================================
+# NOTIFICATIONS
+# ============================================
+notify-slack-success:
+  stage: .post
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      curl -X POST -H 'Content-type: application/json' \
+        --data '{
+          "text": "✅ Pipeline succeeded for ${CI_PROJECT_NAME}",
+          "attachments": [{
+            "color": "good",
+            "fields": [
+              {"title": "Branch", "value": "${CI_COMMIT_REF_NAME}", "short": true},
+              {"title": "Commit", "value": "${CI_COMMIT_SHA:0:8}", "short": true},
+              {"title": "Author", "value": "${GITLAB_USER_LOGIN}", "short": true}
+            ]
+          }]
+        }' ${SLACK_WEBHOOK_URL}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: on_success
+  tags:
+    - docker
+
+notify-slack-failure:
+  stage: .post
+  image: alpine:latest
+  before_script:
+    - apk add --no-cache curl
+  script:
+    - |
+      curl -X POST -H 'Content-type: application/json' \
+        --data '{
+          "text": "❌ Pipeline failed for ${CI_PROJECT_NAME}",
+          "attachments": [{
+            "color": "danger",
+            "fields": [
+              {"title": "Branch", "value": "${CI_COMMIT_REF_NAME}", "short": true},
+              {"title": "Commit", "value": "${CI_COMMIT_SHA:0:8}", "short": true},
+              {"title": "Stage", "value": "${CI_JOB_STAGE}", "short": true},
+              {"title": "Job", "value": "${CI_JOB_NAME}", "short": true}
+            ]
+          }]
+        }' ${SLACK_WEBHOOK_URL}
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: on_failure
+  tags:
+    - docker

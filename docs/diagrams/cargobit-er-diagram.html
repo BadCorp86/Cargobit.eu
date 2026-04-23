@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>CargoBit ER-Diagramm</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #FAFBFE;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SimHei', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+  #diagram { width: fit-content; min-width: 1200px; }
+</style>
+</head>
+<body>
+<div id="diagram">
+  <pre class="mermaid">
+erDiagram
+    USER {
+        uuid id PK
+        string email UK
+        string first_name
+        string last_name
+        string phone
+        string status
+        datetime created_at
+    }
+    
+    COMPANY {
+        uuid id PK
+        string name
+        string type
+        string vat_number UK
+        string country
+        string status
+        datetime created_at
+    }
+    
+    TRANSPORT {
+        uuid id PK
+        uuid shipper_user_id FK
+        uuid carrier_user_id FK
+        string status
+        string origin
+        string destination
+        float value_eur
+        float weight_kg
+        string risk_level
+        datetime pickup_datetime
+        datetime created_at
+    }
+    
+    INSURANCE_QUOTE {
+        uuid id PK
+        string order_id FK
+        uuid customer_id FK
+        float cargo_value_eur
+        float premium_eur
+        float coverage_eur
+        string provider
+        datetime valid_until
+        datetime created_at
+    }
+    
+    INSURANCE_POLICY {
+        uuid id PK
+        uuid quote_id FK
+        string order_id FK
+        uuid customer_id FK
+        string policy_number UK
+        string provider
+        string tier
+        float premium_eur
+        float coverage_eur
+        float commission_eur
+        string status
+        datetime valid_from
+        datetime valid_until
+        string pdf_url
+        datetime created_at
+    }
+    
+    PARTNER {
+        uuid id PK
+        string company_name
+        string contact_person
+        string partner_type
+        string api_key
+        string status
+        datetime onboarding_completed_at
+        datetime created_at
+    }
+    
+    AD_SLOT {
+        uuid id PK
+        string slot UK
+        string name
+        string size
+        string position
+        float e_cpm
+        float fill_rate
+        boolean is_active
+    }
+    
+    AD_CAMPAIGN {
+        uuid id PK
+        uuid partner_id FK
+        uuid slot_id FK
+        string name
+        string image_url
+        string target_url
+        float budget_eur
+        float spent_eur
+        float cpc_eur
+        float cpm_eur
+        string pricing_model
+        string status
+        datetime start_date
+        datetime end_date
+        datetime created_at
+    }
+    
+    AD_IMPRESSION {
+        uuid id PK
+        uuid campaign_id FK
+        uuid slot_id FK
+        string impression_id UK
+        uuid user_id FK
+        string risk_level
+        boolean viewable
+        int view_duration_ms
+        datetime created_at
+    }
+    
+    AD_CLICK {
+        uuid id PK
+        string impression_id FK
+        uuid campaign_id FK
+        uuid user_id FK
+        float conversion_value
+        boolean converted
+        datetime click_timestamp
+    }
+    
+    COMMISSION {
+        uuid id PK
+        string type
+        uuid reference_id FK
+        uuid partner_id FK
+        float amount_eur
+        float rate_percent
+        float base_amount_eur
+        string status
+        date period_month
+        datetime created_at
+    }
+
+    USER ||--o{ TRANSPORT : "shipper_id"
+    USER ||--o{ TRANSPORT : "carrier_id"
+    USER ||--o{ INSURANCE_QUOTE : "customer"
+    USER ||--o{ INSURANCE_POLICY : "customer"
+    USER ||--o{ AD_IMPRESSION : "views"
+    USER ||--o{ AD_CLICK : "clicks"
+    USER ||--o{ COMPANY : "belongs_to"
+    
+    TRANSPORT ||--o| INSURANCE_POLICY : "insured_by"
+    TRANSPORT ||--o{ COMMISSION : "generates"
+    
+    INSURANCE_QUOTE ||--o| INSURANCE_POLICY : "converts_to"
+    INSURANCE_POLICY ||--o{ COMMISSION : "generates"
+    
+    PARTNER ||--o{ AD_CAMPAIGN : "owns"
+    PARTNER ||--o{ COMMISSION : "receives"
+    
+    AD_SLOT ||--o{ AD_CAMPAIGN : "hosts"
+    AD_CAMPAIGN ||--o{ AD_IMPRESSION : "impressions"
+    AD_IMPRESSION ||--o{ AD_CLICK : "clicks"
+    AD_CAMPAIGN ||--o{ COMMISSION : "generates"
+  </pre>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#EFF6FF',
+      primaryBorderColor: '#3B82F6',
+      primaryTextColor: '#1E293B',
+      lineColor: '#64748B',
+      secondaryColor: '#F0FDF4',
+      secondaryBorderColor: '#10B981',
+      tertiaryColor: '#FFF7ED',
+      tertiaryBorderColor: '#F59E0B',
+      fontSize: '13px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, SimHei, sans-serif',
+    },
+    er: {
+      useMaxWidth: false,
+      entityPadding: 15,
+    }
+  });
+</script>
+</body>
+</html>

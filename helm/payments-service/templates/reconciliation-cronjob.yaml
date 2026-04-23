@@ -1,0 +1,66 @@
+{{- if .Values.reconciliation.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "payments.name" . }}-reconciliation
+  labels:
+    app: {{ include "payments.name" . }}-reconciliation
+    component: reconciliation
+spec:
+  schedule: "{{ .Values.reconciliation.schedule }}"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: {{ .Values.reconciliation.successfulJobsHistoryLimit | default 3 }}
+  failedJobsHistoryLimit: {{ .Values.reconciliation.failedJobsHistoryLimit | default 1 }}
+  jobTemplate:
+    metadata:
+      labels:
+        app: {{ include "payments.name" . }}-reconciliation
+    spec:
+      template:
+        metadata:
+          labels:
+            app: {{ include "payments.name" . }}-reconciliation
+          annotations:
+            prometheus.io/scrape: "true"
+            prometheus.io/port: "3000"
+            prometheus.io/path: "/metrics"
+        spec:
+          serviceAccountName: {{ .Values.serviceAccount.name }}
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 1001
+          restartPolicy: OnFailure
+          containers:
+            - name: reconciliation
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              command:
+                - node
+                - dist/src/reconciliation/run-scheduler.js
+              envFrom:
+                - secretRef:
+                    name: {{ .Values.env.existingSecret }}
+              env:
+                - name: NODE_ENV
+                  value: "production"
+                - name: HOSTNAME
+                  valueFrom:
+                    fieldRef:
+                      fieldPath: metadata.name
+              resources:
+                {{- toYaml .Values.reconciliation.resources | nindent 16 }}
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                capabilities:
+                  drop:
+                    - ALL
+          {{- with .Values.nodeSelector }}
+          nodeSelector:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.affinity }}
+          affinity:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+{{- end }}

@@ -1,0 +1,499 @@
+# =============================================================================
+# CargoBit API Gateway - ML Extensions Configuration
+# =============================================================================
+# ML-specific routing, rate limiting, circuit breaker, and auth configuration
+# Version: 2026-04-19-01
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# ML Service Upstreams
+# -----------------------------------------------------------------------------
+mlUpstreams:
+  # ML Scoring Service (Primary)
+  scoring:
+    name: "ml-scoring-service"
+    url: "http://ml-scoring-service.ml.svc.cluster.local:8081"
+    healthCheck: "/health"
+    timeout: 5000  # 5 seconds for scoring
+    retryEnabled: false  # Scoring should be idempotent but no retry by default
+    
+  # Feature Store (Feast)
+  featureStore:
+    name: "feast-feature-server"
+    url: "http://feast-feature-server.ml.svc.cluster.local:6566"
+    healthCheck: "/health"
+    timeout: 3000  # 3 seconds for feature retrieval
+    
+  # Config Service (for scoring weights)
+  configService:
+    name: "config-service"
+    url: "http://config-service.core.svc.cluster.local:8080"
+    healthCheck: "/health"
+    timeout: 2000  # 2 seconds for config
+
+# -----------------------------------------------------------------------------
+# ML Routes
+# -----------------------------------------------------------------------------
+mlRoutes:
+  # Scoring Endpoints
+  - path: "/api/ml/score"
+    methods: ["POST"]
+    upstream: "ml-scoring-service"
+    targetPath: "/score"
+    description: "Single scoring request"
+    authRequired: true
+    rateLimited: true
+    
+  - path: "/api/ml/batch"
+    methods: ["POST"]
+    upstream: "ml-scoring-service"
+    targetPath: "/batch"
+    description: "Batch scoring request"
+    authRequired: true
+    rateLimited: true
+    
+  - path: "/api/ml/health"
+    methods: ["GET"]
+    upstream: "ml-scoring-service"
+    targetPath: "/health"
+    description: "ML service health check"
+    authRequired: false
+    rateLimited: false
+    
+  - path: "/api/ml/features"
+    methods: ["GET", "POST"]
+    upstream: "feast-feature-server"
+    targetPath: "/get-online-features"
+    description: "Feature retrieval"
+    authRequired: true
+    rateLimited: true
+    
+  - path: "/api/ml/models"
+    methods: ["GET"]
+    upstream: "ml-scoring-service"
+    targetPath: "/models"
+    description: "Model registry info"
+    authRequired: true
+    rateLimited: true
+
+  # Config Endpoints (for ML weights)
+  - path: "/api/config/weights"
+    methods: ["GET", "PUT"]
+    upstream: "config-service"
+    targetPath: "/api/v1/config/weights"
+    description: "Scoring weights configuration"
+    authRequired: true
+    adminOnly: true
+    
+  - path: "/api/config/profiles"
+    methods: ["GET"]
+    upstream: "config-service"
+    targetPath: "/api/v1/config/profiles"
+    description: "Scoring profiles"
+    authRequired: true
+
+  # Dispatcher Endpoints (with ML integration)
+  - path: "/api/dispatcher/suggestions"
+    methods: ["GET"]
+    upstream: "matching-service"
+    targetPath: "/suggestions"
+    description: "Matching suggestions with ML scores"
+    authRequired: true
+    roleRequired: "DISPATCHER"
+    
+  - path: "/api/dispatcher/simulate"
+    methods: ["POST"]
+    upstream: "matching-service"
+    targetPath: "/simulate"
+    description: "Scoring simulation"
+    authRequired: true
+    roleRequired: "DISPATCHER"
+
+# -----------------------------------------------------------------------------
+# ML Rate Limits
+# -----------------------------------------------------------------------------
+mlRateLimits:
+  defaults:
+    keyStrategy: "sub"
+    windowSeconds: 60
+    statusCode: 429
+    errorResponse:
+      error: "ML_RATE_LIMITED"
+      message: "ML service rate limit exceeded"
+      retryAfter: 60
+
+  rules:
+    # Single scoring - 600/min per user (10/sec avg)
+    - route: "POST /api/ml/score"
+      limit: 600
+      windowSeconds: 60
+      key: "sub"
+      burstLimit: 20  # Allow burst up to 20/sec
+      description: "Single scoring limit"
+      
+    # Batch scoring - 30/min per user (expensive operation)
+    - route: "POST /api/ml/batch"
+      limit: 30
+      windowSeconds: 60
+      key: "sub"
+      maxBatchSize: 100
+      description: "Batch scoring limit"
+      
+    # Feature retrieval - 1200/min per user (20/sec avg)
+    - route: "POST /api/ml/features"
+      limit: 1200
+      windowSeconds: 60
+      key: "sub"
+      burstLimit: 30
+      description: "Feature retrieval limit"
+      
+    # Config read - 300/min per user
+    - route: "GET /api/config/**"
+      limit: 300
+      windowSeconds: 60
+      key: "sub"
+      description: "Config read limit"
+      
+    # Config write - 10/min per admin (changes are rare)
+    - route: "PUT /api/config/**"
+      limit: 10
+      windowSeconds: 60
+      key: "sub"
+      description: "Config write limit"
+      
+    # Dispatcher suggestions - 120/min per dispatcher
+    - route: "GET /api/dispatcher/suggestions"
+      limit: 120
+      windowSeconds: 60
+      key: "sub"
+      description: "Suggestions limit"
+      
+    # Simulation - 60/min per dispatcher
+    - route: "POST /api/dispatcher/simulate"
+      limit: 60
+      windowSeconds: 60
+      key: "sub"
+      description: "Simulation limit"
+
+  # Global ML service limits
+  globalLimits:
+    - name: "ml_service_total"
+      limit: 10000
+      windowSeconds: 60
+      key: "global"
+      description: "Total ML requests per minute"
+      
+    - name: "ml_service_per_ip"
+      limit: 500
+      windowSeconds: 60
+      key: "ip"
+      description: "ML requests per IP per minute"
+
+# -----------------------------------------------------------------------------
+# ML Circuit Breaker
+# -----------------------------------------------------------------------------
+mlCircuitBreaker:
+  defaults:
+    failureThreshold: 5       # Open after 5 failures
+    successThreshold: 3       # Close after 3 successes in half-open
+    timeout: 30000            # 30 seconds in OPEN state
+    halfOpenRequests: 5       # Test requests in HALF_OPEN
+
+  perService:
+    # Scoring Service - fail fast, use heuristic fallback
+    - service: "ml-scoring-service"
+      failureThreshold: 5
+      timeout: 30000
+      fallback:
+        enabled: true
+        type: "heuristic"     # Fallback to heuristic scoring
+        endpoint: "/api/matching/heuristic-score"
+        
+    # Feature Store - cache fallback
+    - service: "feast-feature-server"
+      failureThreshold: 3
+      timeout: 60000
+      fallback:
+        enabled: true
+        type: "cache"         # Use cached features
+        ttlSeconds: 300       # 5 minute cache
+        
+    # Config Service - critical, cache fallback
+    - service: "config-service"
+      failureThreshold: 3
+      timeout: 60000
+      fallback:
+        enabled: true
+        type: "cache"
+        ttlSeconds: 3600      # 1 hour cache for config
+
+  # State management
+  stateStorage:
+    type: "redis"
+    keyPrefix: "circuit_breaker:ml:"
+    ttlSeconds: 300
+
+# -----------------------------------------------------------------------------
+# ML Authentication & Authorization
+# -----------------------------------------------------------------------------
+mlAuth:
+  # JWT validation for ML endpoints
+  jwtValidation:
+    requiredClaims:
+      - sub
+      - role
+      - companyId
+      
+    # Role-based access for ML
+    roleMapping:
+      - role: "ADMIN"
+        allowedEndpoints:
+          - "/api/ml/**"
+          - "/api/config/**"
+          - "/api/dispatcher/**"
+          
+      - role: "DISPATCHER"
+        allowedEndpoints:
+          - "/api/ml/score"
+          - "/api/ml/features"
+          - "/api/dispatcher/**"
+          
+      - role: "SYSTEM"
+        allowedEndpoints:
+          - "/api/ml/**"
+          - "/api/config/**"
+        additionalChecks:
+          - "subject.serviceWhitelisted == true"
+
+  # API Key authentication (for service-to-service)
+  apiKeyAuth:
+    enabled: true
+    header: "X-API-Key"
+    prefix: "cb_ml_"
+    
+    # API Key validation endpoint
+    validationEndpoint: "http://config-service.core.svc.cluster.local:8080/api/v1/api-keys/validate"
+    
+    # Rate limit tiers by API key
+    tiers:
+      - name: "standard"
+        rateLimit: 600
+        windowSeconds: 60
+        
+      - name: "premium"
+        rateLimit: 3000
+        windowSeconds: 60
+        
+      - name: "internal"
+        rateLimit: 10000
+        windowSeconds: 60
+
+  # Service-to-service auth
+  serviceAuth:
+    enabled: true
+    method: "mTLS"  # or "jwt"
+    
+    jwtConfig:
+      issuer: "cargobit-internal"
+      audience: "ml-services"
+      ttlSeconds: 300
+      algorithm: "RS256"
+
+# -----------------------------------------------------------------------------
+# ML Request Transformation
+# -----------------------------------------------------------------------------
+mlTransform:
+  # Request enrichment
+  requestEnrichment:
+    - endpoint: "/api/ml/score"
+      enrichments:
+        - type: "header"
+          name: "X-Request-ID"
+          value: "{uuid4}"
+          
+        - type: "header"
+          name: "X-Tenant-ID"
+          value: "{jwt.companyId}"
+          
+        - type: "header"
+          name: "X-Profile-ID"
+          value: "{request.profileId}"
+          default: "revenue_focused"
+          
+        - type: "header"
+          name: "X-Canary-Percentage"
+          value: "{config.mlHybrid.canaryPercentage}"
+          
+    - endpoint: "/api/dispatcher/suggestions"
+      enrichments:
+        - type: "header"
+          name: "X-Dispatcher-ID"
+          value: "{jwt.sub}"
+          
+        - type: "query"
+          name: "includeML"
+          value: "true"
+          
+  # Response transformation
+  responseTransformation:
+    - endpoint: "/api/ml/score"
+      transformations:
+        - type: "header"
+          name: "X-Model-Version"
+          from: "response.modelVersion"
+          
+        - type: "header"
+          name: "X-Score-Source"
+          from: "response.source"
+          
+    - endpoint: "/api/dispatcher/suggestions"
+      transformations:
+        - type: "filter"
+          field: "suggestions"
+          condition: "score >= 0.5"  # Filter low-score suggestions
+          
+  # Request validation
+  requestValidation:
+    - endpoint: "/api/ml/score"
+      schema:
+        type: "object"
+        required: ["order", "tour"]
+        properties:
+          order:
+            type: "object"
+            required: ["orderId", "price"]
+          tour:
+            type: "object"
+            required: ["tourId", "detourKm"]
+            
+    - endpoint: "/api/ml/batch"
+      schema:
+        type: "object"
+        required: ["requests"]
+        properties:
+          requests:
+            type: "array"
+            maxItems: 100
+
+# -----------------------------------------------------------------------------
+# ML Observability
+# -----------------------------------------------------------------------------
+mlObservability:
+  # Metrics
+  metrics:
+    prefix: "cargobit_ml_gateway"
+    
+    # Custom metrics
+    customMetrics:
+      - name: "scoring_requests_total"
+        type: "counter"
+        labels: ["source", "profile", "tenant"]
+        
+      - name: "scoring_latency_seconds"
+        type: "histogram"
+        buckets: [0.01, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0]
+        labels: ["source", "profile"]
+        
+      - name: "scoring_score_value"
+        type: "histogram"
+        buckets: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        labels: ["source"]
+        
+      - name: "ml_fallback_total"
+        type: "counter"
+        labels: ["service", "fallback_type"]
+        
+      - name: "circuit_breaker_state"
+        type: "gauge"
+        labels: ["service", "state"]
+
+  # Distributed tracing
+  tracing:
+    enabled: true
+    sampleRate: 1.0  # 100% for ML (important to trace)
+    
+    # Span attributes
+    spanAttributes:
+      - name: "ml.model_version"
+        from: "response.modelVersion"
+        
+      - name: "ml.score"
+        from: "response.score"
+        
+      - name: "ml.profile_id"
+        from: "request.profileId"
+        
+      - name: "ml.tenant_id"
+        from: "header.X-Tenant-ID"
+
+  # Access logging
+  accessLog:
+    format: "json"
+    fields:
+      - timestamp
+      - traceId
+      - method
+      - path
+      - statusCode
+      - latencyMs
+      - mlScore
+      - mlSource  # "heuristic" or "ml"
+      - modelVersion
+      - profileId
+      - tenantId
+      - fallbackUsed
+
+# -----------------------------------------------------------------------------
+# ML Health Checks
+# -----------------------------------------------------------------------------
+mlHealthChecks:
+  - service: "ml-scoring-service"
+    endpoint: "/health"
+    intervalSeconds: 10
+    timeoutMs: 2000
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+    
+  - service: "feast-feature-server"
+    endpoint: "/health"
+    intervalSeconds: 10
+    timeoutMs: 2000
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+    
+  - service: "config-service"
+    endpoint: "/health"
+    intervalSeconds: 30
+    timeoutMs: 2000
+    healthyThreshold: 2
+    unhealthyThreshold: 3
+
+# -----------------------------------------------------------------------------
+# ML Cache Configuration
+# -----------------------------------------------------------------------------
+mlCache:
+  # Feature cache
+  features:
+    enabled: true
+    ttlSeconds: 300  # 5 minutes
+    maxSize: 10000
+    
+  # Config cache
+  config:
+    enabled: true
+    ttlSeconds: 3600  # 1 hour
+    maxSize: 100
+    
+  # Scoring cache (for identical requests)
+  scoring:
+    enabled: true
+    ttlSeconds: 60
+    maxSize: 5000
+    keyTemplate: "{orderId}:{tourId}:{profileId}"
+
+  # Redis configuration
+  redis:
+    host: "redis.observability.svc.cluster.local"
+    port: 6379
+    db: 5  # Separate DB for ML cache
+    keyPrefix: "ml_cache:"

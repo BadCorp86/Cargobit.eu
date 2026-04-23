@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #FFFFFF;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SimHei', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+  #diagram { width: fit-content; min-width: 800px; }
+</style>
+</head>
+<body>
+<div id="diagram">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant API as Backend API
+    participant Events as Event Queue<br/>(Redis/Kafka)
+    participant Processor as Feature Processor
+    participant Store as Feature Store<br/>(Postgres/Redis)
+    participant ML as ML Pipeline
+    participant Model as Model Registry
+
+    rect rgb(239, 246, 255)
+    Note over API,Events: Phase 1: Event Capture (Real-time)
+    
+    Note right of API: Booking Events
+    API->>Events: publish("job_created", {job_id, shipper_id, weight, distance})
+    API->>Events: publish("bid_submitted", {bid_id, transporter_id, price, job_id})
+    API->>Events: publish("bid_accepted", {job_id, transporter_id, price})
+    API->>Events: publish("job_completed", {job_id, duration, rating})
+    
+    Note right of API: User Behavior Events
+    API->>Events: publish("search_performed", {user_id, filters, results_count})
+    API->>Events: publish("profile_viewed", {viewer_id, viewed_id})
+    API->>Events: publish("transporter_rated", {transporter_id, rating, feedback})
+    
+    Note right of API: Dispute Events
+    API->>Events: publish("dispute_opened", {job_id, type, party})
+    API->>Events: publish("dispute_resolved", {outcome, response_time_hours})
+    end
+
+    rect rgb(240, 253, 244)
+    Note over Events,Store: Phase 2: Feature Engineering (Batch + Stream)
+    
+    Events->>Processor: consume events (consumer group)
+    
+    Note right of Processor: Transporter Features (Entity)
+    Processor->>Processor: compute transporter_success_rate
+    Processor->>Processor: compute avg_response_time_minutes
+    Processor->>Processor: compute jobs_last_30_days
+    Processor->>Processor: compute cancel_rate
+    Processor->>Processor: compute avg_rating_weighted
+    Processor->>Processor: compute preferred_routes (region pairs)
+    Processor->>Store: UPSERT transporter_features (transporter_id)
+    
+    Note right of Processor: Shipper Features (Entity)
+    Processor->>Processor: compute shipper_post_frequency
+    Processor->>Processor: compute avg_job_value
+    Processor->>Processor: compute dispute_rate
+    Processor->>Store: UPSERT shipper_features (shipper_id)
+    
+    Note right of Processor: Job Features (Context)
+    Processor->>Processor: compute historical_matches (job, transporter)
+    Processor->>Processor: compute seasonality_factor (month, route)
+    Processor->>Store: UPSERT job_context_features (job_id)
+    end
+
+    rect rgb(255, 247, 237)
+    Note over Store,ML: Phase 3: Training Data Generation
+    
+    ML->>Store: SELECT features WHERE job_status = "completed"
+    Store-->>ML: feature_rows[] with labels (rating, success)
+    
+    ML->>ML: build_features(job, transporter)<br/>→ 11 Features für Scoring
+    Note right of ML: Features:<br/>- job_weight_kg<br/>- transporter_capacity_kg<br/>- capacity_ratio<br/>- same_origin_region<br/>- same_destination_region<br/>- transporter_rating<br/>- job_distance_km<br/>- historical_jobs_with_shipper<br/>- historical_cancel_rate<br/>- avg_response_time<br/>- preferred_route_match
+    
+    ML->>ML: label = success (rating >= 4 ? 1 : 0)
+    ML->>ML: split train/validation/test
+    end
+
+    rect rgb(245, 243, 255)
+    Note over ML,Model: Phase 4: Model Training & Registry
+    
+    ML->>ML: train XGBoost/LightGBM on features
+    ML->>ML: evaluate (AUC, Precision@K, NDCG)
+    ML->>ML: cross_validate (5-fold)
+    
+    alt Model improved (AUC > baseline)
+        ML->>Model: register_model(version, metrics, feature_importance)
+        Model-->>ML: model_id
+        ML->>API: notify_new_model_available(model_id)
+    else No improvement
+        ML->>ML: log experiment, discard model
+    end
+    end
+
+    rect rgb(254, 243, 199)
+    Note over API,Model: Phase 5: Online Serving (Inference)
+    
+    API->>Store: GET transporter_features(transporter_id)
+    Store-->>API: {rating, cancel_rate, jobs_count, ...}
+    
+    API->>API: build_features(job, transporter)
+    API->>ML: POST /score (features)
+    ML->>Model: load_latest_model()
+    Model-->>ML: model_weights
+    ML->>ML: predict(features) → scoreMl
+    ML-->>API: {score: 0.87, confidence: 0.92}
+    
+    Note right of API: Ranking: S = 0.5 × H + 0.5 × M
+    API->>API: combine_heuristic_ml(heuristic, ml_score)
+    API-->>API: ranked_transporters[]
+    end
+
+    rect rgb(254, 226, 226)
+    Note over ML,Model: Phase 6: Feedback Loop
+    
+    API->>Events: publish("prediction_made", {job_id, transporter_id, score, actual_outcome?})
+    
+    loop Weekly Retraining
+        ML->>Store: SELECT predictions WHERE created_at > 7_days_ago
+        Store-->>ML: recent_predictions[]
+        ML->>ML: compute prediction_accuracy (calibration)
+        ML->>ML: detect feature_drift (KS-test)
+        
+        alt Drift detected OR accuracy dropped
+            ML->>ML: trigger_retraining()
+        end
+    end
+    end
+  </pre>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#EFF6FF',
+      primaryBorderColor: '#3B82F6',
+      primaryTextColor: '#1E293B',
+      lineColor: '#94A3B8',
+      secondaryColor: '#F0FDF4',
+      secondaryBorderColor: '#10B981',
+      secondaryTextColor: '#1E293B',
+      tertiaryColor: '#FFF7ED',
+      tertiaryBorderColor: '#F59E0B',
+      tertiaryTextColor: '#1E293B',
+      noteBkgColor: '#F8FAFC',
+      noteTextColor: '#6B7280',
+      noteBorderColor: '#E2E8F0',
+      fontSize: '13px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, SimHei, sans-serif',
+    },
+    sequence: {
+      mirrorActors: false,
+      messageAlign: 'center',
+      actorMargin: 50,
+      width: 160,
+      height: 65,
+      boxMargin: 16,
+      boxTextMargin: 8,
+      noteMargin: 16,
+      messageMargin: 35,
+      bottomMarginAdj: 1,
+    },
+  });
+</script>
+</body>
+</html>

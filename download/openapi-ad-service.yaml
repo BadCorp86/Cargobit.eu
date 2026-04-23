@@ -1,0 +1,475 @@
+openapi: 3.0.3
+info:
+  title: CargoBit Ad Service API
+  description: |
+    Produktionsreife API für Werbeanzeigen auf der CargoBit-Plattform.
+    
+    ## Features
+    - Banner-Ad-Platzierung (970×250, 300×600, 300×250)
+    - Real-Time Targeting (Route, Risk-Level, User)
+    - Impression & Click Tracking
+    - Kampagnen-Verwaltung für Partner
+    
+    ## Monetarisierung
+    - CPM (Cost per 1000 Impressions)
+    - CPC (Cost per Click)
+    
+    ## Authentifizierung
+    Lesende Endpunkte sind öffentlich. Schreibende Endpunkte erfordern Authentifizierung.
+  version: 1.0.0
+  contact:
+    name: CargoBit API Support
+    email: api@cargobit.io
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.cargobit.io/v1
+    description: Production
+  - url: https://api-staging.cargobit.io/v1
+    description: Staging
+
+tags:
+  - name: Slots
+    description: Verfügbare Werbeplätze
+  - name: Render
+    description: Anzeigen-Auslieferung
+  - name: Tracking
+    description: Impression & Click Tracking
+  - name: Campaign
+    description: Kampagnen-Verwaltung
+
+paths:
+  /ads/slots:
+    get:
+      tags:
+        - Slots
+      summary: Verfügbare Ad-Slots auflisten
+      description: Gibt alle verfügbaren Werbeplätze mit Größen und Performance-Daten zurück
+      operationId: listSlots
+      responses:
+        '200':
+          description: Liste der Slots
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SlotListResponse'
+
+  /ads/render:
+    get:
+      tags:
+        - Render
+      summary: Anzeige für Slot abrufen
+      description: |
+        Liefert die anzuzeigende Werbung für einen bestimmten Slot.
+        Berücksichtigt Targeting-Parameter für kontextbezogene Werbung.
+      operationId: renderAd
+      parameters:
+        - name: slot
+          in: query
+          required: true
+          description: Slot-Identifier
+          schema:
+            type: string
+            enum: [homepage-hero, marketplace-sidebar, order-detail-sidebar, dashboard-sidebar]
+        - name: userId
+          in: query
+          description: User-ID für Personalisierung
+          schema:
+            type: string
+        - name: riskLevel
+          in: query
+          description: Risk-Level für kontextbezogene Werbung
+          schema:
+            type: string
+            enum: [green, yellow, red]
+        - name: origin
+          in: query
+          description: Transport-Startort
+          schema:
+            type: string
+        - name: destination
+          in: query
+          description: Transport-Zielort
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Anzeige gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdRenderResponse'
+        '404':
+          description: Keine Anzeige verfügbar
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /ads/impression:
+    post:
+      tags:
+        - Tracking
+      summary: Impression tracken
+      description: Registriert eine Impression für Analytics und Abrechnung
+      operationId: trackImpression
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImpressionRequest'
+      responses:
+        '200':
+          description: Impression erfasst
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ImpressionResponse'
+
+  /ads/click:
+    post:
+      tags:
+        - Tracking
+      summary: Klick tracken
+      description: Registriert einen Klick für Analytics und Abrechnung
+      operationId: trackClick
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClickRequest'
+      responses:
+        '200':
+          description: Klick erfasst
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClickResponse'
+
+  /ads/campaign:
+    get:
+      tags:
+        - Campaign
+      summary: Kampagnen auflisten
+      operationId: listCampaigns
+      parameters:
+        - name: campaignId
+          in: query
+          description: Spezifische Kampagne abrufen
+          schema:
+            type: string
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending_review, active, paused, completed]
+      responses:
+        '200':
+          description: Kampagnen gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignListResponse'
+    post:
+      tags:
+        - Campaign
+      summary: Neue Kampagne erstellen
+      operationId: createCampaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+      responses:
+        '201':
+          description: Kampagne erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignResponse'
+    put:
+      tags:
+        - Campaign
+      summary: Kampagne aktualisieren
+      operationId: updateCampaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignRequest'
+      responses:
+        '200':
+          description: Kampagne aktualisiert
+    delete:
+      tags:
+        - Campaign
+      summary: Kampagne archivieren
+      operationId: deleteCampaign
+      parameters:
+        - name: campaignId
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Kampagne archiviert
+
+components:
+  schemas:
+    Slot:
+      type: object
+      properties:
+        slot:
+          type: string
+        name:
+          type: string
+        size:
+          type: string
+        position:
+          type: string
+        formats:
+          type: array
+          items:
+            type: string
+        maxFileSize:
+          type: integer
+        eCPM:
+          type: number
+        fillRate:
+          type: integer
+        dailyImpressions:
+          type: integer
+
+    SlotListResponse:
+      type: object
+      properties:
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Slot'
+        total:
+          type: integer
+
+    AdRenderResponse:
+      type: object
+      properties:
+        adId:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        targetUrl:
+          type: string
+          format: uri
+        impressionId:
+          type: string
+        provider:
+          type: string
+        alt:
+          type: string
+
+    ImpressionRequest:
+      type: object
+      required:
+        - impressionId
+      properties:
+        impressionId:
+          type: string
+        timestamp:
+          type: integer
+        viewable:
+          type: boolean
+        viewDuration:
+          type: integer
+
+    ImpressionResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        impression:
+          type: object
+          properties:
+            impressionId:
+              type: string
+            recorded:
+              type: boolean
+            timestamp:
+              type: integer
+
+    ClickRequest:
+      type: object
+      required:
+        - impressionId
+        - adId
+      properties:
+        impressionId:
+          type: string
+        adId:
+          type: string
+        timestamp:
+          type: integer
+        clickPosition:
+          type: object
+          properties:
+            x:
+              type: integer
+            y:
+              type: integer
+
+    ClickResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        click:
+          type: object
+          properties:
+            clickId:
+              type: string
+            impressionId:
+              type: string
+            adId:
+              type: string
+            recorded:
+              type: boolean
+
+    CreateCampaignRequest:
+      type: object
+      required:
+        - name
+        - slot
+        - budget
+        - imageUrl
+        - targetUrl
+      properties:
+        name:
+          type: string
+          example: Allianz Transportversicherung
+        slot:
+          type: string
+          enum: [homepage-hero, marketplace-sidebar, order-detail-sidebar, dashboard-sidebar]
+        budget:
+          type: number
+          minimum: 50
+          example: 500
+        cpc:
+          type: number
+          example: 0.50
+        cpm:
+          type: number
+          example: 10.00
+        imageUrl:
+          type: string
+          format: uri
+        targetUrl:
+          type: string
+          format: uri
+        startDate:
+          type: string
+          format: date-time
+        endDate:
+          type: string
+          format: date-time
+        targeting:
+          type: object
+          properties:
+            riskLevels:
+              type: array
+              items:
+                type: string
+                enum: [green, yellow, red]
+            routes:
+              type: array
+              items:
+                type: string
+
+    UpdateCampaignRequest:
+      type: object
+      properties:
+        campaignId:
+          type: string
+        name:
+          type: string
+        budget:
+          type: number
+        status:
+          type: string
+          enum: [active, paused]
+
+    CampaignResponse:
+      type: object
+      properties:
+        campaignId:
+          type: string
+        name:
+          type: string
+        slot:
+          type: string
+        budget:
+          type: number
+        cpc:
+          type: number
+          nullable: true
+        cpm:
+          type: number
+          nullable: true
+        imageUrl:
+          type: string
+        targetUrl:
+          type: string
+        status:
+          type: string
+          enum: [pending_review, active, paused, completed]
+        createdAt:
+          type: string
+          format: date-time
+        stats:
+          $ref: '#/components/schemas/CampaignStats'
+
+    CampaignStats:
+      type: object
+      properties:
+        impressions:
+          type: integer
+        clicks:
+          type: integer
+        ctr:
+          type: number
+        spend:
+          type: number
+        remaining:
+          type: number
+
+    CampaignListResponse:
+      type: object
+      properties:
+        campaigns:
+          type: array
+          items:
+            $ref: '#/components/schemas/CampaignResponse'
+        total:
+          type: integer
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

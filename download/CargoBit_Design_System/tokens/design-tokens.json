@@ -1,0 +1,173 @@
+{
+  "version": "1.0.0",
+  "meta": {
+    "name": "cargobit-design-system",
+    "brand": "CargoBit / Hybrid Security Layer",
+    "description": "Complete Design Token System for CargoBit Platform"
+  },
+  "color": {
+    "brand": {
+      "primary": { "value": "#0052FF" },
+      "primaryHover": { "value": "#003EB3" },
+      "secondary": { "value": "#00C2A8" },
+      "accent": { "value": "#FFB800" }
+    },
+    "neutral": {
+      "50": { "value": "#F9FAFB" },
+      "100": { "value": "#F3F4F6" },
+      "200": { "value": "#E5E7EB" },
+      "300": { "value": "#D1D5DB" },
+      "400": { "value": "#9CA3AF" },
+      "500": { "value": "#6B7280" },
+      "600": { "value": "#4B5563" },
+      "700": { "value": "#374151" },
+      "800": { "value": "#1F2933" },
+      "900": { "value": "#111827" }
+    },
+    "risk": {
+      "green": { "value": "#2ECC71", "label": "Low Risk" },
+      "yellow": { "value": "#F1C40F", "label": "Medium Risk" },
+      "red": { "value": "#E74C3C", "label": "High Risk" }
+    },
+    "insurance": {
+      "blue": { "value": "#0077CC" },
+      "gold": { "value": "#D4AF37" },
+      "silver": { "value": "#C0C0C0" }
+    },
+    "feedback": {
+      "success": { "value": "#10B981" },
+      "warning": { "value": "#F59E0B" },
+      "error": { "value": "#EF4444" },
+      "info": { "value": "#3B82F6" }
+    },
+    "background": {
+      "page": { "value": "#F9FAFB" },
+      "surface": { "value": "#FFFFFF" },
+      "surfaceSubtle": { "value": "#F3F4F6" }
+    },
+    "border": {
+      "subtle": { "value": "#E5E7EB" },
+      "strong": { "value": "#D1D5DB" },
+      "focus": { "value": "#0052FF" }
+    },
+    "text": {
+      "primary": { "value": "#111827" },
+      "secondary": { "value": "#4B5563" },
+      "muted": { "value": "#6B7280" },
+      "inverse": { "value": "#FFFFFF" }
+    }
+  },
+  "typography": {
+    "fontFamily": {
+      "primary": { "value": "Inter, -apple-system, BlinkMacSystemFont, sans-serif" },
+      "mono": { "value": "JetBrains Mono, Consolas, monospace" }
+    },
+    "size": {
+      "xs": { "value": "12px" },
+      "sm": { "value": "14px" },
+      "md": { "value": "16px" },
+      "lg": { "value": "18px" },
+      "xl": { "value": "20px" },
+      "2xl": { "value": "32px" }
+    },
+    "weight": {
+      "regular": { "value": "400" },
+      "medium": { "value": "500" },
+      "semibold": { "value": "600" },
+      "bold": { "value": "700" }
+    },
+    "lineHeight": {
+      "tight": { "value": "1.25" },
+      "normal": { "value": "1.5" },
+      "relaxed": { "value": "1.75" }
+    },
+    "textStyle": {
+      "h1": { "fontFamily": "{typography.fontFamily.primary}", "fontSize": "{typography.size.2xl}", "fontWeight": "{typography.weight.bold}", "lineHeight": "{typography.lineHeight.tight}" },
+      "h2": { "fontFamily": "{typography.fontFamily.primary}", "fontSize": "{typography.size.xl}", "fontWeight": "{typography.weight.semibold}", "lineHeight": "{typography.lineHeight.tight}" },
+      "h3": { "fontFamily": "{typography.fontFamily.primary}", "fontSize": "{typography.size.lg}", "fontWeight": "{typography.weight.semibold}", "lineHeight": "{typography.lineHeight.normal}" },
+      "body": { "fontFamily": "{typography.fontFamily.primary}", "fontSize": "{typography.size.md}", "fontWeight": "{typography.weight.regular}", "lineHeight": "{typography.lineHeight.normal}" },
+      "caption": { "fontFamily": "{typography.fontFamily.primary}", "fontSize": "{typography.size.sm}", "fontWeight": "{typography.weight.regular}", "lineHeight": "{typography.lineHeight.normal}" }
+    }
+  },
+  "spacing": {
+    "4": { "value": "4px" },
+    "8": { "value": "8px" },
+    "12": { "value": "12px" },
+    "16": { "value": "16px" },
+    "20": { "value": "20px" },
+    "24": { "value": "24px" },
+    "32": { "value": "32px" },
+    "40": { "value": "40px" }
+  },
+  "radius": {
+    "none": { "value": "0px" },
+    "sm": { "value": "4px" },
+    "md": { "value": "8px" },
+    "lg": { "value": "12px" },
+    "xl": { "value": "16px" },
+    "pill": { "value": "999px" }
+  },
+  "shadow": {
+    "none": { "value": "none" },
+    "sm": { "value": "0 1px 2px rgba(15, 23, 42, 0.05)" },
+    "card": { "value": "0 1px 3px rgba(15, 23, 42, 0.08)" },
+    "dropdown": { "value": "0 10px 15px rgba(15, 23, 42, 0.15)" },
+    "modal": { "value": "0 20px 25px rgba(15, 23, 42, 0.20)" }
+  },
+  "component": {
+    "button": {
+      "primary": {
+        "bg": { "value": "{color.brand.primary}" },
+        "bgHover": { "value": "{color.brand.primaryHover}" },
+        "text": { "value": "{color.text.inverse}" },
+        "radius": { "value": "{radius.md}" },
+        "paddingX": { "value": "{spacing.16}" },
+        "paddingY": { "value": "{spacing.8}" }
+      },
+      "secondary": {
+        "bg": { "value": "{color.neutral.100}" },
+        "bgHover": { "value": "{color.neutral.200}" },
+        "text": { "value": "{color.text.primary}" },
+        "border": { "value": "{color.border.subtle}" }
+      },
+      "ghost": {
+        "bg": { "value": "transparent" },
+        "bgHover": { "value": "{color.neutral.100}" },
+        "text": { "value": "{color.text.primary}" }
+      },
+      "danger": {
+        "bg": { "value": "{color.feedback.error}" },
+        "bgHover": { "value": "#DC2626" },
+        "text": { "value": "{color.text.inverse}" }
+      }
+    },
+    "input": {
+      "bg": { "value": "{color.background.surface}" },
+      "border": { "value": "{color.border.strong}" },
+      "borderFocus": { "value": "{color.border.focus}" },
+      "text": { "value": "{color.text.primary}" },
+      "placeholder": { "value": "{color.text.muted}" },
+      "radius": { "value": "{radius.md}" },
+      "paddingX": { "value": "{spacing.12}" },
+      "paddingY": { "value": "{spacing.8}" }
+    },
+    "card": {
+      "bg": { "value": "{color.background.surface}" },
+      "border": { "value": "{color.border.subtle}" },
+      "radius": { "value": "{radius.lg}" },
+      "shadow": { "value": "{shadow.card}" },
+      "padding": { "value": "{spacing.16}" }
+    },
+    "badge": {
+      "risk": {
+        "green": { "bg": "#D1FAE5", "text": "#065F46" },
+        "yellow": { "bg": "#FEF3C7", "text": "#92400E" },
+        "red": { "bg": "#FEE2E2", "text": "#991B1B" }
+      },
+      "insurance": {
+        "blue": { "bg": "#DBEAFE", "text": "#1E40AF" },
+        "gold": { "bg": "#FEF3C7", "text": "#92400E" }
+      }
+    }
+  }
+}

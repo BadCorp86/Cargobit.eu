@@ -1,0 +1,804 @@
+openapi: 3.0.3
+info:
+  title: CargoBit Ad Service API
+  description: |
+    Werbe-Service API für die CargoBit Plattform.
+    
+    Verwaltet Banner-Werbung, Sponsored Listings und Ad-Tracking.
+    
+    ## Features
+    - Echtzeit-Ad-Rendering mit Targeting
+    - Impression- und Click-Tracking
+    - Kampagnen-Verwaltung für Werbepartner
+    - CPM/CPC-Pricing-Modelle
+    
+    ## Targeting-Optionen
+    - Risk-Level (green, yellow, red)
+    - Routen (origin-destination)
+    - Benutzer-Segmente
+  version: 1.0.0
+  contact:
+    name: CargoBit API Support
+    email: api@cargobit.eu
+
+servers:
+  - url: https://api.cargobit.eu/v1/ads
+    description: Production
+  - url: https://api-staging.cargobit.eu/v1/ads
+    description: Staging
+
+tags:
+  - name: Slots
+    description: Verfügbare Werbeplätze
+  - name: Render
+    description: Ads ausliefern
+  - name: Tracking
+    description: Impressions und Clicks tracken
+  - name: Campaigns
+    description: Kampagnen verwalten
+
+paths:
+  /slots:
+    get:
+      tags: [Slots]
+      summary: Verfügbare Werbeplätze auflisten
+      description: Gibt alle verfügbaren Ad-Slots mit deren Spezifikationen zurück
+      operationId: listSlots
+      responses:
+        '200':
+          description: Liste der Slots
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  slots:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AdSlot'
+
+  /render:
+    get:
+      tags: [Render]
+      summary: Ad für Slot abrufen
+      description: |
+        Liefert die passende Anzeige für einen Werbeplatz zurück.
+        
+        Berücksichtigt Targeting-Parameter und User-Kontext.
+      operationId: renderAd
+      parameters:
+        - name: slot
+          in: query
+          required: true
+          description: Slot-Identifier
+          schema:
+            type: string
+            enum:
+              - homepage-hero
+              - marketplace-sidebar
+              - listing-highlight
+              - order-detail
+              - dashboard-widget
+            example: "marketplace-sidebar"
+        - name: userId
+          in: query
+          description: Benutzer-ID für Personalisierung
+          schema:
+            type: string
+            format: uuid
+        - name: riskLevel
+          in: query
+          description: Risk-Level für Targeting
+          schema:
+            type: string
+            enum: [green, yellow, red]
+        - name: route
+          in: query
+          description: Route für kontextuelle Ads (origin-destination)
+          schema:
+            type: string
+            example: "BER-VIE"
+        - name: country
+          in: query
+          description: Land des Users
+          schema:
+            type: string
+            example: "DE"
+      responses:
+        '200':
+          description: Ad zum Rendern
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RenderAdResponse'
+        '204':
+          description: Kein Ad verfügbar (Slot leer)
+        '400':
+          description: Ungültiger Slot
+
+  /impression:
+    post:
+      tags: [Tracking]
+      summary: Impression tracken
+      description: |
+        Registriert eine Ad-Impression.
+        
+        Wird aufgerufen, wenn eine Anzeige im Viewport sichtbar wird.
+      operationId: trackImpression
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImpressionEvent'
+            example:
+              campaignId: "camp_1a2b3c4d"
+              slot: "marketplace-sidebar"
+              userId: "user_12345"
+              riskLevel: "green"
+              viewable: true
+              viewDurationMs: 3500
+      responses:
+        '202':
+          description: Impression akzeptiert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  impressionId:
+                    type: string
+                  recorded:
+                    type: boolean
+
+  /click:
+    post:
+      tags: [Tracking]
+      summary: Click tracken
+      description: |
+        Registriert einen Ad-Click.
+        
+        Wird vor dem Redirect zur Ziel-URL aufgerufen.
+      operationId: trackClick
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ClickEvent'
+            example:
+              impressionId: "imp_5e6f7g8h"
+              campaignId: "camp_1a2b3c4d"
+              userId: "user_12345"
+              clickPosition:
+                x: 150
+                y: 200
+      responses:
+        '202':
+          description: Click akzeptiert
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clickId:
+                    type: string
+                  redirectUrl:
+                    type: string
+                    format: uri
+
+  /campaign:
+    post:
+      tags: [Campaigns]
+      summary: Kampagne erstellen
+      description: Erstellt eine neue Werbekampagne
+      operationId: createCampaign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateCampaignRequest'
+            example:
+              partnerId: "partner_abc123"
+              name: "Allianz Q2 Frachtversicherung"
+              slotId: "slot_marketplace_sidebar"
+              imageUrl: "https://cdn.cargobit.eu/ads/allianz-q2.jpg"
+              targetUrl: "https://allianz.de/fracht"
+              budget: 5000.00
+              cpc: 0.50
+              startDate: "2024-04-01"
+              endDate: "2024-06-30"
+              targeting:
+                riskLevels: ["green", "yellow"]
+                countries: ["DE", "AT", "CH"]
+      responses:
+        '201':
+          description: Kampagne erstellt
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+        '400':
+          description: Ungültige Anfrage
+
+    get:
+      tags: [Campaigns]
+      summary: Kampagne abrufen
+      operationId: getCampaign
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Kampagne gefunden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+
+    put:
+      tags: [Campaigns]
+      summary: Kampagne aktualisieren
+      operationId: updateCampaign
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCampaignRequest'
+      responses:
+        '200':
+          description: Kampagne aktualisiert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Campaign'
+
+    delete:
+      tags: [Campaigns]
+      summary: Kampagne löschen
+      operationId: deleteCampaign
+      parameters:
+        - name: id
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Kampagne gelöscht
+
+  /campaigns:
+    get:
+      tags: [Campaigns]
+      summary: Kampagnen auflisten
+      description: |
+        Listet alle Kampagnen mit Paginierung.
+        
+        Erfordert Authentifizierung via Bearer Token oder API-Key.
+      operationId: listCampaigns
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - name: partnerId
+          in: query
+          description: Partner-ID filtern
+          schema:
+            type: string
+            format: uuid
+        - name: status
+          in: query
+          description: Status filtern
+          schema:
+            type: string
+            enum: [DRAFT, PENDING, ACTIVE, PAUSED, COMPLETED]
+        - name: slot
+          in: query
+          description: Slot filtern
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Seitennummer
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: pageSize
+          in: query
+          description: Ergebnisse pro Seite
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sortBy
+          in: query
+          description: Sortierfeld
+          schema:
+            type: string
+            enum: [createdAt, budget, spent, totalImpressions]
+            default: createdAt
+        - name: sortOrder
+          in: query
+          description: Sortierrichtung
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Liste der Kampagnen
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - type: object
+                    required: [items, page, pageSize, total]
+                    properties:
+                      items:
+                        type: array
+                        items:
+                          $ref: '#/components/schemas/Campaign'
+                      page:
+                        type: integer
+                        example: 1
+                      pageSize:
+                        type: integer
+                        example: 20
+                      total:
+                        type: integer
+                        example: 45
+                      totalPages:
+                        type: integer
+                        example: 3
+                      hasNext:
+                        type: boolean
+                        example: true
+        '401':
+          description: Nicht authentifiziert
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: UNAUTHORIZED
+                message: "Authentication required"
+        '403':
+          description: Keine Berechtigung
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /campaign/{id}/stats:
+    get:
+      tags: [Campaigns]
+      summary: Kampagnen-Statistiken
+      operationId: getCampaignStats
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Statistiken
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CampaignStats'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    AdSlot:
+      type: object
+      properties:
+        id:
+          type: string
+        slot:
+          type: string
+          example: "marketplace-sidebar"
+        name:
+          type: string
+          example: "Marketplace Sidebar"
+        size:
+          type: string
+          example: "300x600"
+        position:
+          type: string
+          enum: [top, sidebar, footer, inline]
+        formats:
+          type: array
+          items:
+            type: string
+            enum: [image, html5, video]
+        maxFileSizeKb:
+          type: integer
+          default: 500
+        eCPM:
+          type: number
+          description: Durchschnittlicher CPM
+        fillRate:
+          type: number
+          description: Fill-Rate in Prozent
+        isActive:
+          type: boolean
+
+    RenderAdResponse:
+      type: object
+      properties:
+        adId:
+          type: string
+          description: Eindeutige Ad-ID für diese Auslieferung
+        campaignId:
+          type: string
+        impressionId:
+          type: string
+          description: Zum Tracken der Impression
+        imageUrl:
+          type: string
+          format: uri
+        targetUrl:
+          type: string
+          format: uri
+        altText:
+          type: string
+        htmlContent:
+          type: string
+          description: Optional für HTML5-Ads
+        width:
+          type: integer
+        height:
+          type: integer
+
+    ImpressionEvent:
+      type: object
+      required: [campaignId, slot]
+      properties:
+        campaignId:
+          type: string
+        impressionId:
+          type: string
+          description: Vorher generierte Impression-ID (optional)
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        slot:
+          type: string
+        riskLevel:
+          type: string
+          enum: [green, yellow, red]
+          nullable: true
+        route:
+          type: string
+          nullable: true
+        viewable:
+          type: boolean
+          default: false
+          description: Ob Ad im Viewport sichtbar
+        viewDurationMs:
+          type: integer
+          description: Sichtbarkeitsdauer in ms
+        userAgent:
+          type: string
+        ipAddress:
+          type: string
+        country:
+          type: string
+        timestamp:
+          type: string
+          format: date-time
+
+    ClickEvent:
+      type: object
+      required: [impressionId, campaignId]
+      properties:
+        impressionId:
+          type: string
+        campaignId:
+          type: string
+        userId:
+          type: string
+          format: uuid
+          nullable: true
+        clickPosition:
+          type: object
+          properties:
+            x:
+              type: integer
+            y:
+              type: integer
+        timestamp:
+          type: string
+          format: date-time
+
+    CreateCampaignRequest:
+      type: object
+      required: [partnerId, name, slotId, imageUrl, targetUrl, budget, startDate]
+      properties:
+        partnerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+          maxLength: 100
+        description:
+          type: string
+          maxLength: 500
+        slotId:
+          type: string
+        imageUrl:
+          type: string
+          format: uri
+        targetUrl:
+          type: string
+          format: uri
+        altText:
+          type: string
+          maxLength: 100
+        htmlContent:
+          type: string
+        budget:
+          type: number
+          format: float
+          minimum: 100
+        cpc:
+          type: number
+          format: float
+          nullable: true
+          description: Cost per Click in EUR
+        cpm:
+          type: number
+          format: float
+          nullable: true
+          description: Cost per 1000 Impressions in EUR
+        pricingModel:
+          type: string
+          enum: [CPC, CPM, CPA]
+          default: CPC
+        targeting:
+          $ref: '#/components/schemas/TargetingConfig'
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+
+    UpdateCampaignRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        budget:
+          type: number
+        cpc:
+          type: number
+          nullable: true
+        cpm:
+          type: number
+          nullable: true
+        status:
+          type: string
+          enum: [DRAFT, ACTIVE, PAUSED]
+        targeting:
+          $ref: '#/components/schemas/TargetingConfig'
+        endDate:
+          type: string
+          format: date
+
+    TargetingConfig:
+      type: object
+      properties:
+        riskLevels:
+          type: array
+          items:
+            type: string
+            enum: [green, yellow, red]
+        countries:
+          type: array
+          items:
+            type: string
+        routes:
+          type: array
+          items:
+            type: string
+        userSegments:
+          type: array
+          items:
+            type: string
+            enum: [shipper, carrier, driver, dispatcher]
+
+    Campaign:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        partnerId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        slotId:
+          type: string
+        slot:
+          $ref: '#/components/schemas/AdSlot'
+        imageUrl:
+          type: string
+          format: uri
+        targetUrl:
+          type: string
+          format: uri
+        budget:
+          type: number
+        spent:
+          type: number
+        currency:
+          type: string
+          default: "EUR"
+        pricingModel:
+          type: string
+          enum: [CPC, CPM, CPA]
+        cpc:
+          type: number
+          nullable: true
+        cpm:
+          type: number
+          nullable: true
+        targeting:
+          $ref: '#/components/schemas/TargetingConfig'
+        status:
+          type: string
+          enum: [DRAFT, PENDING, ACTIVE, PAUSED, COMPLETED]
+        reviewStatus:
+          type: string
+          enum: [pending, approved, rejected]
+        startDate:
+          type: string
+          format: date
+        endDate:
+          type: string
+          format: date
+          nullable: true
+        totalImpressions:
+          type: integer
+        totalClicks:
+          type: integer
+        totalCTR:
+          type: number
+          format: float
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CampaignStats:
+      type: object
+      properties:
+        campaignId:
+          type: string
+        period:
+          type: object
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+        impressions:
+          type: integer
+        clicks:
+          type: integer
+        conversions:
+          type: integer
+        ctr:
+          type: number
+          format: float
+        spend:
+          type: number
+          format: float
+        revenue:
+          type: number
+          format: float
+        dailyStats:
+          type: array
+          items:
+            type: object
+            properties:
+              date:
+                type: string
+                format: date
+              impressions:
+                type: integer
+              clicks:
+                type: integer
+              spend:
+                type: number
+
+    ErrorResponse:
+      type: object
+      required: [code, message]
+      properties:
+        code:
+          type: string
+          description: Maschinenlesbarer Fehlercode
+          example: CAMPAIGN_NOT_FOUND
+        message:
+          type: string
+          description: Lesbare Fehlermeldung
+          example: "Campaign not found or access denied"
+        details:
+          type: object
+          description: Zusätzliche Fehlerdetails
+          additionalProperties: true
+        requestId:
+          type: string
+          format: uuid
+          description: Request-ID für Support
+        timestamp:
+          type: string
+          format: date-time
+
+    ValidationError:
+      type: object
+      properties:
+        field:
+          type: string
+        message:
+          type: string
+        code:
+          type: string
+
+    ValidationErrorResponse:
+      allOf:
+        - $ref: '#/components/schemas/ErrorResponse'
+        - type: object
+          properties:
+            errors:
+              type: array
+              items:
+                $ref: '#/components/schemas/ValidationError'
+
+security:
+  - bearerAuth: []
+  - apiKey: []

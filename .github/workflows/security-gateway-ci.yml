@@ -1,0 +1,756 @@
+# ============================================
+# CARGOBIT SECURITY GATEWAY - CI/CD PIPELINE
+# Version: 2.0 - Enterprise-Ready
+# Platform: GitHub Actions
+# ============================================
+
+name: Security Gateway CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'src/**'
+      - 'mini-services/**'
+      - 'tests/**'
+      - 'load-tests/**'
+      - 'package.json'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Nightly builds at 02:00 UTC
+    - cron: '0 2 * * *'
+    # Weekly chaos tests on Sunday at 03:00 UTC
+    - cron: '0 3 * * 0'
+  workflow_dispatch:
+    inputs:
+      scenario:
+        description: 'Load test scenario to run'
+        required: false
+        default: 'ramp-up'
+        type: choice
+        options:
+          - ramp-up
+          - spike
+          - soak
+          - stress
+          - chaos
+
+env:
+  NODE_VERSION: '20'
+  GO_VERSION: '1.21'
+  PNPM_VERSION: '8'
+  BASE_URL: 'http://localhost:3004'
+  RISK_ENGINE_URL: 'http://localhost:3003'
+
+# ============================================
+# CONCURRENCY CONTROL
+# ============================================
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# ============================================
+# JOBS
+# ============================================
+jobs:
+  # ==========================================
+  # STAGE 1: BUILD & LINT
+  # ==========================================
+  build:
+    name: Build & Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run TypeScript check
+        run: pnpm tsc --noEmit
+
+      - name: Run ESLint
+        run: pnpm eslint . --ext .ts,.tsx --max-warnings 0
+
+      - name: Build project
+        run: pnpm build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            .next/
+            dist/
+          retention-days: 1
+
+  # ==========================================
+  # STAGE 2: UNIT TESTS
+  # ==========================================
+  unit-tests:
+    name: Unit Tests
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+
+      - name: Run unit tests with coverage
+        run: pnpm test:unit --coverage --reporter=junit --outputFile=test-results.xml
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+          fail_ci_if_error: true
+          flags: unit
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: |
+            coverage/
+            test-results.xml
+          retention-days: 7
+
+      - name: Coverage threshold check
+        run: |
+          COVERAGE=$(cat coverage/coverage-summary.json | jq '.total.lines.pct')
+          if (( $(echo "$COVERAGE < 85" | bc -l) )); then
+            echo "Coverage $COVERAGE% is below 85% threshold"
+            exit 1
+          fi
+          echo "Coverage $COVERAGE% meets threshold"
+
+  # ==========================================
+  # STAGE 3: INTEGRATION TESTS
+  # ==========================================
+  integration-tests:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: cargobit_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+
+      - name: Setup test database
+        run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_test
+
+      - name: Seed test data
+        run: pnpm tsx scripts/seed-test-data.ts
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_test
+
+      - name: Start mini-services (background)
+        run: |
+          pnpm tsx mini-services/risk-engine-service/index.ts &
+          pnpm tsx mini-services/security-gateway-service/index.ts &
+          sleep 5
+
+      - name: Run integration tests
+        run: pnpm test:integration --reporter=junit --outputFile=integration-results.xml
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_test
+          REDIS_URL: redis://localhost:6379
+
+      - name: Upload integration test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: integration-test-results
+          path: |
+            coverage/
+            integration-results.xml
+          retention-days: 7
+
+  # ==========================================
+  # STAGE 4: CONTRACT TESTS
+  # ==========================================
+  contract-tests:
+    name: Contract Tests (Pact)
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run consumer contract tests
+        run: pnpm test:contract
+        env:
+          PACT_BROKER_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+
+      - name: Publish pacts to broker
+        run: pnpm pact-broker publish pacts --consumer-app-version ${{ github.sha }}
+        env:
+          PACT_BROKER_URL: ${{ secrets.PACT_BROKER_URL }}
+          PACT_BROKER_TOKEN: ${{ secrets.PACT_BROKER_TOKEN }}
+        if: github.ref == 'refs/heads/main'
+
+      - name: Upload pact files
+        uses: actions/upload-artifact@v4
+        with:
+          name: pact-files
+          path: pacts/
+          retention-days: 30
+
+      - name: Verify OpenAPI spec
+        run: |
+          npx @apidevtools/swagger-cli validate download/openapi-security-gateway.yaml
+          npx openapi-diff download/openapi-security-gateway.yaml baseline-openapi.yaml || true
+
+  # ==========================================
+  # STAGE 5: E2E TESTS
+  # ==========================================
+  e2e-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: cargobit_e2e
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps
+
+      - name: Setup test database
+        run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_e2e
+
+      - name: Seed test data
+        run: pnpm tsx scripts/seed-test-data.ts
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_e2e
+
+      - name: Build and start services
+        run: |
+          pnpm build
+          pnpm start &
+          pnpm tsx mini-services/risk-engine-service/index.ts &
+          pnpm tsx mini-services/security-gateway-service/index.ts &
+          sleep 10
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_e2e
+
+      - name: Run E2E tests
+        run: pnpm test:e2e --reporter=html
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_e2e
+          BASE_URL: ${{ env.BASE_URL }}
+
+      - name: Upload E2E artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-test-results
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+  # ==========================================
+  # STAGE 6: SECURITY TESTS (SAST/DAST)
+  # ==========================================
+  security-tests:
+    name: Security Tests
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # SAST - Static Analysis
+      - name: Run Semgrep (SAST)
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/owasp-top-ten
+          outputFormat: sarif
+          output: semgrep-results.sarif
+
+      - name: Run Trivy vulnerability scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Run Snyk security scan
+        uses: snyk/actions/node@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --sarif-file-output=snyk-results.sarif
+
+      # Dependency scan
+      - name: Run npm audit
+        run: pnpm audit --audit-level=high --json > npm-audit.json || true
+
+      # Secret scan
+      - name: Run Gitleaks secret scan
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
+
+      - name: Upload security scan results
+        uses: github/codeql-action/upload-sarif@v2
+        if: always()
+        with:
+          sarif_file: |
+            semgrep-results.sarif
+            trivy-results.sarif
+            snyk-results.sarif
+
+      - name: Upload security artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-results
+          path: |
+            semgrep-results.sarif
+            trivy-results.sarif
+            snyk-results.sarif
+            npm-audit.json
+          retention-days: 30
+
+      - name: Check for critical vulnerabilities
+        run: |
+          CRITICAL=$(cat npm-audit.json | jq '.metadata.vulnerabilities.critical // 0')
+          HIGH=$(cat npm-audit.json | jq '.metadata.vulnerabilities.high // 0')
+          if [ "$CRITICAL" -gt 0 ] || [ "$HIGH" -gt 5 ]; then
+            echo "Found $CRITICAL critical and $HIGH high vulnerabilities"
+            exit 1
+          fi
+
+  # ==========================================
+  # STAGE 7: LOAD TESTS (K6)
+  # ==========================================
+  load-tests:
+    name: Load Tests (K6)
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
+    timeout-minutes: 60
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: cargobit_load
+        ports:
+          - 5432:5432
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6@v1
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v2
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Setup test database
+        run: pnpm prisma migrate deploy
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_load
+
+      - name: Seed test data
+        run: pnpm tsx scripts/seed-test-data.ts
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_load
+
+      - name: Start services
+        run: |
+          pnpm tsx mini-services/risk-engine-service/index.ts &
+          pnpm tsx mini-services/security-gateway-service/index.ts &
+          sleep 10
+        env:
+          DATABASE_URL: postgresql://test:test@localhost:5432/cargobit_load
+
+      - name: Determine test scenario
+        id: scenario
+        run: |
+          if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+            echo "scenario=${{ github.event.inputs.scenario }}" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" == "schedule" ]; then
+            echo "scenario=soak" >> $GITHUB_OUTPUT
+          else
+            echo "scenario=ramp-up" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Run K6 load test
+        run: |
+          k6 run \
+            --env SCENARIO=${{ steps.scenario.outputs.scenario }} \
+            --env BASE_URL=${{ env.BASE_URL }} \
+            --out json=load-test-results.json \
+            --summary-export=load-test-summary.json \
+            load-tests/k6/security-gateway.js
+
+      - name: Generate K6 HTML report
+        run: npx k6-html-reporter --json load-test-results.json --output k6-report.html
+
+      - name: Upload K6 results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: k6-load-test-results
+          path: |
+            load-test-results.json
+            load-test-summary.json
+            k6-report.html
+          retention-days: 14
+
+      - name: Check load test thresholds
+        run: |
+          P95=$(cat load-test-summary.json | jq '.metrics.http_req_duration.values["p(95)"]')
+          ERROR_RATE=$(cat load-test-summary.json | jq '.metrics.http_req_failed.values.rate')
+          if (( $(echo "$P95 > 250" | bc -l) )); then
+            echo "P95 latency ${P95}ms exceeds 250ms threshold"
+            exit 1
+          fi
+          if (( $(echo "$ERROR_RATE > 0.01" | bc -l) )); then
+            echo "Error rate ${ERROR_RATE} exceeds 1% threshold"
+            exit 1
+          fi
+
+  # ==========================================
+  # STAGE 8: CHAOS TESTS
+  # ==========================================
+  chaos-tests:
+    name: Chaos Tests
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests]
+    if: github.event_name == 'schedule' && github.event.schedule == '0 3 * * 0'  # Weekly
+    timeout-minutes: 30
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup k6
+        uses: grafana/setup-k6@v1
+
+      - name: Setup Chaos Mesh CLI
+        run: |
+          curl -sSL https://mirrors.chaos-mesh.org/v2.5.1/chaos-mesh-v2.5.1-linux-amd64.tar.gz | tar xz
+          sudo mv chaos-mesh-v2.5.1-linux-amd64/chaos /usr/local/bin/
+
+      - name: Run chaos experiments
+        run: |
+          # Inject latency to risk-engine
+          chaos inject latency --target risk-engine --duration 30s --latency 500ms
+          sleep 5
+
+          # Run K6 chaos test
+          k6 run --env SCENARIO=chaos --env BASE_URL=${{ env.BASE_URL }} load-tests/k6/security-gateway.js
+
+          # Inject pod failure
+          chaos inject pod-failure --target risk-engine --duration 30s
+          sleep 5
+
+          # Run another K6 test during failure
+          k6 run --env SCENARIO=chaos --env BASE_URL=${{ env.BASE_URL }} load-tests/k6/security-gateway.js
+
+      - name: Upload chaos test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: chaos-test-results
+          path: |
+            chaos-reports/
+          retention-days: 14
+
+  # ==========================================
+  # STAGE 9: DEPLOY STAGING
+  # ==========================================
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, contract-tests, e2e-tests, security-tests]
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/cargobit-security-gateway:staging-${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/cargobit-security-gateway:staging-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Deploy to Kubernetes (staging)
+        run: |
+          kubectl set image deployment/security-gateway \
+            security-gateway=${{ steps.login-ecr.outputs.registry }}/cargobit-security-gateway:staging-${{ github.sha }} \
+            -n staging
+
+      - name: Wait for deployment
+        run: kubectl rollout status deployment/security-gateway -n staging --timeout=300s
+
+      - name: Run smoke tests
+        run: |
+          curl -f https://staging.cargobit.eu/api/security/health || exit 1
+
+  # ==========================================
+  # STAGE 10: DEPLOY PRODUCTION
+  # ==========================================
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, contract-tests, e2e-tests, security-tests, load-tests]
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-central-1
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/cargobit-security-gateway:prod-${{ github.sha }}
+            ${{ steps.login-ecr.outputs.registry }}/cargobit-security-gateway:prod-latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          build-args: |
+            BUILD_VERSION=${{ github.sha }}
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          generate_release_notes: true
+          files: |
+            download/*.pdf
+            download/*.yaml
+
+      - name: Deploy to Kubernetes (production)
+        run: |
+          kubectl set image deployment/security-gateway \
+            security-gateway=${{ steps.login-ecr.outputs.registry }}/cargobit-security-gateway:prod-${{ github.sha }} \
+            -n production
+
+      - name: Wait for deployment
+        run: kubectl rollout status deployment/security-gateway -n production --timeout=300s
+
+      - name: Run smoke tests (production)
+        run: |
+          curl -f https://api.cargobit.eu/security/health || exit 1
+
+      - name: Notify Slack on successful deployment
+        uses: 8398a7/action-slack@v3
+        with:
+          status: success
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        if: success()
+
+# ============================================
+# NOTIFICATIONS
+# ============================================
+  notify-failure:
+    name: Notify on Failure
+    runs-on: ubuntu-latest
+    needs: [unit-tests, integration-tests, contract-tests, e2e-tests, security-tests]
+    if: failure()
+    steps:
+      - name: Notify Slack on failure
+        uses: 8398a7/action-slack@v3
+        with:
+          status: failure
+          fields: repo,message,commit,author,action,eventName,ref,workflow
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}

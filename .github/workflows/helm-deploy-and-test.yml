@@ -1,12 +1,7 @@
 # =============================================================================
-# Helm Test + Release Pipeline (GitHub Actions)
+# Helm Deploy and Test Workflow
 # =============================================================================
-# Zweck: Lint, package, deploy (upgrade/install) in Ziel-Cluster, führe helm test
-# aus und erstelle bei Erfolg ein GitHub Release.
-#
-# Erforderliche GitHub Secrets:
-# - KUBE_CONFIG_DATA: base64-kodierte kubeconfig mit Zugriff auf Ziel-Cluster
-# - ADMIN_JWT: optional für smoke tests
+# Deployt Helm Chart und führt Tests aus
 # =============================================================================
 
 name: Helm Deploy and Test
@@ -17,34 +12,31 @@ on:
       namespace:
         description: 'Kubernetes namespace'
         required: true
-        default: staging
-      chart-path:
-        description: 'Path to Helm chart'
-        required: true
-        default: helm/payments-service
+        default: 'staging'
       image-tag:
         description: 'Image tag to deploy'
         required: false
-        default: latest
+        default: 'latest'
       dry-run:
-        description: 'Dry run only (no deployment)'
+        description: 'Dry run only'
         required: false
-        default: 'false'
+        default: false
         type: boolean
   repository_dispatch:
     types: [images-built]
 
 env:
+  CHART_PATH: helm/payments-service
   HELM_VERSION: '3.12.0'
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      CHART_PATH: ${{ github.event.inputs.chart-path || 'helm/payments-service' }}
       NAMESPACE: ${{ github.event.inputs.namespace || 'staging' }}
-      RELEASE_NAME: payments
       IMAGE_TAG: ${{ github.event.client-payload.image_tag || github.event.inputs.image-tag || 'latest' }}
+      REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
+      NAMESPACE_REGISTRY: ${{ secrets.DOCKER_NAMESPACE }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -62,8 +54,8 @@ jobs:
           KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
         run: |
           echo "$KUBE_CONFIG_DATA" | base64 --decode > kubeconfig
-          export KUBECONFIG=$PWD/kubeconfig
           chmod 600 kubeconfig
+          export KUBECONFIG=$PWD/kubeconfig
           kubectl version --short || kubectl version
 
       - name: Helm lint
@@ -71,124 +63,84 @@ jobs:
 
       - name: Helm template (preview)
         run: |
-          helm template $RELEASE_NAME $CHART_PATH \
+          helm template payments $CHART_PATH \
             --namespace $NAMESPACE \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.NAMESPACE_REGISTRY }}/payments-backend \
             --set image.tag=$IMAGE_TAG \
+            --set workerImage.repository=${{ env.REGISTRY }}/${{ env.NAMESPACE_REGISTRY }}/payments-worker \
             --set workerImage.tag=$IMAGE_TAG
 
       - name: Helm upgrade --install (dry-run)
         if: github.event.inputs.dry-run == 'true'
         run: |
-          helm upgrade --install $RELEASE_NAME $CHART_PATH \
+          helm upgrade --install payments $CHART_PATH \
             --namespace $NAMESPACE --create-namespace \
-            --values $CHART_PATH/values.yaml \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.NAMESPACE_REGISTRY }}/payments-backend \
             --set image.tag=$IMAGE_TAG \
+            --set workerImage.repository=${{ env.REGISTRY }}/${{ env.NAMESPACE_REGISTRY }}/payments-worker \
             --set workerImage.tag=$IMAGE_TAG \
             --dry-run
 
       - name: Helm upgrade --install
         if: github.event.inputs.dry-run != 'true'
         run: |
-          helm upgrade --install $RELEASE_NAME $CHART_PATH \
+          helm upgrade --install payments $CHART_PATH \
             --namespace $NAMESPACE --create-namespace \
-            --values $CHART_PATH/values.yaml \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.NAMESPACE_REGISTRY }}/payments-backend \
             --set image.tag=$IMAGE_TAG \
+            --set workerImage.repository=${{ env.REGISTRY }}/${{ env.NAMESPACE_REGISTRY }}/payments-worker \
             --set workerImage.tag=$IMAGE_TAG \
             --wait --timeout 5m \
             --history-max 10
 
       - name: Verify deployment
         if: github.event.inputs.dry-run != 'true'
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
         run: |
-          export KUBECONFIG=$PWD/kubeconfig
           echo "### Deployment Status" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
           kubectl get pods -n $NAMESPACE -l app=payments -o wide >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           kubectl get deployment -n $NAMESPACE >> $GITHUB_STEP_SUMMARY
 
       - name: Run helm tests
         if: github.event.inputs.dry-run != 'true'
+        env:
+          KUBECONFIG: ${{ github.workspace }}/kubeconfig
         run: |
-          export KUBECONFIG=$PWD/kubeconfig
-          helm test $RELEASE_NAME --namespace $NAMESPACE --timeout 2m || echo "No helm tests defined or tests failed"
+          helm test payments --namespace $NAMESPACE --timeout 2m || echo "No helm tests defined"
 
-      - name: Run smoke verification
+      - name: Run smoke tests
         if: github.event.inputs.dry-run != 'true'
         env:
           ADMIN_JWT: ${{ secrets.ADMIN_JWT }}
         run: |
           if [ -f "./scripts/verify_smoke.sh" ]; then
             chmod +x ./scripts/verify_smoke.sh
-            ./scripts/verify_smoke.sh "https://payments.staging.example.com" "$ADMIN_JWT" || echo "Smoke test failed or script not available"
-          else
-            echo "Smoke test script not found, skipping"
+            ./scripts/verify_smoke.sh "https://payments.${NAMESPACE}.cargobit.io" "$ADMIN_JWT" || true
           fi
 
-      - name: Create GitHub Release on success
+      - name: Create GitHub Release (production only)
         if: github.event.inputs.dry-run != 'true' && github.event.inputs.namespace == 'production'
         uses: ncipollo/release-action@v1
         with:
           tag: "deploy-${{ github.run_id }}"
-          name: "Helm deploy $RELEASE_NAME to $NAMESPACE"
+          name: "Helm deploy to production"
           body: |
-            Deployed chart $CHART_PATH to namespace $NAMESPACE
-            Image tag: $IMAGE_TAG
+            Deployed to production
+            Image tag: ${{ env.IMAGE_TAG }}
             Commit: ${{ github.sha }}
 
       - name: Cleanup
         if: always()
         run: rm -f kubeconfig
 
-  # Rollback Job (optional, manuell auslösen)
-  rollback:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' && github.event.inputs.rollback == 'true'
-    env:
-      NAMESPACE: ${{ github.event.inputs.namespace }}
-      RELEASE_NAME: payments
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Helm
-        uses: azure/setup-helm@v3
-
-      - name: Set up kubectl
-        uses: azure/setup-kubectl@v3
-
-      - name: Decode kubeconfig
-        env:
-          KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-        run: |
-          echo "$KUBE_CONFIG_DATA" | base64 --decode > kubeconfig
-          export KUBECONFIG=$PWD/kubeconfig
-
-      - name: Helm rollback
-        run: |
-          helm history $RELEASE_NAME --namespace $NAMESPACE
-          helm rollback $RELEASE_NAME --namespace $NAMESPACE
-
 # =============================================================================
-# ERFORDERLICHE SECRETS
+# Erforderliche Secrets
 # =============================================================================
 #
-# 1. KUBE_CONFIG_DATA — base64-kodierte kubeconfig mit Zugriff auf Ziel-Cluster
-#    Erstellung:
-#    cat ~/.kube/config | base64 -w 0 > kubeconfig_base64.txt
+# - KUBE_CONFIG_DATA    - Base64 kubeconfig für CI
+# - DOCKER_REGISTRY     - z.B. registry.example.com
+# - DOCKER_NAMESPACE    - z.B. myteam
+# - ADMIN_JWT           - (optional) Für Smoke Tests
 #
-# 2. ADMIN_JWT — optional für smoke tests
-#
-# =============================================================================
-# SICHERHEITSHINWEISE
-# =============================================================================
-#
-# 1. Least privilege: CI kubeconfig sollte nur minimal nötige Rechte haben
-#    (namespace-scoped ServiceAccount)
-#
-# 2. Secret handling: Vermeide direkte Secrets in repo; nutze GitHub Secrets,
-#    SealedSecrets oder ExternalSecrets
-#
-# 3. Rollback: Image rollbacks via Helm:
-#    helm rollback payments -n staging
-#    oder --set image.tag=<previous>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #FFFFFF;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SimHei', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+  #diagram { width: fit-content; min-width: 800px; }
+</style>
+</head>
+<body>
+<div id="diagram">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant Shipper as Verlader
+    participant Transporter as Transporteur
+    participant API as Backend API
+    participant Wallet as Wallet Service
+    participant Stripe as Stripe
+    participant Admin as Admin Panel
+    participant DB as Database
+
+    rect rgb(254, 226, 226)
+    Note over Shipper,DB: Phase 1: Storno (vor Pickup)
+    Shipper->>API: POST /jobs/{id}/cancel<br/>{reason: "no_transporter_available"}
+    API->>DB: CHECK job.status IN ("open", "booked")
+    
+    alt Job Status ok für Storno
+        API->>DB: UPDATE job SET status = "cancelled"
+        API->>DB: INSERT dispute_record
+        
+        alt Refund erforderlich (booked)
+            API->>Wallet: get_wallet_by_user(shipper)
+            API->>Wallet: credit_wallet(shipper, full_amount, "refund")
+            API->>Wallet: debit_wallet(transporter, pending_amount, "cancel")
+            API->>Wallet: debit_wallet(platform, fee, "cancel_fee_return")
+        end
+        
+        API->>Transporter: Notify: Job storniert
+        API-->>Shipper: 200 Storno bestätigt
+    else Job bereits in_transit
+        API-->>Shipper: 400 Cannot cancel - transport in progress
+    end
+    end
+
+    rect rgb(254, 243, 199)
+    Note over Shipper,DB: Phase 2: Refund (nach Delivery - Mängel)
+    Shipper->>API: POST /disputes<br/>{job_id, type: "damage", evidence[]}
+    API->>DB: INSERT disputes (status = "open")
+    API->>Admin: Notify: Neuer Dispute
+    API-->>Shipper: Dispute eingereicht
+
+    Admin->>API: GET /disputes/{id}
+    API-->>Admin: Dispute Details + Evidence
+    
+    Admin->>API: PATCH /disputes/{id}/resolve<br/>{action: "partial_refund", amount_cents}
+    
+    alt Partial Refund
+        API->>Stripe: Refund.create({amount, payment_intent})
+        Stripe-->>API: Refund confirmed
+        API->>Wallet: credit_wallet(shipper, refund_amount, "dispute_refund")
+        API->>DB: UPDATE disputes SET status = "resolved"
+        API-->>Shipper: Refund verarbeitet
+        API-->>Transporter: Dispute resolved - partial refund
+    else Full Refund
+        API->>Stripe: Refund.create({amount: full_amount})
+        Stripe-->>API: Refund confirmed
+        API->>Wallet: credit_wallet(shipper, full_amount, "full_refund")
+        API->>Wallet: debit_wallet(transporter, payout, "chargeback")
+        API->>DB: UPDATE disputes SET status = "resolved"
+    else Rejected
+        API->>DB: UPDATE disputes SET status = "rejected"
+        API-->>Shipper: Dispute abgelehnt (Begründung)
+    end
+    end
+
+    rect rgb(245, 243, 255)
+    Note over Shipper,DB: Phase 3: Eskalation (Admin-Entscheid)
+    Shipper->>API: POST /disputes/{id}/escalate<br/>{additional_evidence}
+    API->>DB: UPDATE disputes SET escalated = true, status = "escalated"
+    API->>Admin: High-Priority Alert: Eskalation
+
+    Admin->>API: PATCH /disputes/{id}/final_decision<br/>{outcome, notes, adjust_rating?}
+    
+    alt Outcome: Shipper favor
+        API->>Stripe: Refund.create(...)
+        API->>Wallet: credit_wallet(shipper, amount)
+        API->>DB: UPDATE users SET rating = rating - 0.2 WHERE transporter
+        API-->>Shipper: ✅ Entscheidung zu Ihren Gunsten
+        API-->>Transporter: ⚠️ Rating angepasst
+    else Outcome: Transporter favor
+        API->>DB: UPDATE disputes SET status = "closed"
+        API-->>Shipper: ❌ Dispute abgelehnt
+        API-->>Transporter: ✅ Dispute geschlossen - keine Aktion
+    else Outcome: Split
+        API->>Wallet: credit_wallet(shipper, partial)
+        API-->>Shipper: Teilweise Rückerstattung
+        API-->>Transporter: Teilweise belastet
+    end
+    
+    API->>DB: INSERT audit_log (decision, actor, timestamp)
+    end
+  </pre>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#EFF6FF',
+      primaryBorderColor: '#3B82F6',
+      primaryTextColor: '#1E293B',
+      lineColor: '#94A3B8',
+      secondaryColor: '#F0FDF4',
+      secondaryBorderColor: '#10B981',
+      secondaryTextColor: '#1E293B',
+      tertiaryColor: '#FFF7ED',
+      tertiaryBorderColor: '#F59E0B',
+      tertiaryTextColor: '#1E293B',
+      noteBkgColor: '#F8FAFC',
+      noteTextColor: '#6B7280',
+      noteBorderColor: '#E2E8F0',
+      fontSize: '13px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, SimHei, sans-serif',
+    },
+    sequence: {
+      mirrorActors: false,
+      messageAlign: 'center',
+      actorMargin: 50,
+      width: 150,
+      height: 65,
+      boxMargin: 16,
+      boxTextMargin: 8,
+      noteMargin: 16,
+      messageMargin: 35,
+      bottomMarginAdj: 1,
+    },
+  });
+</script>
+</body>
+</html>

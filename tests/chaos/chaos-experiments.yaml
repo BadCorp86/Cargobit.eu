@@ -1,0 +1,210 @@
+# ============================================
+# CARGOBIT SECURITY GATEWAY - CHAOS TESTS
+# Version: 2.0 - Chaos Mesh & Litmus Experiments
+# ============================================
+
+# ============================================
+# 1. RISK ENGINE LATENCY INJECTION
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: risk-engine-latency
+  namespace: cargobit
+spec:
+  action: delay
+  mode: one
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: risk-engine
+  delay:
+    latency: "500ms"
+    correlation: "50"
+    jitter: "100ms"
+  duration: "5m"
+---
+# ============================================
+# 2. RISK ENGINE POD FAILURE
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: risk-engine-pod-failure
+  namespace: cargobit
+spec:
+  action: pod-failure
+  mode: one
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: risk-engine
+  duration: "2m"
+---
+# ============================================
+# 3. RISK ENGINE POD KILL
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: risk-engine-pod-kill
+  namespace: cargobit
+spec:
+  action: pod-kill
+  mode: one
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: risk-engine
+  gracePeriod: 0
+---
+# ============================================
+# 4. DATABASE LATENCY INJECTION
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: postgres-latency
+  namespace: cargobit
+spec:
+  action: delay
+  mode: all
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: postgres
+  delay:
+    latency: "200ms"
+    correlation: "80"
+  duration: "3m"
+---
+# ============================================
+# 5. NOTIFICATION SERVICE DOWN
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: PodChaos
+metadata:
+  name: notification-service-down
+  namespace: cargobit
+spec:
+  action: pod-failure
+  mode: all
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: notification-service
+  duration: "5m"
+---
+# ============================================
+# 6. NETWORK PARTITION (Gateway <-> Risk Engine)
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: NetworkChaos
+metadata:
+  name: gateway-risk-partition
+  namespace: cargobit
+spec:
+  action: partition
+  mode: all
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: security-gateway
+  direction: both
+  target:
+    selector:
+      namespaces:
+        - cargobit
+      labelSelectors:
+        app: risk-engine
+    mode: all
+  duration: "3m"
+---
+# ============================================
+# 7. CPU STRESS ON GATEWAY
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: gateway-cpu-stress
+  namespace: cargobit
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: security-gateway
+  stressors:
+    cpu:
+      workers: 4
+      load: 80
+  duration: "5m"
+---
+# ============================================
+# 8. MEMORY STRESS ON GATEWAY
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: StressChaos
+metadata:
+  name: gateway-memory-stress
+  namespace: cargobit
+spec:
+  mode: one
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: security-gateway
+  stressors:
+    memory:
+      size: "512MB"
+  duration: "3m"
+---
+# ============================================
+# 9. DNS FAILURE
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: DNSChaos
+metadata:
+  name: dns-failure
+  namespace: cargobit
+spec:
+  action: error
+  mode: all
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: security-gateway
+  patterns:
+    - "risk-engine.*"
+  duration: "2m"
+---
+# ============================================
+# 10. HTTP FAULT INJECTION
+# ============================================
+apiVersion: chaos-mesh.org/v1alpha1
+kind: HTTPChaos
+metadata:
+  name: risk-engine-http-fault
+  namespace: cargobit
+spec:
+  mode: all
+  selector:
+    namespaces:
+      - cargobit
+    labelSelectors:
+      app: security-gateway
+  target: Request
+  port: 3003
+  path: "*"
+  method: POST
+  abort: true
+  duration: "2m"

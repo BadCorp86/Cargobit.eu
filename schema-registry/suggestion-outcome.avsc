@@ -1,0 +1,325 @@
+{
+  "type": "record",
+  "name": "SuggestionOutcome",
+  "namespace": "io.cargobit.logistics.events",
+  "doc": "Event documenting the outcome of a capacity-based order suggestion",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": {
+        "type": "string",
+        "logicalType": "uuid"
+      },
+      "doc": "Unique event identifier (UUID v4)"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "SuggestionEventType",
+        "symbols": ["suggestion.outcome"]
+      },
+      "doc": "Event type constant"
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      },
+      "doc": "Event timestamp (epoch millis)"
+    },
+    {
+      "name": "suggestionId",
+      "type": "string",
+      "doc": "Unique suggestion identifier"
+    },
+    {
+      "name": "tourId",
+      "type": "string",
+      "doc": "Tour identifier"
+    },
+    {
+      "name": "orderId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Order identifier"
+    },
+    {
+      "name": "segmentId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Tour segment identifier"
+    },
+    {
+      "name": "decision",
+      "type": {
+        "type": "enum",
+        "name": "DecisionType",
+        "symbols": ["ACCEPT", "REJECT", "TIMEOUT", "CANCELLED"]
+      },
+      "doc": "Decision made on the suggestion"
+    },
+    {
+      "name": "decidedBy",
+      "type": {
+        "type": "enum",
+        "name": "DecidedByType",
+        "symbols": ["DRIVER", "DISPATCHER", "SYSTEM", "AUTO_REJECT"]
+      },
+      "doc": "Who made the decision"
+    },
+    {
+      "name": "decisionLatencySeconds",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Time between suggestion and decision (seconds)"
+    },
+    {
+      "name": "decisionReason",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Optional reason for the decision"
+    },
+    {
+      "name": "executed",
+      "type": "boolean",
+      "doc": "Was the order actually executed"
+    },
+    {
+      "name": "executionFailureReason",
+      "type": ["null", {
+        "type": "enum",
+        "name": "ExecutionFailureReason",
+        "symbols": [
+          "CAPACITY_CHANGED",
+          "TIME_WINDOW_MISSED",
+          "VEHICLE_BREAKDOWN",
+          "CUSTOMER_CANCELLED",
+          "DRIVER_REJECTED",
+          "ROUTE_INFEASIBLE",
+          "OTHER"
+        ]
+      }],
+      "default": null,
+      "doc": "Reason for execution failure"
+    },
+    {
+      "name": "plannedMargin",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Planned margin in EUR"
+    },
+    {
+      "name": "realizedMargin",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Realized margin in EUR"
+    },
+    {
+      "name": "marginDelta",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Margin deviation (realized - planned)"
+    },
+    {
+      "name": "revenue",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Revenue in EUR"
+    },
+    {
+      "name": "costs",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Actual costs in EUR"
+    },
+    {
+      "name": "delayMinutes",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Delay caused by additional order (minutes)"
+    },
+    {
+      "name": "co2ImpactKg",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "CO2 impact in kg (negative = reduction)"
+    },
+    {
+      "name": "detourKm",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Actual detour in km"
+    },
+    {
+      "name": "customerId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Customer identifier"
+    },
+    {
+      "name": "driverId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Driver identifier"
+    },
+    {
+      "name": "vehicleId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Vehicle identifier"
+    },
+    {
+      "name": "lane",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Lane identifier (e.g., DE-BER->DE-HAM)"
+    },
+    {
+      "name": "features",
+      "type": {
+        "type": "record",
+        "name": "ScoringFeatures",
+        "fields": [
+          {
+            "name": "revenueScore",
+            "type": "double",
+            "doc": "Revenue score (unnormalized)"
+          },
+          {
+            "name": "capacityUtilizationScore",
+            "type": "double",
+            "doc": "Capacity utilization score (0-1)"
+          },
+          {
+            "name": "priorityScore",
+            "type": "double",
+            "doc": "Priority score (0-1)"
+          },
+          {
+            "name": "riskScore",
+            "type": "double",
+            "doc": "Risk score (0-1, 1 = low risk)"
+          },
+          {
+            "name": "serviceLevelScore",
+            "type": "double",
+            "doc": "Service level score (0-1)"
+          },
+          {
+            "name": "co2Score",
+            "type": "double",
+            "doc": "CO2 score (0-1)"
+          },
+          {
+            "name": "finalHeuristicScore",
+            "type": "double",
+            "doc": "Final weighted heuristic score"
+          },
+          {
+            "name": "mlScore",
+            "type": ["null", "double"],
+            "default": null,
+            "doc": "ML score (if enabled)"
+          },
+          {
+            "name": "blendFactor",
+            "type": ["null", "double"],
+            "default": null,
+            "doc": "Blend factor at scoring time"
+          }
+        ]
+      },
+      "doc": "Feature values at suggestion time"
+    },
+    {
+      "name": "mlMetadata",
+      "type": ["null", {
+        "type": "record",
+        "name": "MLMetadata",
+        "fields": [
+          {
+            "name": "modelVersion",
+            "type": "string",
+            "doc": "Model version identifier"
+          },
+          {
+            "name": "modelUsed",
+            "type": {
+              "type": "enum",
+              "name": "ModelType",
+              "symbols": ["heuristic", "ml", "hybrid"]
+            },
+            "doc": "Scoring model used"
+          },
+          {
+            "name": "featureVectorHash",
+            "type": ["null", "string"],
+            "default": null,
+            "doc": "Hash of feature vector for reproducibility"
+          }
+        ]
+      }],
+      "default": null,
+      "doc": "ML model metadata (if ML enabled)"
+    },
+    {
+      "name": "context",
+      "type": ["null", {
+        "type": "record",
+        "name": "EventContext",
+        "fields": [
+          {
+            "name": "timeOfDay",
+            "type": ["null", {
+              "type": "enum",
+              "name": "TimeOfDay",
+              "symbols": ["MORNING", "MIDDAY", "AFTERNOON", "EVENING", "NIGHT"]
+            }],
+            "default": null,
+            "doc": "Time of day"
+          },
+          {
+            "name": "dayOfWeek",
+            "type": ["null", {
+              "type": "enum",
+              "name": "DayOfWeek",
+              "symbols": ["MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]
+            }],
+            "default": null,
+            "doc": "Day of week"
+          },
+          {
+            "name": "isWeekend",
+            "type": ["null", "boolean"],
+            "default": null,
+            "doc": "Is weekend"
+          },
+          {
+            "name": "weatherCondition",
+            "type": ["null", {
+              "type": "enum",
+              "name": "WeatherCondition",
+              "symbols": ["CLEAR", "CLOUDY", "RAINY", "STORMY", "SNOWY"]
+            }],
+            "default": null,
+            "doc": "Weather condition"
+          },
+          {
+            "name": "trafficCondition",
+            "type": ["null", {
+              "type": "enum",
+              "name": "TrafficCondition",
+              "symbols": ["LIGHT", "NORMAL", "HEAVY", "CONGESTED"]
+            }],
+            "default": null,
+            "doc": "Traffic condition"
+          }
+        ]
+      }],
+      "default": null,
+      "doc": "Context information"
+    }
+  ]
+}

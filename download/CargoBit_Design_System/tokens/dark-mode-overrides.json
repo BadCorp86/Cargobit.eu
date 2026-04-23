@@ -1,0 +1,40 @@
+{
+  "mode": {
+    "dark": {
+      "color": {
+        "background": {
+          "page": { "value": "#0F1115" },
+          "surface": { "value": "#1A1C20" },
+          "surfaceSubtle": { "value": "#2A2D33" }
+        },
+        "text": {
+          "primary": { "value": "#FFFFFF" },
+          "secondary": { "value": "#D1D5DB" },
+          "muted": { "value": "#9CA3AF" },
+          "inverse": { "value": "#000000" }
+        },
+        "border": {
+          "subtle": { "value": "#2F333A" },
+          "strong": { "value": "#4B5563" }
+        },
+        "brand": {
+          "primary": { "value": "#4C8DFF" },
+          "primaryHover": { "value": "#3A6FCC" }
+        },
+        "risk": {
+          "green": { "value": "#27AE60" },
+          "yellow": { "value": "#D4AC0D" },
+          "red": { "value": "#C0392B" }
+        }
+      },
+      "shadow": {
+        "card": {
+          "value": "0 1px 3px rgba(0,0,0,0.5)"
+        },
+        "dropdown": {
+          "value": "0 10px 20px rgba(0,0,0,0.6)"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,356 @@
+{
+  "info": {
+    "name": "CargoBit Payouts E2E Tests",
+    "description": "End-to-End test collection for Payouts API with Newman CI support",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:3000" },
+    { "key": "admin_jwt", "value": "" },
+    { "key": "cron_secret", "value": "" },
+    { "key": "payout_id", "value": "" },
+    { "key": "idempotency_key", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Setup",
+      "item": [
+        {
+          "name": "Generate Idempotency Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "const key = 'payout_e2e_' + Date.now() + '_' + Math.random().toString(36).substring(7);",
+                  "pm.environment.set('idempotency_key', key);",
+                  "console.log('Generated idempotency key:', key);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/health" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Create Payout",
+      "item": [
+        {
+          "name": "Create Payout - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Response has payout_id', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.payout.id).to.exist;",
+                  "    pm.environment.set('payout_id', json.payout.id);",
+                  "});",
+                  "pm.test('Status is PROCESSING or PAID', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(['PROCESSING', 'PAID']).to.include(json.payout.status);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_jwt}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-user-id", "value": "admin_test_user" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"test_shipper_user\",\n  \"amountCents\": 5000,\n  \"currency\": \"EUR\",\n  \"idempotencyKey\": \"{{idempotency_key}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/admin/payouts" }
+          }
+        },
+        {
+          "name": "Create Payout - Idempotency Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200 or 201', () => {",
+                  "    pm.expect([200, 201]).to.include(pm.response.code);",
+                  "});",
+                  "pm.test('Same payout_id returned', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.payout.id).to.equal(pm.environment.get('payout_id'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_jwt}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-user-id", "value": "admin_test_user" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"test_shipper_user\",\n  \"amountCents\": 5000,\n  \"currency\": \"EUR\",\n  \"idempotencyKey\": \"{{idempotency_key}}\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/admin/payouts" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. List Payouts",
+      "item": [
+        {
+          "name": "List All Payouts",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has data array', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.be.true;",
+                  "    pm.expect(json.data).to.be.an('array');",
+                  "});",
+                  "pm.test('Pagination metadata present', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.pagination).to.exist;",
+                  "    pm.expect(json.pagination.total).to.be.at.least(1);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_jwt}}" },
+              { "key": "x-user-id", "value": "admin_test_user" }
+            ],
+            "url": { "raw": "{{base_url}}/api/admin/payouts?limit=50" }
+          }
+        },
+        {
+          "name": "Filter by Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('All results have PAID status', () => {",
+                  "    const json = pm.response.json();",
+                  "    json.data.forEach(p => pm.expect(p.status).to.equal('PAID'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_jwt}}" },
+              { "key": "x-user-id", "value": "admin_test_user" }
+            ],
+            "url": { "raw": "{{base_url}}/api/admin/payouts?status=PAID" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Get Payout Detail",
+      "item": [
+        {
+          "name": "Get Created Payout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Payout ID matches', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.payout.id).to.equal(pm.environment.get('payout_id'));",
+                  "});",
+                  "pm.test('Includes wallet transactions', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.walletTransactions).to.be.an('array');",
+                  "});",
+                  "pm.test('Includes audit trail', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.auditTrail).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_jwt}}" },
+              { "key": "x-user-id", "value": "admin_test_user" }
+            ],
+            "url": { "raw": "{{base_url}}/api/admin/payouts/{{payout_id}}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Error Scenarios",
+      "item": [
+        {
+          "name": "Invalid Amount",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Error code is INVALID_AMOUNT', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.equal('INVALID_AMOUNT');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_jwt}}" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "x-user-id", "value": "admin_test_user" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"test_shipper_user\",\n  \"amountCents\": 50\n}"
+            },
+            "url": { "raw": "{{base_url}}/api/admin/payouts" }
+          }
+        },
+        {
+          "name": "Non-existent Payout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Error code is PAYOUT_NOT_FOUND', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.equal('PAYOUT_NOT_FOUND');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{admin_jwt}}" },
+              { "key": "x-user-id", "value": "admin_test_user" }
+            ],
+            "url": { "raw": "{{base_url}}/api/admin/payouts/non_existent_id_12345" }
+          }
+        },
+        {
+          "name": "Unauthorized Access",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Error code is AUTH_REQUIRED', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.code).to.equal('AUTH_REQUIRED');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/admin/payouts" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "5. Cron Scheduler",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has healthy field', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.healthy).to.exist;",
+                  "});",
+                  "pm.test('Queue stats present', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.queue).to.exist;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": { "raw": "{{base_url}}/api/cron/payouts" }
+          }
+        },
+        {
+          "name": "Run Scheduler",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Response has summary', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.summary).to.exist;",
+                  "});",
+                  "pm.test('Duration is reported', () => {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.duration).to.be.at.least(0);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{cron_secret}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{base_url}}/api/cron/payouts" }
+          }
+        }
+      ]
+    }
+  ]
+}

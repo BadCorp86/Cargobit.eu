@@ -40,18 +40,15 @@ import {
   Eye,
   MousePointer,
   MessageSquare,
-  Home,
-  ArrowLeft,
 } from 'lucide-react';
 import { useAuthStore, type User as UserType } from '@/lib/auth-store';
 
 interface DashboardProps {
   onLogout: () => void;
   onNewTransport: () => void;
-  onBack?: () => void;
 }
 
-export function Dashboard({ onLogout, onNewTransport, onBack }: DashboardProps) {
+export function Dashboard({ onLogout, onNewTransport }: DashboardProps) {
   const { user } = useAuthStore();
 
   if (!user) return null;
@@ -82,19 +79,8 @@ export function Dashboard({ onLogout, onNewTransport, onBack }: DashboardProps) 
       <header className="sticky top-0 z-50 bg-background/95 backdrop-blur-md border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-            {/* Logo with Back Button */}
+            {/* Logo */}
             <div className="flex items-center gap-3">
-              {onBack && (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onBack}
-                  className="gap-2 -ml-2"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  Zurück
-                </Button>
-              )}
               <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
                 <Package className="w-6 h-6 text-primary-foreground" />
               </div>

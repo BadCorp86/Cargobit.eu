@@ -1,0 +1,156 @@
+// CargoBit Database Schema
+// DBML - Database Markup Language
+// Compatible with dbdiagram.io
+
+Table users {
+  id uuid [pk]
+  email text [unique, not null]
+  role text [not null, note: 'shipper, carrier, partner, admin']
+  created_at timestamp [default: `now()`]
+}
+
+Table orders {
+  id uuid [pk]
+  shipper_id uuid [ref: > users.id, not null]
+  carrier_id uuid [ref: > users.id]
+  status text [not null]
+  origin text [not null]
+  destination text [not null]
+  value_eur numeric(12,2)
+  weight_kg numeric(10,2)
+  risk_level text [note: 'GREEN, YELLOW, RED']
+  created_at timestamp [default: `now()`]
+}
+
+Table insurance_policies {
+  id uuid [pk]
+  order_id uuid [ref: > orders.id, unique, not null]
+  customer_id uuid [ref: > users.id, not null]
+  provider text [not null, note: 'ALLIANZ, HDI, AXA, MUNICH_RE, GENERALI']
+  premium_eur numeric(10,2) [not null]
+  coverage_eur numeric(12,2) [not null]
+  commission_eur numeric(10,2)
+  status text [default: 'PENDING', note: 'PENDING, ACTIVE, CANCELLED, EXPIRED, CLAIMED']
+  policy_number text [unique]
+  pdf_url text
+  created_at timestamp [default: `now()`]
+}
+
+Table partners {
+  id uuid [pk]
+  name text [not null]
+  type text [not null, note: 'insurance, ads']
+  contact_email text [not null]
+  api_key_hash text
+  created_at timestamp [default: `now()`]
+}
+
+Table ad_campaigns {
+  id uuid [pk]
+  partner_id uuid [ref: > partners.id, not null]
+  name text [not null]
+  slot text [not null, note: 'homepage-hero, marketplace-sidebar, listing-highlight, order-detail, dashboard-widget']
+  budget_eur numeric(12,2) [not null]
+  cpc_eur numeric(8,4)
+  cpm_eur numeric(8,4)
+  status text [default: 'DRAFT', note: 'DRAFT, PENDING, ACTIVE, PAUSED, COMPLETED']
+  created_at timestamp [default: `now()`]
+  updated_at timestamp
+}
+
+Table ad_impressions {
+  id uuid [pk]
+  impression_id text [unique, not null]
+  campaign_id uuid [ref: > ad_campaigns.id, not null]
+  user_id uuid [ref: > users.id]
+  slot text [not null]
+  risk_level text
+  viewable boolean [default: false]
+  view_duration_ms integer
+  created_at timestamp [default: `now()`]
+  
+  indexes {
+    impression_id [unique]
+    campaign_id
+    created_at
+  }
+}
+
+Table ad_clicks {
+  id uuid [pk]
+  impression_id text [ref: > ad_impressions.impression_id, not null]
+  campaign_id uuid [ref: > ad_campaigns.id, not null]
+  user_id uuid [ref: > users.id]
+  click_position jsonb
+  created_at timestamp [default: `now()`]
+  
+  indexes {
+    impression_id
+    campaign_id
+    created_at
+  }
+}
+
+Table commissions {
+  id uuid [pk]
+  type text [not null, note: 'insurance, ads']
+  reference_id uuid [not null, note: 'Policy-ID or Campaign-ID']
+  partner_id uuid [ref: > partners.id, not null]
+  amount_eur numeric(10,2) [not null]
+  status text [default: 'accrued', note: 'accrued, invoiced, paid']
+  period_month date [not null]
+  invoice_id uuid
+  created_at timestamp [default: `now()`]
+  
+  indexes {
+    type
+    partner_id
+    period_month
+    status
+  }
+}
+
+// Enum Types
+Enum user_role {
+  shipper
+  carrier
+  partner
+  admin
+}
+
+Enum order_status {
+  DRAFT
+  PENDING
+  MATCHED
+  IN_TRANSIT
+  DELIVERED
+  CANCELLED
+}
+
+Enum risk_level {
+  GREEN
+  YELLOW
+  RED
+}
+
+Enum policy_status {
+  PENDING
+  ACTIVE
+  CANCELLED
+  EXPIRED
+  CLAIMED
+}
+
+Enum campaign_status {
+  DRAFT
+  PENDING
+  ACTIVE
+  PAUSED
+  COMPLETED
+}
+
+Enum commission_status {
+  accrued
+  invoiced
+  paid
+}

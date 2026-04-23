@@ -1,0 +1,93 @@
+{
+  "type": "record",
+  "name": "SuggestionDecisionMade",
+  "namespace": "io.cargobit.logistics.events",
+  "doc": "Event emitted when a decision is made on a suggestion",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "SuggestionDecisionEventType",
+        "symbols": ["suggestion.decision.made"]
+      }
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "suggestionId",
+      "type": "string",
+      "doc": "Suggestion identifier"
+    },
+    {
+      "name": "tourId",
+      "type": "string",
+      "doc": "Tour identifier"
+    },
+    {
+      "name": "orderId",
+      "type": "string",
+      "doc": "Order identifier"
+    },
+    {
+      "name": "decision",
+      "type": {
+        "type": "enum",
+        "name": "SuggestionDecision",
+        "symbols": ["ACCEPT", "REJECT"]
+      }
+    },
+    {
+      "name": "decidedBy",
+      "type": {
+        "type": "enum",
+        "name": "DecisionMaker",
+        "symbols": ["DRIVER", "DISPATCHER", "SYSTEM", "AUTO_REJECT"]
+      }
+    },
+    {
+      "name": "decisionLatencySeconds",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Time between suggestion and decision"
+    },
+    {
+      "name": "reason",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Reason for the decision"
+    },
+    {
+      "name": "driverId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Driver who decided (if decidedBy=DRIVER)"
+    },
+    {
+      "name": "dispatcherId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Dispatcher who decided (if decidedBy=DISPATCHER)"
+    },
+    {
+      "name": "score",
+      "type": "double",
+      "doc": "Original suggestion score"
+    },
+    {
+      "name": "rank",
+      "type": ["null", "int"],
+      "default": null,
+      "doc": "Rank of this suggestion among all suggestions for the tour"
+    }
+  ]
+}

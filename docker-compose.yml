@@ -1,0 +1,215 @@
+# ===========================================
+# CargoBit Platform - Docker Compose
+# ===========================================
+# Full development stack for CargoBit
+
+version: '3.9'
+
+services:
+  # ===========================================
+  # DATABASE - PostgreSQL
+  # ===========================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: cargobit-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: cargobit
+      POSTGRES_PASSWORD: cargobit_dev_password
+      POSTGRES_DB: cargobit
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cargobit"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # CACHE - Redis
+  # ===========================================
+  redis:
+    image: redis:7-alpine
+    container_name: cargobit-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ===========================================
+  # FILE STORAGE - MinIO (S3 Compatible)
+  # ===========================================
+  minio:
+    image: minio/minio:latest
+    container_name: cargobit-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin123
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+
+  # ===========================================
+  # EMAIL - Mailhog (Development)
+  # ===========================================
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: cargobit-mailhog
+    restart: unless-stopped
+    ports:
+      - "1025:1025"   # SMTP
+      - "8025:8025"   # Web UI
+    healthcheck:
+      test: ["CMD-SHELL", "echo | nc localhost 1025 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # ===========================================
+  # MONITORING - Prometheus
+  # ===========================================
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: cargobit-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    profiles:
+      - monitoring
+
+  # ===========================================
+  # MONITORING - Grafana
+  # ===========================================
+  grafana:
+    image: grafana/grafana:latest
+    container_name: cargobit-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    profiles:
+      - monitoring
+
+  # ===========================================
+  # MAIN APP - Next.js
+  # ===========================================
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: cargobit-app
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://cargobit:cargobit_dev_password@postgres:5432/cargobit?schema=public
+      REDIS_URL: redis://redis:6379
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - production
+
+  # ===========================================
+  # RISK ENGINE MICROSERVICE
+  # ===========================================
+  risk-engine:
+    build:
+      context: ./mini-services/risk-engine-service
+      dockerfile: Dockerfile
+    container_name: cargobit-risk-engine
+    restart: unless-stopped
+    environment:
+      PORT: 3003
+      DATABASE_URL: postgresql://cargobit:cargobit_dev_password@postgres:5432/cargobit?schema=public
+      REDIS_URL: redis://redis:6379
+    ports:
+      - "3003:3003"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    profiles:
+      - production
+
+  # ===========================================
+  # SECURITY GATEWAY MICROSERVICE
+  # ===========================================
+  security-gateway:
+    build:
+      context: ./mini-services/security-gateway-service
+      dockerfile: Dockerfile
+    container_name: cargobit-security-gateway
+    restart: unless-stopped
+    environment:
+      PORT: 3004
+      RISK_SERVICE_URL: http://risk-engine:3003
+      RISK_SERVICE_TOKEN: ${RISK_SERVICE_TOKEN:-service-token-change-in-production}
+    ports:
+      - "3004:3004"
+    depends_on:
+      - risk-engine
+    profiles:
+      - production
+
+# ===========================================
+# VOLUMES
+# ===========================================
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+
+# ===========================================
+# NETWORKS
+# ===========================================
+networks:
+  default:
+    name: cargobit-network

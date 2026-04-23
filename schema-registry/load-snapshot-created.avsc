@@ -1,0 +1,86 @@
+{
+  "type": "record",
+  "name": "LoadSnapshotCreated",
+  "namespace": "io.cargobit.logistics.events",
+  "doc": "Event emitted when a load snapshot is created (manual entry or vision analysis)",
+  "fields": [
+    {
+      "name": "eventId",
+      "type": "string",
+      "doc": "Unique event identifier"
+    },
+    {
+      "name": "eventType",
+      "type": {
+        "type": "enum",
+        "name": "LoadSnapshotEventType",
+        "symbols": ["load.snapshot.created"]
+      }
+    },
+    {
+      "name": "occurredAt",
+      "type": {
+        "type": "long",
+        "logicalType": "timestamp-millis"
+      }
+    },
+    {
+      "name": "tourId",
+      "type": "string",
+      "doc": "Tour identifier"
+    },
+    {
+      "name": "vehicleId",
+      "type": "string",
+      "doc": "Vehicle identifier"
+    },
+    {
+      "name": "volumeUsedM3",
+      "type": "double",
+      "doc": "Used volume in cubic meters"
+    },
+    {
+      "name": "weightUsedKg",
+      "type": "double",
+      "doc": "Used weight in kilograms"
+    },
+    {
+      "name": "palletsUsed",
+      "type": "int",
+      "doc": "Number of pallets used"
+    },
+    {
+      "name": "confidence",
+      "type": ["null", "double"],
+      "default": null,
+      "doc": "Confidence score (0-1) for vision-based snapshots"
+    },
+    {
+      "name": "source",
+      "type": {
+        "type": "enum",
+        "name": "SnapshotSource",
+        "symbols": ["MANUAL_ENTRY", "VISION_ANALYSIS", "SYSTEM_CALCULATED"]
+      },
+      "doc": "Source of the snapshot"
+    },
+    {
+      "name": "imageId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Image identifier if vision-based"
+    },
+    {
+      "name": "enteredBy",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "User who entered the data (if manual)"
+    },
+    {
+      "name": "segmentId",
+      "type": ["null", "string"],
+      "default": null,
+      "doc": "Tour segment identifier"
+    }
+  ]
+}

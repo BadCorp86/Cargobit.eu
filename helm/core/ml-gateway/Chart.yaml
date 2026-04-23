@@ -1,0 +1,14 @@
+apiVersion: v2
+name: ml-gateway
+description: CargoBit ML Gateway Service
+version: 1.0.0
+appVersion: "1.0.0"
+type: application
+keywords:
+  - ml
+  - gateway
+  - scoring
+  - cargobit
+maintainers:
+  - name: CargoBit Team
+    email: team@cargobit.io

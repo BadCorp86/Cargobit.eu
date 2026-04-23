@@ -1,0 +1,496 @@
+{
+  "info": {
+    "name": "CargoBit Payouts E2E",
+    "description": "End-to-End tests for CargoBit Payouts API",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "adminToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "payoutId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "idempotencyKey",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{adminToken}}",
+        "type": "string"
+      }
+    ]
+  },
+  "item": [
+    {
+      "name": "Setup",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has healthy flag', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('healthy');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            }
+          }
+        },
+        {
+          "name": "Generate Idempotency Key",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "var idempotencyKey = 'test_payout_' + Date.now();",
+                  "pm.collectionVariables.set('idempotencyKey', idempotencyKey);",
+                  "console.log('Generated idempotency key:', idempotencyKey);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Create Payout",
+      "item": [
+        {
+          "name": "Create Payout - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has success flag', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.success).to.be.true;",
+                  "});",
+                  "",
+                  "pm.test('Payout ID is returned', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.payout).to.have.property('id');",
+                  "    pm.collectionVariables.set('payoutId', jsonData.payout.id);",
+                  "});",
+                  "",
+                  "pm.test('Status is PROCESSING or PAID', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(['PROCESSING', 'PAID']).to.include(jsonData.payout.status);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"test_user_001\",\n    \"amountCents\": 10000,\n    \"currency\": \"EUR\",\n    \"idempotencyKey\": \"{{idempotencyKey}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/payouts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "payouts"]
+            }
+          }
+        },
+        {
+          "name": "Create Payout - Idempotency Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Same payout ID returned', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var existingPayoutId = pm.collectionVariables.get('payoutId');",
+                  "    pm.expect(jsonData.payout.id).to.equal(existingPayoutId);",
+                  "});",
+                  "",
+                  "pm.test('Idempotency message present', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.payout.message).to.include('Idempotency');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"test_user_001\",\n    \"amountCents\": 10000,\n    \"currency\": \"EUR\",\n    \"idempotencyKey\": \"{{idempotencyKey}}\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/payouts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "payouts"]
+            }
+          }
+        },
+        {
+          "name": "Create Payout - Validation Error",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('Error code is INVALID_AMOUNT', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.equal('INVALID_AMOUNT');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"userId\": \"test_user_001\",\n    \"amountCents\": 50,\n    \"currency\": \"EUR\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/payouts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "payouts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "List Payouts",
+      "item": [
+        {
+          "name": "List Payouts - All",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data array', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.data).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('Created payout is in list', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    var payoutId = pm.collectionVariables.get('payoutId');",
+                  "    var found = jsonData.data.find(p => p.id === payoutId);",
+                  "    pm.expect(found).to.exist;",
+                  "});",
+                  "",
+                  "pm.test('Pagination info present', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.pagination).to.have.property('total');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/payouts?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "payouts"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
+              ]
+            }
+          }
+        },
+        {
+          "name": "List Payouts - Filter by Status",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('All payouts have PAID status', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    jsonData.data.forEach(p => {",
+                  "        pm.expect(p.status).to.equal('PAID');",
+                  "    });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/payouts?status=PAID",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "payouts"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PAID"
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Get Payout Detail",
+      "item": [
+        {
+          "name": "Get Payout - Success",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Payout details returned', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.payout).to.have.property('id');",
+                  "    pm.expect(jsonData.payout).to.have.property('amountCents');",
+                  "    pm.expect(jsonData.payout).to.have.property('status');",
+                  "});",
+                  "",
+                  "pm.test('Wallet transactions included', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.payout).to.have.property('wallet_transactions');",
+                  "});",
+                  "",
+                  "pm.test('Audit trail included', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.payout).to.have.property('audit_trail');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/payouts/{{payoutId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "payouts", "{{payoutId}}"]
+            }
+          }
+        },
+        {
+          "name": "Get Payout - Not Found",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 404', function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});",
+                  "",
+                  "pm.test('Error code is PAYOUT_NOT_FOUND', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.code).to.equal('PAYOUT_NOT_FOUND');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/admin/payouts/nonexistent_payout_id",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "admin", "payouts", "nonexistent_payout_id"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Scheduler",
+      "item": [
+        {
+          "name": "Health Check",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has healthy flag', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData).to.have.property('healthy');",
+                  "});",
+                  "",
+                  "pm.test('Queue stats present', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.queue).to.have.property('pendingPayouts');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/cron/payouts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "cron", "payouts"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Webhooks",
+      "item": [
+        {
+          "name": "Simulate transfer.paid Event",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Event received', function () {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.expect(jsonData.received).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "stripe-signature",
+                "value": "whsec_test_signature"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"id\": \"evt_test_{{timestamp}}\",\n    \"type\": \"transfer.paid\",\n    \"data\": {\n        \"object\": {\n            \"id\": \"tr_test_{{timestamp}}\",\n            \"amount\": 10000,\n            \"currency\": \"eur\",\n            \"metadata\": {\n                \"payout_id\": \"{{payoutId}}\"\n            }\n        }\n    },\n    \"created\": {{timestamp}}\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/stripe/webhook/payouts",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "stripe", "webhook", "payouts"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #FFFFFF;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SimHei', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+  #diagram { width: fit-content; min-width: 800px; }
+</style>
+</head>
+<body>
+<div id="diagram">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    participant TApp as Transporteur App
+    participant API as Backend API
+    participant DB as Database
+    participant WS as WebSocket Server
+    participant SApp as Shipper App
+    participant Notify as Notification Service
+
+    rect rgb(239, 246, 255)
+    Note over TApp,DB: Phase 1: Location Updates (Periodic)
+    loop alle 30 Sekunden
+        TApp->>API: POST /jobs/{id}/location<br/>{lat, lng, speed, heading}
+        API->>DB: UPDATE job_locations
+        API->>WS: broadcast("location_update", job_id, location)
+        WS-->>SApp: {lat, lng, timestamp}
+    end
+    end
+
+    rect rgb(240, 253, 244)
+    Note over TApp,DB: Phase 2: Status Transitions
+    TApp->>API: PATCH /jobs/{id}/status<br/>{status: "in_transit"}
+    API->>DB: UPDATE jobs SET status = "in_transit"
+    API->>DB: INSERT status_history
+    API->>WS: broadcast("status_change", job_id, "in_transit")
+    WS-->>SApp: Job gestartet
+    API->>Notify: push_notification(shipper_id, "Transport gestartet")
+    Notify-->>SApp: 🔔 Push Notification
+    end
+
+    rect rgb(255, 247, 237)
+    Note over TApp,DB: Phase 3: Checkpoints & Milestones
+    TApp->>API: POST /jobs/{id}/checkpoints<br/>{type: "pickup", location, photos[]}
+    API->>DB: INSERT checkpoints
+    API->>DB: UPDATE jobs SET pickup_at = NOW()
+    API->>WS: broadcast("checkpoint", job_id, pickup_data)
+    WS-->>SApp: Abholung bestätigt
+    Note over TApp,API: Optional: Signature Capture
+    TApp->>API: POST /jobs/{id}/signature<br/>{signature_base64, recipient_name}
+    API->>DB: UPDATE jobs SET signature_url
+    end
+
+    rect rgb(245, 243, 255)
+    Note over TApp,Notify: Phase 4: Delivery Confirmation
+    TApp->>API: PATCH /jobs/{id}/status<br/>{status: "delivered", delivery_proof}
+    API->>DB: UPDATE jobs SET status = "delivered"
+    API->>DB: UPDATE jobs SET delivered_at = NOW()
+    API->>WS: broadcast("status_change", job_id, "delivered")
+    WS-->>SApp: ✅ Lieferung abgeschlossen
+    API->>Notify: push_notification(shipper_id, "Lieferung erfolgt")
+    API->>Notify: email_receipt(shipper_id, job_details)
+    end
+
+    rect rgb(254, 243, 199)
+    Note over SApp,DB: Phase 5: History & Audit Trail
+    SApp->>API: GET /jobs/{id}/timeline
+    API->>DB: SELECT * FROM status_history WHERE job_id
+    DB-->>API: timeline_events[]
+    API-->>SApp: [{status, timestamp, location, actor}]
+    SApp->>API: GET /jobs/{id}/tracking
+    API->>DB: SELECT * FROM job_locations ORDER BY timestamp
+    DB-->>API: location_history[]
+    API-->>SApp: Polyline für Karte
+    end
+  </pre>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#EFF6FF',
+      primaryBorderColor: '#3B82F6',
+      primaryTextColor: '#1E293B',
+      lineColor: '#94A3B8',
+      secondaryColor: '#F0FDF4',
+      secondaryBorderColor: '#10B981',
+      secondaryTextColor: '#1E293B',
+      tertiaryColor: '#FFF7ED',
+      tertiaryBorderColor: '#F59E0B',
+      tertiaryTextColor: '#1E293B',
+      noteBkgColor: '#F8FAFC',
+      noteTextColor: '#6B7280',
+      noteBorderColor: '#E2E8F0',
+      fontSize: '13px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, SimHei, sans-serif',
+    },
+    sequence: {
+      mirrorActors: false,
+      messageAlign: 'center',
+      actorMargin: 50,
+      width: 160,
+      height: 65,
+      boxMargin: 16,
+      boxTextMargin: 8,
+      noteMargin: 16,
+      messageMargin: 35,
+      bottomMarginAdj: 1,
+    },
+  });
+</script>
+</body>
+</html>

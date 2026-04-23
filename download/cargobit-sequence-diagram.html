@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>CargoBit End-to-End Sequence Diagram</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  
+  :root {
+    --text: #111827;
+    --text-sub: #6B7280;
+    --text-muted: #9CA3AF;
+    --bg: #FFFFFF;
+    --surface: #F9FAFB;
+    --border: #E5E7EB;
+    --blue: #3B82F6;
+    --cyan: #06B6D4;
+    --purple: #8B5CF6;
+    --amber: #F59E0B;
+    --red: #EF4444;
+    --green: #10B981;
+    --connector: #94A3B8;
+  }
+  
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'SimHei', system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    -webkit-font-smoothing: antialiased;
+  }
+  
+  #root { 
+    width: fit-content; 
+    min-width: 1000px; 
+    margin: 0 auto; 
+    padding: 48px 40px; 
+  }
+
+  /* Header */
+  .hero-header {
+    background: linear-gradient(135deg, #1E293B 0%, #0F172A 100%);
+    border-radius: 16px; 
+    padding: 40px 48px; 
+    color: white; 
+    margin-bottom: 40px;
+  }
+  .hero-header h1 { 
+    font-size: 28px; 
+    font-weight: 700; 
+    margin-bottom: 12px; 
+  }
+  .hero-header p { 
+    font-size: 15px; 
+    color: #94A3B8; 
+    max-width: 700px; 
+    line-height: 1.6; 
+  }
+  .hero-badge {
+    display: inline-block; 
+    background: rgba(59,130,246,0.15);
+    color: #60A5FA; 
+    font-size: 12px; 
+    font-weight: 600;
+    padding: 4px 12px; 
+    border-radius: 20px; 
+    margin-bottom: 16px;
+  }
+
+  /* Legend */
+  .flow-legend {
+    display: flex; 
+    gap: 24px; 
+    justify-content: center;
+    margin-bottom: 32px; 
+    padding: 16px 24px;
+    background: #F9FAFB; 
+    border-radius: 8px; 
+    border: 1px solid #E5E7EB;
+  }
+  .legend-item { 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    font-size: 13px; 
+    color: #4B5563; 
+  }
+  .legend-dot { 
+    width: 12px; 
+    height: 12px; 
+    border-radius: 3px; 
+    border: 2px solid; 
+  }
+  .legend-role {
+    display: flex; 
+    align-items: center; 
+    gap: 6px; 
+    font-size: 12px; 
+    color: #6B7280;
+    padding: 4px 10px;
+    border-radius: 4px;
+    background: #F3F4F6;
+  }
+
+  /* Phase Groups */
+  .phase-group {
+    background: #F8FAFC; 
+    border-radius: 12px; 
+    padding: 20px 24px;
+    margin-bottom: 20px;
+    position: relative;
+  }
+  .phase-title {
+    font-size: 16px; 
+    font-weight: 700; 
+    padding: 10px 16px;
+    border-radius: 8px; 
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .phase-title .phase-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.1);
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .phase-steps { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 10px; 
+    padding-left: 12px; 
+  }
+  
+  /* Step */
+  .phase-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px; 
+    background: white; 
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    position: relative;
+  }
+  .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; 
+    height: 24px;
+    border-radius: 50%; 
+    font-size: 12px; 
+    font-weight: 600;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .step-content {
+    flex: 1;
+  }
+  .step-title {
+    font-size: 14px; 
+    font-weight: 600; 
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+  .step-desc {
+    font-size: 13px; 
+    color: var(--text-sub);
+    line-height: 1.5;
+  }
+  .step-api {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    font-size: 11px;
+    background: #F1F5F9;
+    padding: 2px 8px;
+    border-radius: 4px;
+    color: #64748B;
+    margin-top: 6px;
+    display: inline-block;
+  }
+  .step-actor {
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 4px;
+  }
+
+  /* Phase connectors */
+  .phase-connector {
+    text-align: center; 
+    color: #94A3B8; 
+    font-size: 24px; 
+    margin: 8px 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+  }
+  .phase-connector::before,
+  .phase-connector::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #E2E8F0;
+    max-width: 200px;
+  }
+
+  /* Actor colors */
+  .actor-shipper { background: #DBEAFE; color: #1E40AF; }
+  .actor-carrier { background: #D1FAE5; color: #065F46; }
+  .actor-system { background: #F3E8FF; color: #7C3AED; }
+  .actor-pricing { background: #FEF3C7; color: #92400E; }
+  .actor-matching { background: #FCE7F3; color: #9D174D; }
+
+  /* Phase colors - Blue-gray progression */
+  .phase-1 .phase-title { background: #F0F4F8; color: #334155; border-left: 4px solid #64748B; }
+  .phase-1 .step-num { background: #E2E8F0; color: #475569; }
+  
+  .phase-2 .phase-title { background: #E8EDF2; color: #1E3A5F; border-left: 4px solid #5B7A99; }
+  .phase-2 .step-num { background: #DBEAFE; color: #1E3A5F; }
+  
+  .phase-3 .phase-title { background: #E0E7EF; color: #1E3050; border-left: 4px solid #4A6B8A; }
+  .phase-3 .step-num { background: #D0D9E4; color: #1E3050; }
+  
+  .phase-4 .phase-title { background: #D8E0EA; color: #172540; border-left: 4px solid #3A5C7A; }
+  .phase-4 .step-num { background: #C7D2E0; color: #172540; }
+  
+  .phase-5 .phase-title { background: #D0D8E5; color: #1E3050; border-left: 4px solid #2B5473; }
+  .phase-5 .step-num { background: #BFC9D8; color: #1E3050; }
+
+  /* Data flow box */
+  .data-flow {
+    background: linear-gradient(135deg, #F8FAFC 0%, #F1F5F9 100%);
+    border: 1px dashed #CBD5E1;
+    border-radius: 8px;
+    padding: 12px 16px;
+    margin-top: 8px;
+    font-size: 12px;
+  }
+  .data-flow-title {
+    font-weight: 600;
+    color: #475569;
+    margin-bottom: 6px;
+  }
+  .data-flow code {
+    font-family: 'SF Mono', 'Consolas', monospace;
+    background: #E2E8F0;
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #334155;
+  }
+
+  /* Footer */
+  .footer {
+    margin-top: 40px;
+    padding: 20px 24px;
+    background: #F8FAFC;
+    border-radius: 8px;
+    border: 1px solid #E5E7EB;
+  }
+  .footer h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 12px;
+  }
+  .footer-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+  .footer-item {
+    font-size: 12px;
+    color: #6B7280;
+  }
+  .footer-item strong {
+    color: #374151;
+    display: block;
+    margin-bottom: 4px;
+  }
+</style>
+</head>
+<body>
+<div id="root">
+  <!-- Header -->
+  <div class="hero-header">
+    <span class="hero-badge">CargoBit Platform</span>
+    <h1>End-to-End Sequence Diagram</h1>
+    <p>Order → Pricing → Bids → Matching → Execution: Vollständiger Datenfluss vom Auftragseingang bis zur Transportausführung mit allen Service-Interaktionen.</p>
+  </div>
+
+  <!-- Legend -->
+  <div class="flow-legend">
+    <div class="legend-item">
+      <div class="legend-dot" style="border-color:#3B82F6;background:#EFF6FF;"></div>
+      Service Call
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="border-color:#10B981;background:#D1FAE5;"></div>
+      User Action
+    </div>
+    <div class="legend-item">
+      <div class="legend-dot" style="border-color:#8B5CF6;background:#EDE9FE;"></div>
+      Database Write
+    </div>
+    <span class="legend-role actor-shipper">Shipper</span>
+    <span class="legend-role actor-carrier">Carrier</span>
+    <span class="legend-role actor-system">System</span>
+    <span class="legend-role actor-pricing">Pricing</span>
+    <span class="legend-role actor-matching">Matching</span>
+  </div>
+
+  <!-- Phase 1: Order Creation -->
+  <div class="phase-group phase-1">
+    <div class="phase-title">
+      <span class="phase-num">1</span>
+      Phase: Order Creation & Pricing
+    </div>
+    <div class="phase-steps">
+      <div class="phase-step">
+        <span class="step-num">1.1</span>
+        <div class="step-content">
+          <div class="step-title">Shipper erstellt neuen Transportauftrag</div>
+          <div class="step-desc">Shipper gibt Routendaten (Pickup/Delivery), Frachtdaten (Gewicht, Volumen), Anforderungen (ADR, Kühlung) ein.</div>
+          <span class="step-api">POST /orders</span>
+        </div>
+        <span class="step-actor actor-shipper">Shipper</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">1.2</span>
+        <div class="step-content">
+          <div class="step-title">Order-Service ruft Pricing-Service auf</div>
+          <div class="step-desc">Berechnet Marktpreis, Startpreis, Mindestpreis basierend auf Diesel, Maut, Fahrzeit, Risiko.</div>
+          <span class="step-api">POST /pricing/market-price</span>
+        </div>
+        <span class="step-actor actor-pricing">Pricing-Service</span>
+        <div class="data-flow">
+          <div class="data-flow-title">External Data Calls:</div>
+          <code>GET /fuel-prices</code> → Fuel-DB &nbsp;|&nbsp; 
+          <code>GET /toll-cost</code> → Toll-API &nbsp;|&nbsp; 
+          <code>GET /labor-rates</code> → Labor-DB
+        </div>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">1.3</span>
+        <div class="step-content">
+          <div class="step-title">Pricing-Service berechnet CostBreakdown</div>
+          <div class="step-desc">computeCostBreakdown(): baseCost + fuelCost + tollCost + laborCost + riskCost → total</div>
+          <span class="step-api">INSERT order_pricing</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+        <div class="data-flow">
+          <div class="data-flow-title">Pricing Response:</div>
+          <code>marketPrice: 1.250€</code> &nbsp;|&nbsp; 
+          <code>startPrice: 1.180€</code> &nbsp;|&nbsp; 
+          <code>minPrice: 980€</code>
+        </div>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">1.4</span>
+        <div class="step-content">
+          <div class="step-title">Order erstellt mit Pricing-Context</div>
+          <div class="step-desc">Order-Service speichert Order und zeigt Shipper den empfohlenen Preisbereich.</div>
+          <span class="step-api">INSERT orders → Response: order + pricing</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-connector">↓</div>
+
+  <!-- Phase 2: Carrier Bidding -->
+  <div class="phase-group phase-2">
+    <div class="phase-title">
+      <span class="phase-num">2</span>
+      Phase: Carrier Bidding & Validation
+    </div>
+    <div class="phase-steps">
+      <div class="phase-step">
+        <span class="step-num">2.1</span>
+        <div class="step-content">
+          <div class="step-title">Carrier sieht verfügbare Aufträge</div>
+          <div class="step-desc">Frontend zeigt Order-Details + PriceBreakdownCard (Marktpreis, Kostenstruktur transparent).</div>
+          <span class="step-api">GET /transports/available</span>
+        </div>
+        <span class="step-actor actor-carrier">Carrier</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">2.2</span>
+        <div class="step-content">
+          <div class="step-title">Carrier gibt Gebot ein</div>
+          <div class="step-desc">BidInputWithValidation Komponente mit Live-Feedback (green/yellow/red).</div>
+          <span class="step-api">Input: bidPrice €</span>
+        </div>
+        <span class="step-actor actor-carrier">Carrier</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">2.3</span>
+        <div class="step-content">
+          <div class="step-title">Frontend validiert Gebot via Pricing-Service</div>
+          <div class="step-desc">Prüft: bidPrice ≥ minPrice, Risiko-Level, berechnet priceScore (0.0-1.0).</div>
+          <span class="step-api">POST /pricing/orders/{id}/bid/validate</span>
+        </div>
+        <span class="step-actor actor-pricing">Pricing-Service</span>
+        <div class="data-flow">
+          <div class="data-flow-title">Validation Response:</div>
+          <code>valid: true</code> &nbsp;|&nbsp; 
+          <code>priceScore: 0.72</code> &nbsp;|&nbsp; 
+          <code>feedback: "Guter Preis"</code>
+        </div>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">2.4</span>
+        <div class="step-content">
+          <div class="step-title">Gebot wird gespeichert</div>
+          <div class="step-desc">Bid-Service speichert validiertes Gebot mit priceScore für Matching.</div>
+          <span class="step-api">POST /bids → INSERT carrier_bids</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-connector">↓</div>
+
+  <!-- Phase 3: Matching Engine -->
+  <div class="phase-group phase-3">
+    <div class="phase-title">
+      <span class="phase-num">3</span>
+      Phase: Matching Engine Processing
+    </div>
+    <div class="phase-steps">
+      <div class="phase-step">
+        <span class="step-num">3.1</span>
+        <div class="step-content">
+          <div class="step-title">Matching wird getriggert</div>
+          <div class="step-desc">Scheduler oder Event (Bidding-Ende) startet Matching-Prozess.</div>
+          <span class="step-api">POST /matching/orders/{id}/match</span>
+        </div>
+        <span class="step-actor actor-matching">Matching-Service</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">3.2</span>
+        <div class="step-content">
+          <div class="step-title">Lade alle validen Bids</div>
+          <div class="step-desc">Nur Bids mit valid=true werden berücksichtigt (Pricing-Service bereits geprüft).</div>
+          <span class="step-api">SELECT FROM carrier_bids WHERE valid=true</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">3.3</span>
+        <div class="step-content">
+          <div class="step-title">Berechne Carrier Scores</div>
+          <div class="step-desc">Score = 0.25×priceScore + 0.25×reliability + 0.20×capacity + 0.15×distance + 0.15×risk</div>
+          <span class="step-api">computeScore() → MATCH_SCORE</span>
+        </div>
+        <span class="step-actor actor-matching">Matching-Service</span>
+        <div class="data-flow">
+          <div class="data-flow-title">External Data Calls:</div>
+          <code>GET /carrier-stats</code> → reliability &nbsp;|&nbsp; 
+          <code>GET /risk-score</code> → riskScore &nbsp;|&nbsp; 
+          <code>GET /capacity</code> → capacity
+        </div>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">3.4</span>
+        <div class="step-content">
+          <div class="step-title">Filter & Rank Carriers</div>
+          <div class="step-desc">Nur Carrier mit Score ≥ 0.6 qualifizieren. Sortierung absteigend nach Score.</div>
+          <span class="step-api">filter(score ≥ 0.6).sort(desc)</span>
+        </div>
+        <span class="step-actor actor-matching">Matching-Service</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">3.5</span>
+        <div class="step-content">
+          <div class="step-title">Besten Carrier zuweisen</div>
+          <div class="step-desc">Order-Service erhält Assignment mit vollständiger Erklärung (Top-3 Gründe).</div>
+          <span class="step-api">POST /orders/{id}/assign</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-connector">↓</div>
+
+  <!-- Phase 4: Execution -->
+  <div class="phase-group phase-4">
+    <div class="phase-title">
+      <span class="phase-num">4</span>
+      Phase: Execution & Tracking
+    </div>
+    <div class="phase-steps">
+      <div class="phase-step">
+        <span class="step-num">4.1</span>
+        <div class="step-content">
+          <div class="step-title">Carrier erhält Zuweisung</div>
+          <div class="step-desc">Push-Notification + In-App Alert mit Auftragsdetails.</div>
+          <span class="step-api">POST /notifications → Carrier App</span>
+        </div>
+        <span class="step-actor actor-carrier">Carrier</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">4.2</span>
+        <div class="step-content">
+          <div class="step-title">Shipper erhält Zuweisung</div>
+          <div class="step-desc">Notification mit Carrier-Info, Preis, ETA.</div>
+          <span class="step-api">POST /notifications → Shipper App</span>
+        </div>
+        <span class="step-actor actor-shipper">Shipper</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">4.3</span>
+        <div class="step-content">
+          <div class="step-title">Carrier akzeptiert Transport</div>
+          <div class="step-desc">Execution-Service erstellt Transport-Record, initiiert GPS-Tracking.</div>
+          <span class="step-api">POST /execution/accept → INSERT executed_transports</span>
+        </div>
+        <span class="step-actor actor-carrier">Carrier</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">4.4</span>
+        <div class="step-content">
+          <div class="step-title">Transport-Tracking aktiv</div>
+          <div class="step-desc">Live GPS-Updates, Status-Updates (PICKED_UP, IN_TRANSIT, DELIVERED).</div>
+          <span class="step-api">WebSocket: gps_updates, status_changes</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase-connector">↓</div>
+
+  <!-- Phase 5: Completion -->
+  <div class="phase-group phase-5">
+    <div class="phase-title">
+      <span class="phase-num">5</span>
+      Phase: Completion & Settlement
+    </div>
+    <div class="phase-steps">
+      <div class="phase-step">
+        <span class="step-num">5.1</span>
+        <div class="step-content">
+          <div class="step-title">Transport abgeschlossen</div>
+          <div class="step-desc">Carrier markiert als DELIVERED, Proof of Delivery (POD) hochgeladen.</div>
+          <span class="step-api">POST /transports/{id}/complete</span>
+        </div>
+        <span class="step-actor actor-carrier">Carrier</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">5.2</span>
+        <div class="step-content">
+          <div class="step-title">Carrier-Stats aktualisiert</div>
+          <div class="step-desc">onTimeRate, completedOrders, avgRating neu berechnet.</div>
+          <span class="step-api">UPDATE carrier_stats</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">5.3</span>
+        <div class="step-content">
+          <div class="step-title">ML Pipeline: executed_price speichern</div>
+          <div class="step-desc">Für Training des ML-Preismodells: executed_price_eur → future model improvement.</div>
+          <span class="step-api">INSERT training_data (features + executed_price)</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+      <div class="phase-step">
+        <span class="step-num">5.4</span>
+        <div class="step-content">
+          <div class="step-title">Payment Settlement</div>
+          <div class="step-desc">Escrow-Release an Carrier, Platform-Fee abgezogen.</div>
+          <span class="step-api">POST /wallet/settlement</span>
+        </div>
+        <span class="step-actor actor-system">System</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer Info -->
+  <div class="footer">
+    <h3>Key Integrations</h3>
+    <div class="footer-grid">
+      <div class="footer-item">
+        <strong>Pricing-Service</strong>
+        Liefert priceScore (0.0-1.0) für Matching. Matching nutzt NIEMALS raw bid_price direkt.
+      </div>
+      <div class="footer-item">
+        <strong>Matching-Engine</strong>
+        Gewichtung: 25% Preis + 25% Reliability + 20% Capacity + 15% Distance + 15% Risk
+      </div>
+      <div class="footer-item">
+        <strong>ML Pipeline</strong>
+        Training mit executed_price_eur → kontinuierliche Verbesserung von marketPrice-Vorhersagen
+      </div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

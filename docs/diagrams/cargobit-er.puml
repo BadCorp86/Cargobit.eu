@@ -1,0 +1,111 @@
+@startuml CargoBit ER Diagram
+
+!define TABLE(name) entity name << (T,#FFAAAA) >>
+!define PK(x) * x : UUID
+!define FK(x) x : UUID
+
+TABLE(users) {
+  PK(id)
+  --
+  email : TEXT
+  role  : TEXT  <<shipper|carrier|partner|admin>>
+  created_at : TIMESTAMP
+}
+
+TABLE(orders) {
+  PK(id)
+  --
+  shipper_id  : UUID
+  carrier_id  : UUID
+  status      : TEXT
+  origin      : TEXT
+  destination : TEXT
+  value_eur   : NUMERIC
+  weight_kg   : NUMERIC
+  risk_level  : TEXT
+  created_at  : TIMESTAMP
+}
+
+TABLE(insurance_policies) {
+  PK(id)
+  --
+  order_id       : UUID
+  customer_id    : UUID
+  provider       : TEXT
+  premium_eur    : NUMERIC
+  coverage_eur   : NUMERIC
+  commission_eur : NUMERIC
+  status         : TEXT
+  policy_number  : TEXT
+  pdf_url        : TEXT
+  created_at     : TIMESTAMP
+}
+
+TABLE(partners) {
+  PK(id)
+  --
+  name        : TEXT
+  type        : TEXT <<insurance|ads>>
+  contact_email : TEXT
+}
+
+TABLE(ad_campaigns) {
+  PK(id)
+  --
+  partner_id : UUID
+  name       : TEXT
+  slot       : TEXT
+  budget_eur : NUMERIC
+  cpc_eur    : NUMERIC
+  cpm_eur    : NUMERIC
+  status     : TEXT
+  created_at : TIMESTAMP
+}
+
+TABLE(ad_impressions) {
+  PK(id)
+  --
+  impression_id : TEXT
+  campaign_id   : UUID
+  user_id       : UUID
+  slot          : TEXT
+  risk_level    : TEXT
+  created_at    : TIMESTAMP
+}
+
+TABLE(ad_clicks) {
+  PK(id)
+  --
+  impression_id : TEXT
+  campaign_id   : UUID
+  user_id       : UUID
+  created_at    : TIMESTAMP
+}
+
+TABLE(commissions) {
+  PK(id)
+  --
+  type         : TEXT <<insurance|ads>>
+  reference_id : UUID
+  partner_id   : UUID
+  amount_eur   : NUMERIC
+  status       : TEXT <<accrued|invoiced|paid>>
+  period_month : DATE
+  created_at   : TIMESTAMP
+}
+
+users ||--o{ orders : shipper
+users ||--o{ orders : carrier
+orders ||--|| policies : has
+users ||--o{ policies : customer
+
+partners ||--o{ ad_campaigns : owns
+ad_campaigns ||--o{ ad_impressions : has
+ad_campaigns ||--o{ ad_clicks : has
+ad_impressions ||--o{ ad_clicks : from
+
+partners ||--o{ commissions : receives
+policies ||--o{ commissions : insurance_ref
+ad_campaigns ||--o{ commissions : ads_ref
+
+@enduml

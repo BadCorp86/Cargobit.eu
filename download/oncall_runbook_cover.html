@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>On-Call Operational Runbook</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --c-bg: #f7f7f6;
+            --c-accent: #2c6f86;
+            --c-text: #1e1d1b;
+            --c-muted: #87857d;
+            --c-block: #686049;
+            --c-border: #c5bea8;
+            --c-error: #8d4741;
+            --c-warning: #b08c46;
+            --c-success: #417653;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        @page {
+            size: 794px 1123px;
+            margin: 0;
+        }
+        
+        html, body {
+            width: 794px;
+            height: 1123px;
+            margin: 0;
+            padding: 0;
+            background: var(--c-bg);
+            font-family: 'Inter', sans-serif;
+            overflow: hidden;
+        }
+        
+        .cover {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            padding: 80px 60px;
+        }
+        
+        /* Top decorative line */
+        .top-line {
+            position: absolute;
+            top: 60px;
+            left: 60px;
+            right: 60px;
+            height: 3px;
+            background: var(--c-error);
+        }
+        
+        /* Kicker */
+        .kicker {
+            font-size: 12px;
+            font-weight: 500;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            color: var(--c-muted);
+            margin-top: 40px;
+        }
+        
+        /* Main title */
+        .title {
+            font-size: 40px;
+            font-weight: 700;
+            color: var(--c-text);
+            line-height: 1.2;
+            margin-top: 20px;
+            max-width: 600px;
+        }
+        
+        .title-line {
+            display: block;
+        }
+        
+        /* Subtitle */
+        .subtitle {
+            font-size: 16px;
+            font-weight: 400;
+            color: var(--c-accent);
+            margin-top: 16px;
+            line-height: 1.5;
+        }
+        
+        /* Severity indicators */
+        .severity-row {
+            position: absolute;
+            top: 320px;
+            left: 60px;
+            right: 60px;
+            display: flex;
+            gap: 20px;
+        }
+        
+        .severity-box {
+            flex: 1;
+            padding: 12px 16px;
+            background: white;
+            border-left: 3px solid var(--c-border);
+        }
+        
+        .severity-box.sev1 { border-left-color: var(--c-error); }
+        .severity-box.sev2 { border-left-color: var(--c-warning); }
+        .severity-box.sev3 { border-left-color: var(--c-accent); }
+        .severity-box.sev4 { border-left-color: var(--c-success); }
+        
+        .severity-label {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            margin-bottom: 4px;
+        }
+        
+        .severity-box.sev1 .severity-label { color: var(--c-error); }
+        .severity-box.sev2 .severity-label { color: var(--c-warning); }
+        .severity-box.sev3 .severity-label { color: var(--c-accent); }
+        .severity-box.sev4 .severity-label { color: var(--c-success); }
+        
+        .severity-time {
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--c-text);
+        }
+        
+        /* Summary box */
+        .summary-box {
+            position: absolute;
+            bottom: 220px;
+            left: 60px;
+            right: 60px;
+            padding: 20px 24px;
+            background: white;
+            border-left: 4px solid var(--c-accent);
+        }
+        
+        .summary-title {
+            font-size: 11px;
+            font-weight: 600;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+            color: var(--c-accent);
+            margin-bottom: 8px;
+        }
+        
+        .summary-text {
+            font-size: 13px;
+            line-height: 1.6;
+            color: var(--c-text);
+        }
+        
+        /* Meta info */
+        .meta {
+            position: absolute;
+            bottom: 80px;
+            left: 60px;
+            right: 60px;
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end;
+        }
+        
+        .meta-left {
+            font-size: 11px;
+            color: var(--c-muted);
+            line-height: 1.8;
+        }
+        
+        .meta-right {
+            font-size: 10px;
+            color: var(--c-muted);
+            text-align: right;
+        }
+        
+        /* Bottom line */
+        .bottom-line {
+            position: absolute;
+            bottom: 60px;
+            left: 60px;
+            right: 60px;
+            height: 1px;
+            background: var(--c-border);
+        }
+        
+        /* Vertical accent */
+        .vertical-accent {
+            position: absolute;
+            left: 60px;
+            top: 140px;
+            width: 1px;
+            height: 80px;
+            background: var(--c-border);
+        }
+    </style>
+</head>
+<body>
+    <div class="cover">
+        <div class="top-line"></div>
+        <div class="vertical-accent"></div>
+        
+        <div class="kicker">CargoBit Security Operations</div>
+        
+        <h1 class="title">
+            <span class="title-line">On-Call Operational</span>
+            <span class="title-line">Runbook</span>
+        </h1>
+        
+        <p class="subtitle">Quick Reference Guide for Security-Layer Incidents<br/>Gateway, Risk-Engine, Mitigation, Audit, Notification</p>
+        
+        <div class="severity-row">
+            <div class="severity-box sev1">
+                <div class="severity-label">SEV-1 Critical</div>
+                <div class="severity-time">5 min response</div>
+            </div>
+            <div class="severity-box sev2">
+                <div class="severity-label">SEV-2 High</div>
+                <div class="severity-time">15 min response</div>
+            </div>
+            <div class="severity-box sev3">
+                <div class="severity-label">SEV-3 Medium</div>
+                <div class="severity-time">60 min response</div>
+            </div>
+            <div class="severity-box sev4">
+                <div class="severity-label">SEV-4 Low</div>
+                <div class="severity-time">24 h response</div>
+            </div>
+        </div>
+        
+        <div class="summary-box">
+            <div class="summary-title">Purpose</div>
+            <div class="summary-text">
+                This runbook provides immediate, actionable guidance for on-call engineers handling security-layer incidents. 
+                Keep this document accessible at all times during on-call shifts. Follow the standard checklist for every incident, 
+                then apply specific procedures based on incident type.
+            </div>
+        </div>
+        
+        <div class="meta">
+            <div class="meta-left">
+                <strong>Classification:</strong> Internal - Operations<br/>
+                <strong>Review Cycle:</strong> Monthly
+            </div>
+            <div class="meta-right">
+                Version 1.0<br/>
+                April 2026
+            </div>
+        </div>
+        
+        <div class="bottom-line"></div>
+    </div>
+</body>
+</html>

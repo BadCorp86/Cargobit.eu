@@ -15,7 +15,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { SecurityConfigService } from '@/services/security-config.service';
 import { FraudScoringService, CarrierStats, BidContext } from '@/services/fraud-scoring.service';
-import { prisma } from '@/lib/db';
+import { db } from '@/lib/db';
 
 // =============================================================================
 // TYPES
@@ -112,7 +112,7 @@ export async function POST(
     const configVersion = securityConfig.getConfigVersion();
     
     // Get order with pricing
-    const order = await prisma.order.findUnique({
+    const order = await db.order.findUnique({
       where: { id: orderId },
       include: {
         pricing: true,
@@ -328,7 +328,7 @@ async function getCarrierStats(carrierId: string): Promise<CarrierStats> {
   // In production, this would query the database
   // For now, return defaults
   
-  const carrier = await prisma.user.findUnique({
+  const carrier = await db.user.findUnique({
     where: { id: carrierId },
     include: {
       driverProfile: true,

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Insurance Flow - CargoBit</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #FAFBFE;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SimHei', sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 48px;
+  }
+  #diagram { width: fit-content; min-width: 900px; }
+</style>
+</head>
+<body>
+<div id="diagram">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant Frontend as Frontend
+    participant Backend as Backend API
+    participant Insurance as Insurance Service
+    participant DB as Database
+    participant Partner as Insurance Partner
+
+    Note over User,Frontend: Phase 1: Quote Request
+    
+    User->>Frontend: Opens order details
+    Frontend->>Backend: GET /orders/id
+    Backend->>DB: SELECT order WHERE id
+    DB-->>Backend: Order data
+    Backend-->>Frontend: Order details
+    
+    Frontend->>Backend: GET /insurance/quote?orderId=...
+    Backend->>Insurance: Calculate premium
+    Insurance->>Insurance: Evaluate risk factors
+    Insurance-->>Backend: QuoteResponse (Tiers)
+    Backend-->>Frontend: Quote + Pricing Options
+    
+    Note over User,Frontend: Phase 2: Policy Creation
+    
+    User->>Frontend: Selects tier and clicks "Confirm"
+    Frontend->>Backend: POST /insurance/policy
+    Backend->>Backend: Validate quote (not expired)
+    Backend->>Insurance: POST /policy (create)
+    Insurance->>Partner: API Call (create policy)
+    Partner-->>Insurance: PolicyNumber + PDF URL
+    Insurance-->>Backend: PolicyResponse
+    Backend->>DB: INSERT insurance_policies
+    Backend->>DB: INSERT commissions (type=insurance)
+    Backend-->>Frontend: Policy confirmed + PDF
+    
+    Note over User,Frontend: Phase 3: Webhook Events
+    
+    Partner->>Backend: Webhook /insurance/issued
+    Backend->>DB: UPDATE policy SET status=active
+    Backend->>DB: INSERT insurance_webhook_logs
+    Backend-->>Partner: 200 OK
+    
+    User->>Frontend: Downloads policy PDF
+    Frontend-->>User: PDF is displayed
+  </pre>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#EFF6FF',
+      primaryBorderColor: '#3B82F6',
+      primaryTextColor: '#1E293B',
+      lineColor: '#64748B',
+      noteBkgColor: '#F0FDF4',
+      noteTextColor: '#166534',
+      noteBorderColor: '#10B981',
+      fontSize: '13px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, SimHei, sans-serif',
+    },
+    sequence: {
+      mirrorActors: false,
+      messageAlign: 'center',
+      bottomMarginAdj: 1,
+      rightAngles: true,
+    }
+  });
+</script>
+</body>
+</html>

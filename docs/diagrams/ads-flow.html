@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Ad Flow - CargoBit</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #FAFBFE;
+    font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SimHei', sans-serif;
+    display: flex; justify-content: center;
+    padding: 48px;
+  }
+  #diagram { width: fit-content; min-width: 900px; }
+</style>
+</head>
+<body>
+<div id="diagram">
+  <pre class="mermaid">
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant Frontend as Frontend
+    participant AdService as Ad Service
+    participant DB as Database
+    participant Partner as Ad Partner
+
+    Note over User,Frontend: Phase 1: Ad Rendering
+    
+    User->>Frontend: Opens Marketplace
+    Frontend->>AdService: GET /ads/render?slot=marketplace-sidebar
+    AdService->>DB: SELECT active_campaigns
+    DB-->>AdService: Campaign list
+    AdService->>AdService: Targeting match (risk, route, user)
+    AdService->>DB: INSERT ad_impressions (impression_id)
+    AdService-->>Frontend: RenderAdResponse
+    Note right of Frontend: imageUrl, targetUrl, impressionId
+    
+    Frontend->>Frontend: Displays banner
+    
+    Note over User,Frontend: Phase 2: Impression Tracking
+    
+    Frontend->>AdService: POST /ads/impression
+    Note right of Frontend: impressionId, campaignId, slot, userId
+    AdService->>DB: UPDATE ad_impressions SET viewable=true
+    AdService->>DB: UPDATE ad_campaigns SET impressions++
+    AdService->>DB: INSERT ad_campaign_daily_stats
+    AdService-->>Frontend: 202 Accepted
+    
+    Note over User,Frontend: Phase 3: Click Tracking
+    
+    User->>Frontend: Clicks on banner
+    Frontend->>AdService: POST /ads/click
+    Note right of Frontend: impressionId, campaignId, userId
+    AdService->>DB: INSERT ad_clicks
+    AdService->>DB: UPDATE ad_campaigns SET clicks++, spent+=cpc
+    AdService->>AdService: Check Budget (spent greater than or equal budget?)
+    AdService-->>Frontend: 202 + redirectUrl
+    Frontend->>Frontend: Redirect to targetUrl
+    
+    Note over User,Frontend: Phase 4: Commission (Monthly)
+    
+    Partner->>AdService: Monthly Billing Request
+    AdService->>DB: SELECT SUM(spend) GROUP BY partner
+    AdService->>DB: INSERT commissions (type=ads)
+    AdService-->>Partner: Billing Report
+  </pre>
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'base',
+    themeVariables: {
+      primaryColor: '#FFF7ED',
+      primaryBorderColor: '#F59E0B',
+      primaryTextColor: '#1E293B',
+      lineColor: '#64748B',
+      noteBkgColor: '#FEF3C7',
+      noteTextColor: '#92400E',
+      noteBorderColor: '#F59E0B',
+      fontSize: '13px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, PingFang SC, SimHei, sans-serif',
+    },
+    sequence: {
+      mirrorActors: false,
+      messageAlign: 'center',
+      bottomMarginAdj: 1,
+      rightAngles: true,
+    }
+  });
+</script>
+</body>
+</html>

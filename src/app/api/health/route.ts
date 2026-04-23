@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/db";
+import { db } from "@/lib/db";
 
 export async function GET() {
   const startTime = Date.now();
 
   try {
     // Test database connection
-    await prisma.$queryRaw`SELECT 1`;
+    await db.$queryRaw`SELECT 1`;
 
     const latency = Date.now() - startTime;
 
