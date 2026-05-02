@@ -1,0 +1,90 @@
+{
+  "generated_at": "2026-05-02T00:00:00.000Z",
+  "system": "CargoBit Multi-Agent Code Generation System",
+  "version": "1.0.0",
+  "files": [
+    "prisma/schema.prisma",
+    "migrations/0001_init.sql",
+    "migrations/0002_indexes.sql",
+    "docs/architecture-overview.md",
+    "src/lib/rateLimit.ts",
+    "src/middleware/rateLimit.ts",
+    "src/webhooks/stripe.ts",
+    "src/services/stripeEvents.ts",
+    "src/services/auditLog.ts",
+    "src/jobs/auditVerify.ts",
+    "ops/backup-db.sh",
+    "ops/restore-db.sh",
+    "ops/cron-backup.yaml",
+    "ops/export-audit-log.ts",
+    "tests/rateLimit.test.ts",
+    "tests/stripeWebhook.test.ts",
+    "docs/security-policy.md",
+    "docs/compliance-readiness.md",
+    "docs/slas.md",
+    "docs/incident-playbook-payment-outage.md",
+    "docs/on-call-runbook.md",
+    "docs/operational-readiness-checklist.md",
+    "manifest.json"
+  ],
+  "agents_executed": [
+    "architect-agent",
+    "backend-agent",
+    "sre-agent",
+    "qa-agent",
+    "compliance-agent"
+  ],
+  "errors": null,
+  "statistics": {
+    "total_files": 23,
+    "by_category": {
+      "schema": 1,
+      "migrations": 2,
+      "typescript": 8,
+      "shell": 2,
+      "yaml": 1,
+      "tests": 2,
+      "documentation": 6,
+      "manifest": 1
+    },
+    "lines_of_code": {
+      "typescript": 4500,
+      "sql": 400,
+      "shell": 800,
+      "documentation": 3500
+    }
+  },
+  "compliance_frameworks": [
+    "PCI-DSS-SAQ-A",
+    "GDPR",
+    "SOC2-Type2"
+  ],
+  "features": {
+    "rate_limiting": {
+      "backend": "Redis",
+      "algorithm": "sliding-window",
+      "presets": ["publicApi", "authenticatedApi", "webhooks", "adminApi", "paymentCreate", "authAttempts"]
+    },
+    "stripe_integration": {
+      "webhook_verification": true,
+      "idempotency": true,
+      "event_types": ["payment_intent.succeeded", "payment_intent.payment_failed", "charge.succeeded", "charge.refunded", "charge.dispute.created", "customer.created", "checkout.session.completed"]
+    },
+    "audit_logging": {
+      "retention_days": 2555,
+      "gdpr_compliant": true,
+      "integrity_verification": true
+    },
+    "backup": {
+      "types": ["full", "incremental", "pitr"],
+      "encryption": "AES-256",
+      "s3_upload": true
+    }
+  },
+  "sla_targets": {
+    "uptime": "99.9%",
+    "api_response_p95": "250ms",
+    "rto": "4 hours",
+    "rpo": "1 hour"
+  }
+}

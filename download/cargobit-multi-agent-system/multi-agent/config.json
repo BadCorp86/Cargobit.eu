@@ -1,0 +1,97 @@
+{
+  "system": "CargoBit Multi-Agent Code Generation System",
+  "version": "1.0.0",
+  "description": "Production-ready multi-agent system for CargoBit payment infrastructure",
+  "execution": {
+    "mode": "sequential",
+    "timeout_per_agent": 300000,
+    "retry_attempts": 3,
+    "validation_enabled": true
+  },
+  "agents": {
+    "architect-agent": {
+      "order": 1,
+      "dependencies": [],
+      "outputs": [
+        "prisma/schema.prisma",
+        "migrations/0001_init.sql",
+        "migrations/0002_indexes.sql",
+        "docs/architecture-overview.md"
+      ]
+    },
+    "backend-agent": {
+      "order": 2,
+      "dependencies": ["architect-agent"],
+      "requires": ["prisma/schema.prisma"],
+      "outputs": [
+        "src/lib/rateLimit.ts",
+        "src/middleware/rateLimit.ts",
+        "src/webhooks/stripe.ts",
+        "src/services/stripeEvents.ts",
+        "src/services/auditLog.ts",
+        "src/jobs/auditVerify.ts"
+      ]
+    },
+    "sre-agent": {
+      "order": 3,
+      "dependencies": ["architect-agent"],
+      "requires": ["migrations/0001_init.sql"],
+      "outputs": [
+        "ops/backup-db.sh",
+        "ops/restore-db.sh",
+        "ops/cron-backup.yaml",
+        "ops/export-audit-log.ts"
+      ]
+    },
+    "qa-agent": {
+      "order": 4,
+      "dependencies": ["backend-agent", "sre-agent"],
+      "requires": [
+        "src/lib/rateLimit.ts",
+        "src/webhooks/stripe.ts",
+        "ops/backup-db.sh"
+      ],
+      "outputs": [
+        "tests/rateLimit.test.ts",
+        "tests/stripeWebhook.test.ts"
+      ]
+    },
+    "compliance-agent": {
+      "order": 5,
+      "dependencies": ["architect-agent", "backend-agent"],
+      "requires": [
+        "docs/architecture-overview.md",
+        "src/services/auditLog.ts"
+      ],
+      "outputs": [
+        "docs/security-policy.md",
+        "docs/compliance-readiness.md",
+        "docs/slas.md",
+        "docs/incident-playbook-payment-outage.md",
+        "docs/on-call-runbook.md",
+        "docs/operational-readiness-checklist.md"
+      ]
+    }
+  },
+  "validation": {
+    "rules": [
+      {
+        "type": "file_exists",
+        "pattern": "**/*.ts",
+        "required": true
+      },
+      {
+        "type": "file_exists",
+        "pattern": "prisma/schema.prisma",
+        "required": true
+      },
+      {
+        "type": "json_valid",
+        "pattern": "manifest.json",
+        "required": true
+      }
+    ]
+  },
+  "output_directory": "./output",
+  "manifest_file": "manifest.json"
+}
