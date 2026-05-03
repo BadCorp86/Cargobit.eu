@@ -18,10 +18,10 @@
 | Developer Portal | 25 | ✅ |
 | Developer Portal Advanced | 4 | ✅ |
 | Developer Portal Governance | 4 | ✅ |
-| Developer Portal Architecture | 3 | ✅ |
+| Developer Portal Architecture | 4 | ✅ |
 | Roadmaps & Evolution | 8 | ✅ |
 | Multi-Agent System | 15 | ✅ |
-| **Gesamt** | **145+** | ✅ |
+| **Gesamt** | **146+** | ✅ |
 
 ---
 
@@ -456,7 +456,15 @@
 
 ---
 
-## 21. Multi-Agent System
+## 21. Developer Portal - Security (Block BE)
+
+| Datei | Beschreibung | Block |
+|-------|--------------|-------|
+| `developer-portal-api-proxy-engine-threat-model-stride.md` | Threat Model STRIDE - API Proxy Engine | Block BE |
+
+---
+
+## 22. Multi-Agent System
 
 ### 16.1 Agents
 
@@ -646,6 +654,7 @@ cargobit-multi-agent-system/
 | BB | Architecture Blueprint | Enterprise Architecture (Master-Artefakt) |
 | BC | C4 Level 3 | Tools Service Component Model |
 | BD | C4 Level 4 | API Proxy Engine (Implementierungs-Referenz) |
+| BE | Security Threat Model | STRIDE für API Proxy Engine |
 
 ---
 
