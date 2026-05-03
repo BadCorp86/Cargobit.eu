@@ -18,10 +18,10 @@
 | Developer Portal | 25 | ✅ |
 | Developer Portal Advanced | 4 | ✅ |
 | Developer Portal Governance | 4 | ✅ |
-| Developer Portal Architecture | 2 | ✅ |
+| Developer Portal Architecture | 3 | ✅ |
 | Roadmaps & Evolution | 8 | ✅ |
 | Multi-Agent System | 15 | ✅ |
-| **Gesamt** | **144+** | ✅ |
+| **Gesamt** | **145+** | ✅ |
 
 ---
 
@@ -448,7 +448,15 @@
 
 ---
 
-## 20. Multi-Agent System
+## 20. Developer Portal - C4 Level 4 (Block BD)
+
+| Datei | Beschreibung | Block |
+|-------|--------------|-------|
+| `developer-portal-api-proxy-engine-c4-level4.md` | C4 Level 4 - API Proxy Engine (Implementierungs-Referenz) | Block BD |
+
+---
+
+## 21. Multi-Agent System
 
 ### 16.1 Agents
 
@@ -637,6 +645,7 @@ cargobit-multi-agent-system/
 | AX-BA | Governance Master | API/Event/Data Governance, Compliance |
 | BB | Architecture Blueprint | Enterprise Architecture (Master-Artefakt) |
 | BC | C4 Level 3 | Tools Service Component Model |
+| BD | C4 Level 4 | API Proxy Engine (Implementierungs-Referenz) |
 
 ---
 
