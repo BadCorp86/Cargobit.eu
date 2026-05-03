@@ -16,9 +16,11 @@
 | Compliance & Security | 15 | ✅ |
 | Enterprise & Operations | 15 | ✅ |
 | Developer Portal | 25 | ✅ |
+| Developer Portal Advanced | 4 | ✅ |
+| Developer Portal Governance | 4 | ✅ |
 | Roadmaps & Evolution | 8 | ✅ |
 | Multi-Agent System | 15 | ✅ |
-| **Gesamt** | **130+** | ✅ |
+| **Gesamt** | **142+** | ✅ |
 
 ---
 
@@ -407,7 +409,29 @@
 
 ---
 
-## 16. Multi-Agent System
+## 16. Developer Portal - Advanced Systems (Blocks AP-AS)
+
+| Datei | Beschreibung | Block |
+|-------|--------------|-------|
+| `developer-portal-ai-integration-konzept.md` | AI-Integration-Konzept | Block AP |
+| `developer-portal-self-healing-system.md` | Self-Healing-System | Block AQ |
+| `developer-portal-partner-scoring-system.md` | Partner-Scoring-System | Block AR |
+| `developer-portal-multi-region-deployment-konzept.md` | Multi-Region-Deployment | Block AS |
+
+---
+
+## 17. Developer Portal - Governance Master Level (Blocks AX-BA)
+
+| Datei | Beschreibung | Block |
+|-------|--------------|-------|
+| `developer-portal-api-governance-framework.md` | API-Governance-Framework | Block AX |
+| `developer-portal-event-governance-framework.md` | Event-Governance-Framework | Block AY |
+| `developer-portal-data-governance-framework.md` | Data-Governance-Framework | Block AZ |
+| `developer-portal-compliance-framework.md` | Compliance-Framework (GDPR, SOC2, ISO27001) | Block BA |
+
+---
+
+## 18. Multi-Agent System
 
 ### 16.1 Agents
 
@@ -592,6 +616,8 @@ cargobit-multi-agent-system/
 | Z, AA-AC | Governance | Governance, QA, Security, Release |
 | AH-AK | Operational Excellence | BCP, DRP, Architecture |
 | AL-AO | Security & Future | Threat Model, Pentest, ADR, Vision |
+| AP-AS | Advanced Systems | AI-Integration, Self-Healing, Scoring, Multi-Region |
+| AX-BA | Governance Master | API/Event/Data Governance, Compliance |
 
 ---
 
