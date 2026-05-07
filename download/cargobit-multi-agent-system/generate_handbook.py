@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 CargoBit Multi-Agent System Governance Postcheck Handbook
-Generated PDF with all 28 blocks (BY-DC)
+Generated PDF with all 40 blocks (BY-DO)
 """
 
 import os
@@ -244,7 +244,7 @@ def build_handbook():
     story.append(Spacer(1, 0.5*cm))
     story.append(Paragraph("<b>Governance Postcheck Handbook</b>", styles['CNTitle']))
     story.append(Spacer(1, 1*cm))
-    story.append(Paragraph("Version 2.0 – 28 Dokumentations-Blöcke", styles['Caption']))
+    story.append(Paragraph("Version 3.0 – 40 Dokumentations-Blöcke", styles['Caption']))
     story.append(Spacer(1, 2*cm))
     
     # Block Overview Table
@@ -259,6 +259,8 @@ def build_handbook():
         ['Phase 7', 'CQ', 'CI-Job-Snippets'],
         ['Phase 8', 'CR–CU', 'Release-Readiness'],
         ['Phase 9', 'CV–DC', 'Operations Excellence'],
+        ['Phase 10', 'DD–DI', 'PR-Ready Artefakte'],
+        ['Phase 11', 'DJ–DO', 'Executive & Compliance'],
     ]
     story.append(create_table(overview_data, [CONTENT_WIDTH*0.2, CONTENT_WIDTH*0.2, CONTENT_WIDTH*0.6]))
     story.append(Spacer(1, 1*cm))
@@ -266,10 +268,11 @@ def build_handbook():
     # Key Metrics
     story.append(Paragraph("<b>Key Technical Details</b>", styles['CNH2']))
     metrics = [
-        ['Total Blöcke', '28 (BY–DC)'],
+        ['Total Blöcke', '40 (BY–DO)'],
         ['Patches', '11 (0001–0011)'],
         ['Scripts', '3 Shell Scripts'],
         ['Starter-Repo', 'ZIP'],
+        ['PDF Handbook', 'v3.0'],
     ]
     story.append(create_table(metrics, [CONTENT_WIDTH*0.4, CONTENT_WIDTH*0.6]))
     
@@ -289,6 +292,8 @@ def build_handbook():
         ("Phase 7: CI-Job-Snippets", "CQ"),
         ("Phase 8: Release-Readiness", "CR, CS, CT, CU"),
         ("Phase 9: Operations Excellence", "CV, CW, CX, CY, CZ, DA, DB, DC"),
+        ("Phase 10: PR-Ready Artefakte", "DD, DE, DF, DG, DH, DI"),
+        ("Phase 11: Executive & Compliance", "DJ, DK, DL, DM, DN, DO"),
     ]
     
     for title, blocks in toc_items:
@@ -718,6 +723,126 @@ def build_handbook():
     
     story.append(PageBreak())
     
+    # ━━ Phase 10: PR-Ready Artefakte ━━
+    story.append(Paragraph("Phase 10: PR-Ready Artefakte", styles['CNH1']))
+    story.append(Paragraph("Blöcke DD, DE, DF, DG, DH, DI", styles['Caption']))
+    story.append(Spacer(1, 12))
+    
+    story.append(Paragraph("Release PR Description (DD)", styles['CNH2']))
+    story.append(Paragraph(
+        "Vollständige PR-Beschreibungsvorlage mit strukturierten Sektionen: "
+        "Summary, Changes, Release-Readiness, Test Evidence, Rollback Plan. "
+        "Fertig zum Kopieren in GitHub/GitLab PRs.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Go/No-Go Meeting Template (DE)", styles['CNH2']))
+    story.append(Paragraph(
+        "Professionelle Meeting-Vorlage für Release-Entscheidungen mit "
+        "Teilnehmer-Liste, Agenda, Status-Checkliste und Sign-off-Section. "
+        "Dauer: 30 Min, klare Struktur für Go/No-Go Entscheidung.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Release Status Matrix (DF)", styles['CNH2']))
+    story.append(Paragraph(
+        "Automatische Status-Matrix mit Health Score Berechnung. "
+        "Enthält alle Kriterien (Secrets, SBOM, Signing, Canary, Admission, Runbooks). "
+        "Für kontinuierliche Updates im Repository.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("CI Pipeline Status Update (DG)", styles['CNH2']))
+    story.append(Paragraph(
+        "Detailliertes CI/CD Pipeline Dokument mit GitHub Actions und GitLab CI Versionen. "
+        "Vollständige Job-Definitionen für Build, Test, Security, Sign, Deploy. "
+        "Ready-to-use in Projekten.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Release Dashboard (DH)", styles['CNH2']))
+    story.append(Paragraph(
+        "Markdown-Dashboard für Release-Tracking mit Status-Übersicht, "
+        "Metriken, Progress Bars und Quick Links. "
+        "Für Anzeige in GitHub/GitLab Wiki oder Confluence.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Release Announcement Templates (DI)", styles['CNH2']))
+    story.append(Paragraph(
+        "Vorlagen für Slack und Teams Go-Live Announcements. "
+        "Enthält strukturierte Nachrichten mit Status, Links und Kontakten. "
+        "Fertig zum Versenden an Stakeholder.",
+        styles['CNBody']
+    ))
+    
+    story.append(PageBreak())
+    
+    # ━━ Phase 11: Executive & Compliance ━━
+    story.append(Paragraph("Phase 11: Executive & Compliance", styles['CNH1']))
+    story.append(Paragraph("Blöcke DJ, DK, DL, DM, DN, DO", styles['Caption']))
+    story.append(Spacer(1, 12))
+    
+    story.append(Paragraph("Executive Release Announcement (DJ)", styles['CNH2']))
+    story.append(Paragraph(
+        "Professionelle Ankündigung für Geschäftsführung und Bereichsleiter. "
+        "Präzise, risikoorientiert, faktenbasiert ohne technische Überladung. "
+        "Enthält strategischen Nutzen, Risikominimierung und Betriebsstatus.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Audit-Bundle (DK)", styles['CNH2']))
+    story.append(Paragraph(
+        "Vollständige Sammlung aller sicherheits-, build- und release-relevanten Artefakte. "
+        "Ordnerstruktur mit 5 Kategorien: Build, Signing, CI/CD, Deployment, Governance. "
+        "Ready für interne und externe Audits.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Auto Release Tagging (DL)", styles['CNH2']))
+    story.append(Paragraph(
+        "Automatisches Release-Tagging-System für GitHub Actions und GitLab CI. "
+        "Versionsschema: vYYYY.MM.DD-SHA. "
+        "Enthält Extended Version mit Changelog-Generierung.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Automatisches Changelog-System (DM)", styles['CNH2']))
+    story.append(Paragraph(
+        "Vollautomatische Changelog-Generierung aus Commit-Historie. "
+        "Unterstützt Conventional Commits mit Kategorisierung. "
+        "GitHub Actions und GitLab CI Versionen verfügbar.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Release-Poster 1-Pager (DN)", styles['CNH2']))
+    story.append(Paragraph(
+        "Kompakte visuelle Zusammenfassung für Management und Stakeholder. "
+        "Verfügbar in ASCII, Markdown und HTML. "
+        "Enthält Status, Kern-Funktionen, Metriken und Quick Links.",
+        styles['CNBody']
+    ))
+    story.append(Spacer(1, 8))
+    
+    story.append(Paragraph("Compliance-Memo (DO)", styles['CNH2']))
+    story.append(Paragraph(
+        "Formales Memo für Revision, Security und Compliance-Officer. "
+        "DSGVO, ISO 27001, SOC 2 Mapping mit Nachweisen. "
+        "Enthält Risikobewertung, Exception-Prozess und Freigabe-Section.",
+        styles['CNBody']
+    ))
+    
+    story.append(PageBreak())
+    
     # ━━ Appendix: Patches & Scripts ━━
     story.append(Paragraph("Appendix: Patches & Scripts", styles['CNH1']))
     story.append(Spacer(1, 12))
@@ -762,8 +887,8 @@ def build_handbook():
     story.append(Paragraph("───", styles['Caption']))
     story.append(Spacer(1, 12))
     story.append(Paragraph(
-        "CargoBit Multi-Agent System – Governance Postcheck Handbook v2.0<br/>"
-        "28 Blöcke | 11 Patches | 3 Scripts | 1 Starter-Repo",
+        "CargoBit Multi-Agent System – Governance Postcheck Handbook v3.0<br/>"
+        "40 Blöcke | 11 Patches | 3 Scripts | 1 Starter-Repo",
         styles['Caption']
     ))
     
