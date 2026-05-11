@@ -82,7 +82,7 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -111,7 +111,7 @@ jobs:
           echo "Model verified at s3://${{ env.S3_BUCKET }}/models/$VERSION/"
       
       - name: Configure kubectl
-        uses: azure/setup-kubectl@v3
+        uses: azure/setup-kubectl@v4
         with:
           version: 'v1.28.0'
       
@@ -163,7 +163,7 @@ jobs:
     
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       
       - name: Start canary monitoring
         run: |
@@ -216,8 +216,11 @@ jobs:
     
     steps:
       - name: Send Slack notification
-        uses: slackapi/slack-github-action@v1.25.0
+        if: ${{ secrets.SLACK_WEBHOOK != '' }}
+        uses: slackapi/slack-github-action@v2.0.0
         with:
+          webhook: ${{ secrets.SLACK_WEBHOOK }}
+          webhook-type: incoming-webhook
           payload: |
             {
               "blocks": [
@@ -264,6 +267,4 @@ jobs:
                 }
               ]
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}
-          SLACK_WEBHOOK_TYPE: INCOMING_WEBHOOK
+        continue-on-error: true
