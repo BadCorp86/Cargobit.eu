@@ -1,6 +1,7 @@
 // ============================================
-// CARGOBIT MIDDLEWARE
+// CARGOBIT PROXY
 // Route Protection & Security
+// Next.js 16 compatible
 // ============================================
 
 import { NextResponse } from 'next/server';
@@ -136,10 +137,10 @@ function getRouteConfig(pathname: string): RouteConfig | null {
 }
 
 // ============================================
-// MAIN MIDDLEWARE
+// MAIN PROXY
 // ============================================
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const config = getRouteConfig(pathname);
 
