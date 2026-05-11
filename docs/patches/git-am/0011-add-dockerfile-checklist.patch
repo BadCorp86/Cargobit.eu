@@ -1,0 +1,163 @@
+From: CargoBit CI/CD Team <ci-team@cargobit.io>
+Subject: [PATCH] chore(ci): add Dockerfile checklist and hardened example for governance-postcheck
+
+---
+ docs/Dockerfile_CHECKLIST.md           | 95 ++++++++++++++++++++++++++
+ governance-postcheck/Dockerfile.hardened | 43 +++++++++++
+ 2 files changed, 138 insertions(+)
+ create mode 100644 docs/Dockerfile_CHECKLIST.md
+ create mode 100644 governance-postcheck/Dockerfile.hardened
+
+diff --git a/docs/Dockerfile_CHECKLIST.md b/docs/Dockerfile_CHECKLIST.md
+new file mode 100644
+index 0000000..checksum
+--- /dev/null
++++ b/docs/Dockerfile_CHECKLIST.md
+@@ -0,0 +1,95 @@
++# Dockerfile Checklist
++
++Kurz: Prüfpunkte, die jeder Dockerfile‑PR erfüllen muss.
++
++- **Multi‑stage Build**
++  - **✅** Build‑Artefakte werden in einer separaten Stage erzeugt und nicht in das Runtime‑Image übernommen.
++- **Pinned Base Image**
++  - **✅** Verwende ein konkretes Tag oder Digest (z. B. `python:3.11-slim@sha256:...`).
++- **Minimaler Runtime Layer**
++  - **✅** Nutze ein kleines, geprüftes Runtime Image (Debian slim, distroless, alpine) für die final stage.
++- **Non‑root User**
++  - **✅** Erstelle und wechsle zu einem nicht‑privilegierten User (`USER appuser`).
++- **No Secrets in Image**
++  - **✅** Keine Secrets, Tokens oder private Keys im Image oder Dockerfile.
++- **Reproducible Builds**
++  - **✅** Setze `ENV` Variablen für Versionsnummern; vermeide `latest`.
++- **Remove Build Tools**
++  - **✅** Entferne Compiler, package managers und caches in der final stage.
++- **Security Hardening**
++  - **✅** Setze `HEALTHCHECK`, `USER`, `WORKDIR`, `EXPOSE` sinnvoll.
++- **SBOM Generation Hook**
++  - **✅** Stelle sicher, dass CI SBOM (syft) gegen das gebaute Image erzeugen kann.
++- **Small Image Size**
++  - **✅** Ziel: möglichst klein; dokumentiere Gründe für Abweichungen.
++- **Layer Caching**
++  - **✅** Reihenfolge der Dockerfile‑Anweisungen optimiert für Cache‑Hits.
++- **Non‑interactive Installs**
++  - **✅** Verwende `DEBIAN_FRONTEND=noninteractive` bei apt‑Installs.
++- **Immutable Tags for Production**
++  - **✅** Produktion: push mit Digest; Deploys sollten Digest‑based sein.
++- **SBOM and Attestation**
++  - **✅** CI erzeugt SBOM und `cosign attest` optional.
++- **Testing**
++  - **✅** Image enthält keine test‑only artefacts; Unit tests laufen vor Build.
++- **Documentation**
++  - **✅** Dockerfile kommentiert; README ergänzt mit Run/Debug Befehlen.
++
++## CI Integration Hinweise
++
++- **SBOM Erzeugung** (GitHub Actions / GitLab CI)
++  - Nach `docker build` in CI:
++    ```
++    syft <image-ref> -o json > sbom.json
++    ```
++  - Lade `sbom.json` als Job‑Artefakt hoch.
++
++- **Trivy Scan**
++  - Scanne das gebaute Image in CI:
++    ```
++    trivy image --format json --output trivy.json --severity CRITICAL,HIGH <image-ref>
++    ```
++  - Lade `trivy.json` als Artefakt; fail job bei Findings nach Policy.
++
++- **Signing**
++  - Keyless: `cosign sign --keyless <image-ref>` in Sign‑Job.
++  - Attestation (optional): `cosign attest --predicate sbom.json --type sbom <image-ref>`
++
++- **Verify in Deploy**
++  - Deploy‑Gate: `cosign verify --keyless <image-ref>` oder keyed verify mit `COSIGN_PUB`.
++
++## Testbefehle für Reviewer
++
++- **Build lokal**
++  ```
++  docker build -f governance-postcheck/Dockerfile.hardened -t local/postcheck:dev .
++  ```
++- **SBOM**
++  ```
++  syft local/postcheck:dev -o json > sbom.json
++  ```
++- **Trivy**
++  ```
++  trivy image --severity CRITICAL,HIGH local/postcheck:dev
++  ```
++- **Run**
++  ```
++  docker run --rm -p 8443:8443 local/postcheck:dev
++  curl -sS http://localhost:8443/health
++  ```
++- **Verify signature** (nach CI push & sign)
++  ```
++  cosign verify --keyless ghcr.io/ORG/governance-postcheck:<TAG>
++  ```
++
++## PR Reviewer Checklist (kopierbar)
++
++- [ ] Dockerfile verwendet Multi‑stage Build.
++- [ ] Final image läuft als **non‑root**.
++- [ ] Keine Build‑Tools in final image.
++- [ ] Base images sind gepinnt (Tag oder Digest).
++- [ ] SBOM wird in CI erzeugt und als Artefakt gespeichert.
++- [ ] Trivy Scan läuft und Policy ist dokumentiert.
++- [ ] Signatur wird in CI erzeugt (keyless oder keyed).
++- [ ] Healthcheck vorhanden und sinnvoll.
++- [ ] README ergänzt mit Build/Run/Verify Befehlen.
+diff --git a/governance-postcheck/Dockerfile.hardened b/governance-postcheck/Dockerfile.hardened
+new file mode 100644
+index 0000000..checksum
+--- /dev/null
++++ b/governance-postcheck/Dockerfile.hardened
+@@ -0,0 +1,43 @@
++# ---- build stage ----
++FROM python:3.11-slim@sha256:REPLACE_WITH_DIGEST AS build
++WORKDIR /src
++
++# Install build deps
++ENV DEBIAN_FRONTEND=noninteractive
++RUN apt-get update && apt-get install -y --no-install-recommends \
++    build-essential gcc libssl-dev ca-certificates \
++  && rm -rf /var/lib/apt/lists/*
++
++# Copy and install python deps into a wheelhouse
++COPY governance-postcheck/app/requirements.txt .
++RUN python -m pip install --upgrade pip wheel setuptools
++RUN python -m pip wheel -r requirements.txt -w /wheels
++
++# Copy source
++COPY governance-postcheck /src/governance-postcheck
++
++# ---- runtime stage ----
++FROM python:3.11-slim@sha256:REPLACE_WITH_DIGEST AS runtime
++# Create non-root user
++RUN groupadd --gid 1000 appgroup \
++  && useradd --uid 1000 --gid appgroup --shell /bin/false --create-home appuser
++
++WORKDIR /app
++
++# Install runtime deps from wheelhouse
++COPY --from=build /wheels /wheels
++RUN python -m pip install --no-index --find-links=/wheels -r /src/governance-postcheck/app/requirements.txt \
++  && rm -rf /wheels /root/.cache/pip
++
++# Copy only runtime files
++COPY --from=build /src/governance-postcheck /app
++
++# Security: drop capabilities and run as non-root
++USER appuser
++ENV PYTHONUNBUFFERED=1
++
++# Healthcheck and metadata
++EXPOSE 8443
++HEALTHCHECK --interval=30s --timeout=5s --start-period=10s CMD curl -f http://localhost:8443/health || exit 1
++
++# Entrypoint
++CMD ["python", "-m", "governance_postcheck.main"]
+--
+2.43.0

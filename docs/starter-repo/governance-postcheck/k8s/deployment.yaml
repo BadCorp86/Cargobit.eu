@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: governance-postcheck
+  namespace: governance
+  labels:
+    app: governance-postcheck
+    app.kubernetes.io/name: governance-postcheck
+    app.kubernetes.io/component: postcheck
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: governance-postcheck
+  template:
+    metadata:
+      labels:
+        app: governance-postcheck
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8443"
+        prometheus.io/path: "/metrics"
+    spec:
+      serviceAccountName: governance-postcheck
+      containers:
+      - name: governance-postcheck
+        image: ghcr.io/cargobit/governance-postcheck:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8443
+          name: http
+        env:
+        - name: PROM_URL
+          valueFrom:
+            secretKeyRef:
+              name: governance-postcheck-secrets
+              key: PROM_URL
+        - name: PORT
+          value: "8443"
+        resources:
+          requests:
+            cpu: 100m
+            memory: 128Mi
+          limits:
+            cpu: 500m
+            memory: 512Mi
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8443
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8443
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+      securityContext:
+        fsGroup: 1000
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: governance-postcheck
+  namespace: governance
+spec:
+  selector:
+    app: governance-postcheck
+  ports:
+  - port: 8443
+    targetPort: 8443
+    name: http
+  type: ClusterIP
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: governance-postcheck
+  namespace: governance
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: governance-postcheck-secrets
+  namespace: governance
+type: Opaque
+stringData:
+  PROM_URL: "http://prometheus-server.monitoring.svc.cluster.local:9090"

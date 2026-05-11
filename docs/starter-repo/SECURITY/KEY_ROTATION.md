@@ -1,0 +1,43 @@
+# Key Management, Rotation und Secret Konfiguration
+
+Dieses Dokument beschreibt empfohlene Praktiken für Signatur-Keys, Rotation und CI-Secrets für das `governance-postcheck` Projekt.
+
+## Signing-Strategie (Empfehlung)
+- **Keyless Signing (OIDC)**: Bevorzugt für CI-Workflows; keine dauerhaften privaten Schlüssel in CI-Secrets; nutzt OIDC (GitHub Actions `id-token` oder GitLab CI `CI_JOB_JWT`) und `cosign sign --keyless`.
+- **Keyed Signing**: Nur wenn Keyless nicht möglich. Private Keys in KMS/HSM speichern oder als verschlüsselte Secrets mit striktem Zugriff.
+
+## CI Secrets (Beispiele)
+- **GitHub Actions**
+  - `GITHUB_TOKEN` (automatisch) oder `REGISTRY_USERNAME`/`REGISTRY_PASSWORD`
+  - Für keyed signing: `COSIGN_KEY` (base64-encoded private key) und optional `COSIGN_PASSWORD`
+  - Für keyless: `permissions.id-token: write` aktivieren
+- **GitLab CI**
+  - `CI_REGISTRY_USER`, `CI_REGISTRY_PASSWORD`
+  - Optional `COSIGN_KEY_BASE64` (nur bei keyed signing)
+
+## Key Rotation Policy
+- **Intervall:** Private Keys mindestens alle 90 Tage rotieren; bei hohem Risiko kürzer.
+- **Rotation (Keyed):**
+  1. Erzeuge neuen Key in KMS/HSM.
+  2. Signiere Test-Image und verifiziere Signatur.
+  3. Aktualisiere CI Secret (`COSIGN_KEY_BASE64`) in einer Wartungs-Pipeline.
+  4. Revoke/Archive alten Key; dokumentiere Revoke-Datum.
+- **Rotation (Keyless):**
+  - Regelmäßige Audit-Überprüfung der Rekor-Einträge; Policy-Updates nach Bedarf.
+
+## Access Control & Least Privilege
+- CI-Accounts nur minimal nötige Rechte geben.
+- Secrets nur in geschützten CI-Variablen speichern; Zugriff auf Admins/CI-Service Accounts beschränken.
+- Audit-Logs aktivieren (Registry, KMS, CI).
+
+## Incident Response (bei Key-Kompromittierung)
+1. Sofort: Entziehe CI-Secret und sperre betroffene Accounts.  
+2. Erzeuge neuen Key (KMS/HSM) und aktualisiere CI-Secrets.  
+3. Revoke/Archive kompromittierten Key; dokumentiere Zeitstempel.  
+4. Rebuild & Resign kritische Images mit neuem Key; veröffentliche Signatur-Änderungen.  
+5. Informiere Stakeholder und erstelle Post-Mortem.
+
+## Operational Empfehlungen
+- Nutze `cosign verify` in Deploy-Pipelines, um nur signierte Images zuzulassen.  
+- Ergänze Signaturen mit Attestations (z. B. `cosign attest`) für SBOM/Build-Metadaten.  
+- Dokumentiere Key-Rotation und Secret-Owner im Runbook/Oncall-Handbuch.

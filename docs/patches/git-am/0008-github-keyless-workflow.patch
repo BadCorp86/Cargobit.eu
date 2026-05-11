@@ -1,0 +1,101 @@
+From 1111111111111111111111111111111111111111 Mon Sep 17 00:00:00 2001
+From: CI Automation <ci@example.com>
+Date: Wed, 06 May 2026 00:00:00 +0200
+Subject: [PATCH] ci(postcheck): add GitHub Actions keyless workflow to build test scan push and sign image
+
+---
+ .github/workflows/postcheck-ci-keyless.yml | 120 ++++++++++++++++++++++++++++++++++
+ 1 file changed, 120 insertions(+)
+ create mode 100644 .github/workflows/postcheck-ci-keyless.yml
+
+diff --git a/.github/workflows/postcheck-ci-keyless.yml b/.github/workflows/postcheck-ci-keyless.yml
+new file mode 100644
+index 0000000..2222222
+--- /dev/null
++++ b/.github/workflows/postcheck-ci-keyless.yml
+@@ -0,0 +1,120 @@
++name: CI PostCheck Build Test Scan Push KeylessSign
++
++on:
++  push:
++    paths:
++      - 'governance-postcheck/**'
++  pull_request:
++    paths:
++      - 'governance-postcheck/**'
++
++permissions:
++  contents: read
++  packages: write
++  id-token: write
++
++env:
++  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/governance-postcheck
++  IMAGE_TAG: ${{ github.sha }}
++
++jobs:
++  test-and-build:
++    runs-on: ubuntu-latest
++    steps:
++      - uses: actions/checkout@v4
++
++      - name: Set up Python
++        uses: actions/setup-python@v4
++        with:
++          python-version: '3.11'
++
++      - name: Install test deps
++        run: |
++          python -m pip install --upgrade pip
++          pip install -r governance-postcheck/app/requirements.txt pytest
++
++      - name: Run unit tests
++        run: pytest governance-postcheck/tests -q
++
++      - name: Set up Docker Buildx
++        uses: docker/setup-buildx-action@v3
++
++      - name: Log in to GHCR
++        uses: docker/login-action@v2
++        with:
++          registry: ghcr.io
++          username: ${{ github.actor }}
++          password: ${{ secrets.GITHUB_TOKEN }}
++
++      - name: Build and push image
++        uses: docker/build-push-action@v5
++        with:
++          context: governance-postcheck
++          file: governance-postcheck/Dockerfile
++          push: true
++          tags: |
++            ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
++            ${{ env.IMAGE_NAME }}:latest
++
++      - name: Download Trivy DB
++        uses: aquasecurity/trivy-action@v1
++        with:
++          download-db-only: true
++
++      - name: Scan image with Trivy
++        uses: aquasecurity/trivy-action@v1
++        with:
++          image-ref: ${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}
++          format: 'table'
++          exit-code: '1'
++          vuln-type: 'os,library'
++
++      - name: Install cosign
++        run: |
++          COSIGN_VERSION="2.1.0"
++          curl -sSLf -o /tmp/cosign.tar.gz "https://github.com/sigstore/cosign/releases/download/v${COSIGN_VERSION}/cosign-linux-amd64.tar.gz"
++          sudo tar -C /usr/local/bin -xzf /tmp/cosign.tar.gz
++
++      - name: Keyless sign image with cosign (OIDC)
++        env:
++          COSIGN_EXPERIMENTAL: "1"
++        run: |
++          cosign sign --keyless "${{ env.IMAGE_NAME }}:${{ env.IMAGE_TAG }}"
++
+-- 
+2.34.1
