@@ -2,12 +2,19 @@
 
 /**
  * Premium Sidebar Component
- * Glassmorphism + Glow Effects + Animations
+ * Glassmorphism + Glow Effects + Framer Motion Animations
+ * 
+ * Features:
+ * - Animated menu items with stagger effect
+ * - Active state with glow indicator
+ * - Hover scale/glow effects
+ * - Collapsible with smooth transitions
  */
 
 import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { motion, AnimatePresence } from 'framer-motion';
 
 interface NavItem {
   id: string;
@@ -157,6 +164,31 @@ const DEFAULT_MENU: NavItem[] = [
   },
 ];
 
+const sidebarVariants = {
+  hidden: { x: -260 },
+  visible: {
+    x: 0,
+    transition: {
+      type: 'spring',
+      stiffness: 300,
+      damping: 30,
+    },
+  },
+};
+
+const menuItemVariants = {
+  hidden: { opacity: 0, x: -20 },
+  visible: (i: number) => ({
+    opacity: 1,
+    x: 0,
+    transition: {
+      delay: i * 0.03,
+      duration: 0.3,
+      ease: 'easeOut',
+    },
+  }),
+};
+
 export default function Sidebar({
   menuItems = DEFAULT_MENU,
   collapsed = false,
@@ -170,14 +202,22 @@ export default function Sidebar({
   return (
     <>
       {/* Mobile Overlay */}
-      {mobileOpen && (
-        <div
-          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
-          onClick={onMobileClose}
-        />
-      )}
+      <AnimatePresence>
+        {mobileOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 lg:hidden"
+            onClick={onMobileClose}
+          />
+        )}
+      </AnimatePresence>
 
-      <aside
+      <motion.aside
+        initial="hidden"
+        animate="visible"
+        variants={sidebarVariants}
         className={`
           fixed left-0 top-0 h-full z-50
           transition-all duration-300 ease-out
@@ -196,11 +236,19 @@ export default function Sidebar({
             {!collapsed && (
               <Link href="/admin/dashboard" className="flex items-center gap-3 group">
                 {/* Logo */}
-                <div className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] flex items-center justify-center shadow-lg shadow-[#1C7ED6]/20 group-hover:shadow-[#1C7ED6]/40 transition-shadow duration-300">
+                <motion.div 
+                  className="relative w-10 h-10 rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] flex items-center justify-center shadow-lg shadow-[#1C7ED6]/20 group-hover:shadow-[#1C7ED6]/40 transition-shadow duration-300"
+                  whileHover={{ scale: 1.05, rotate: 5 }}
+                  whileTap={{ scale: 0.95 }}
+                >
                   <span className="text-white font-bold text-lg">CB</span>
                   {/* Glow Effect */}
-                  <div className="absolute inset-0 rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] opacity-50 blur-md -z-10" />
-                </div>
+                  <motion.div 
+                    className="absolute inset-0 rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] opacity-50 blur-md -z-10"
+                    animate={{ opacity: [0.3, 0.6, 0.3] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
+                </motion.div>
                 <div>
                   <span className="text-white font-semibold text-lg tracking-tight">CargoBit</span>
                   <p className="text-white/40 text-[10px] font-medium tracking-wider uppercase">Admin Panel</p>
@@ -209,99 +257,162 @@ export default function Sidebar({
             )}
 
             {collapsed && (
-              <div className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] flex items-center justify-center shadow-lg shadow-[#1C7ED6]/20">
+              <motion.div 
+                className="w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] flex items-center justify-center shadow-lg shadow-[#1C7ED6]/20"
+                whileHover={{ scale: 1.1 }}
+              >
                 <span className="text-white font-bold text-lg">CB</span>
-              </div>
+              </motion.div>
             )}
           </div>
 
           {/* Navigation */}
           <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
-            {menuItems.map((item) => {
+            {menuItems.map((item, index) => {
               const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
 
               return (
-                <Link
+                <motion.div
                   key={item.id}
-                  href={item.href}
-                  className={`
-                    relative flex items-center gap-3 px-3 py-3 rounded-[14px] transition-all duration-200 group
-                    ${isActive
-                      ? 'bg-[#1C7ED6]/20 text-white'
-                      : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
-                    }
-                  `}
-                  title={collapsed ? item.label : undefined}
+                  custom={index}
+                  variants={menuItemVariants}
+                  initial="hidden"
+                  animate="visible"
                 >
-                  {/* Active Glow */}
-                  {isActive && (
-                    <>
-                      <div className="absolute inset-0 rounded-[14px] bg-[#1C7ED6]/10" />
-                      <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-8 bg-[#00D4FF] rounded-r-full shadow-lg shadow-[#00D4FF]/50" />
-                    </>
-                  )}
+                  <Link
+                    href={item.href}
+                    className={`
+                      relative flex items-center gap-3 px-3 py-3 rounded-[14px] transition-all duration-200 group
+                      ${isActive
+                        ? 'bg-[#1C7ED6]/20 text-white'
+                        : 'text-white/60 hover:text-white hover:bg-white/[0.05]'
+                      }
+                    `}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    {/* Active Glow */}
+                    {isActive && (
+                      <>
+                        <motion.div 
+                          className="absolute inset-0 rounded-[14px] bg-[#1C7ED6]/10"
+                          layoutId="activeBackground"
+                          transition={{ type: 'spring', stiffness: 300, damping: 30 }}
+                        />
+                        <motion.div 
+                          className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-8 bg-[#00D4FF] rounded-r-full shadow-lg shadow-[#00D4FF]/50"
+                          initial={{ height: 0 }}
+                          animate={{ height: 32 }}
+                          transition={{ duration: 0.3 }}
+                        />
+                      </>
+                    )}
 
-                  {/* Icon */}
-                  <span className={`relative z-10 ${isActive ? 'text-[#00D4FF]' : 'group-hover:text-white/80'}`}>
-                    {item.icon}
-                  </span>
+                    {/* Icon */}
+                    <motion.span 
+                      className={`relative z-10 ${isActive ? 'text-[#00D4FF]' : 'group-hover:text-white/80'}`}
+                      whileHover={{ scale: 1.1 }}
+                      transition={{ type: 'spring', stiffness: 400 }}
+                    >
+                      {item.icon}
+                    </motion.span>
 
-                  {/* Label */}
-                  {!collapsed && (
-                    <>
-                      <span className="relative z-10 font-medium text-[14px] flex-1">{item.label}</span>
-                      {item.badge && (
-                        <span className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-[#E74C3C] text-white shadow-lg shadow-[#E74C3C]/30">
-                          {item.badge}
-                        </span>
-                      )}
-                    </>
-                  )}
-                </Link>
+                    {/* Label */}
+                    {!collapsed && (
+                      <>
+                        <span className="relative z-10 font-medium text-[14px] flex-1">{item.label}</span>
+                        {item.badge && (
+                          <motion.span 
+                            className="px-2 py-0.5 text-[10px] font-semibold rounded-full bg-[#E74C3C] text-white shadow-lg shadow-[#E74C3C]/30"
+                            initial={{ scale: 0 }}
+                            animate={{ scale: 1 }}
+                            transition={{ type: 'spring', stiffness: 500 }}
+                          >
+                            {item.badge}
+                          </motion.span>
+                        )}
+                      </>
+                    )}
+                  </Link>
+                </motion.div>
               );
             })}
           </nav>
 
           {/* User Section */}
-          <div className="p-4 border-t border-white/[0.08]">
+          <motion.div 
+            className="p-4 border-t border-white/[0.08]"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5 }}
+          >
             {!collapsed ? (
-              <div className="flex items-center gap-3 p-3 rounded-[14px] bg-white/[0.03] hover:bg-white/[0.05] transition-colors cursor-pointer group">
+              <motion.div 
+                className="flex items-center gap-3 p-3 rounded-[14px] bg-white/[0.03] hover:bg-white/[0.05] transition-colors cursor-pointer group"
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+              >
                 {/* Avatar */}
                 <div className="relative">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] flex items-center justify-center text-white font-semibold">
                     {user.name.charAt(0).toUpperCase()}
                   </div>
-                  <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#2ECC71] rounded-full border-2 border-[#06121C] shadow-lg shadow-[#2ECC71]/30" />
+                  <motion.div 
+                    className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#2ECC71] rounded-full border-2 border-[#06121C] shadow-lg shadow-[#2ECC71]/30"
+                    animate={{ scale: [1, 1.2, 1] }}
+                    transition={{ duration: 2, repeat: Infinity }}
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-white font-medium text-sm truncate">{user.name}</p>
                   <p className="text-white/40 text-xs">{user.role}</p>
                 </div>
-                <svg className="w-4 h-4 text-white/40 group-hover:text-white/60 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <motion.svg 
+                  className="w-4 h-4 text-white/40 group-hover:text-white/60 transition-colors" 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                  whileHover={{ y: -2 }}
+                >
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 9l4-4 4 4m0 6l-4 4-4-4" />
-                </svg>
-              </div>
+                </motion.svg>
+              </motion.div>
             ) : (
-              <div className="relative w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] flex items-center justify-center text-white font-semibold cursor-pointer">
+              <motion.div 
+                className="relative w-10 h-10 mx-auto rounded-xl bg-gradient-to-br from-[#1C7ED6] to-[#00D4FF] flex items-center justify-center text-white font-semibold cursor-pointer"
+                whileHover={{ scale: 1.1 }}
+              >
                 {user.name.charAt(0).toUpperCase()}
-                <div className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#2ECC71] rounded-full border-2 border-[#06121C]" />
-              </div>
+                <motion.div 
+                  className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[#2ECC71] rounded-full border-2 border-[#06121C]"
+                  animate={{ scale: [1, 1.2, 1] }}
+                  transition={{ duration: 2, repeat: Infinity }}
+                />
+              </motion.div>
             )}
-          </div>
+          </motion.div>
         </div>
 
         {/* Collapse Toggle Button - Desktop only */}
         {onToggle && (
-          <button
+          <motion.button
             onClick={onToggle}
             className="absolute -right-3 top-24 w-6 h-6 rounded-full bg-[#1C7ED6] border border-white/20 flex items-center justify-center text-white hover:bg-[#00D4FF] transition-colors shadow-lg shadow-[#1C7ED6]/30 hidden lg:flex"
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
           >
-            <svg className={`w-3 h-3 transition-transform duration-300 ${collapsed ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <motion.svg 
+              className="w-3 h-3" 
+              fill="none" 
+              stroke="currentColor" 
+              viewBox="0 0 24 24"
+              animate={{ rotate: collapsed ? 180 : 0 }}
+              transition={{ duration: 0.3 }}
+            >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
+            </motion.svg>
+          </motion.button>
         )}
-      </aside>
+      </motion.aside>
     </>
   );
 }
