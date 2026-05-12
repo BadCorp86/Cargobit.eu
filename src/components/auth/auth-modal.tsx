@@ -206,11 +206,6 @@ export function AuthModal({ open, onOpenChange, defaultTab = 'login' }: AuthModa
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </div>
-
-              <div className="mt-6 text-center text-sm text-muted-foreground">
-                Demo-Zugänge: shipper@cargobit.eu, driver@cargobit.eu, dispatcher@cargobit.eu, admin@cargobit.eu
-                <br />(Passwort: demo123)
-              </div>
             </div>
           </TabsContent>
 
